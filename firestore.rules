@@ -1,0 +1,164 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fonction pour vérifier si l'utilisateur a un rôle d'administration
+    function hasAdminRole() {
+      return request.auth != null && 
+             (request.auth.token.admin == true || 
+              request.auth.token.direction == true || 
+              request.auth.token.superviseur == true);
+    }
+
+    // Règles pour la collection users
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Règles pour la collection sales
+    match /sales/{saleId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      // Permettre aux admins/direction/superviseurs de tout modifier/supprimer
+      allow update, delete: if request.auth != null && 
+                            (request.auth.uid == resource.data.userId || hasAdminRole());
+    }
+    
+    match /users/{userId}/chatHistories/{historyId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/chatHistories/{historyId}/messages/{messageId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Règles pour la collection contactsArgues (CA)
+    match /contactsArgues/{docId} {
+      // Seuls les utilisateurs avec rôle admin, direction ou superviseur peuvent lire/créer/modifier/supprimer
+      allow read, create, update, delete: if hasAdminRole();
+    }
+    
+    // Règles pour la collection missions
+    match /missions/{missionId} {
+      allow read, write: if hasAdminRole();
+    }
+    
+    // Règles pour la collection objectives
+    match /objectives/{objectiveId} {
+      // Seuls les utilisateurs avec rôle admin, direction ou superviseur peuvent lire/créer/modifier/supprimer
+      allow read: if request.auth != null && 
+                     (hasAdminRole() || 
+                      resource.data.scope == 'team' || 
+                      resource.data.userId == request.auth.uid);
+      allow create, update, delete: if hasAdminRole();
+    }
+    
+    // Règles pour les sous-collections des missions
+    match /missions/{missionId}/sales/{saleId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      // Permettre aux admins/direction/superviseurs de tout modifier/supprimer
+      allow update, delete: if request.auth != null && 
+                            (request.auth.uid == resource.data.userId || hasAdminRole());
+    }
+    
+    match /missions/{missionId}/contactsArgues/{docId} {
+      // Tous les utilisateurs connectés peuvent lire
+      allow read: if request.auth != null;
+      // Seuls les utilisateurs avec rôle admin, direction ou superviseur peuvent créer/modifier/supprimer
+      allow create, update, delete: if hasAdminRole();
+    }
+    
+    match /missions/{missionId}/objectives/{objectiveId} {
+      // Seuls les utilisateurs avec rôle admin, direction ou superviseur peuvent lire/créer/modifier/supprimer
+      allow read, create, update, delete: if hasAdminRole();
+    }
+
+    // ========================================
+    // RÈGLES SIMPLES POUR LE JEU MR. WHITE
+    // ========================================
+    
+    // Sessions de jeu Mr. White
+    match /mrwhite_games/{gameId} {
+      // Tout le monde peut lire les parties
+      allow read: if request.auth != null;
+      
+      // Tout le monde peut créer une partie
+      allow create: if request.auth != null && 
+                       request.resource.data.hostId == request.auth.uid;
+      
+      // L'hôte peut modifier sa partie, les joueurs peuvent se joindre/voter
+      allow update: if request.auth != null;
+      
+      // Seul l'hôte peut supprimer sa partie
+      allow delete: if request.auth != null && 
+                   request.auth.uid == resource.data.hostId;
+    }
+    
+    // Événements globaux Mr. White
+    match /mrwhite_events/{eventId} {
+      // Tout le monde peut lire les événements
+      allow read: if request.auth != null;
+      
+      // Tout le monde peut créer des événements
+      allow create: if request.auth != null;
+      
+      // Personne ne peut modifier/supprimer les événements
+      allow update, delete: if false;
+    }
+
+    // ========================================
+    // RÈGLES POUR LE JEU MYCOVER
+    // ========================================
+    
+    // Parties MYcover
+    match /games/{gameId} {
+      // Tout le monde peut lire les parties visibles
+      allow read: if request.auth != null && resource.data.isVisible == true;
+      
+      // Tout le monde peut créer une partie
+      allow create: if request.auth != null && 
+                       request.resource.data.hostId == request.auth.uid;
+      
+      // L'hôte peut modifier sa partie
+      allow update: if request.auth != null && 
+                       resource.data.hostId == request.auth.uid;
+      
+      // L'hôte peut supprimer sa partie
+      allow delete: if request.auth != null && 
+                       resource.data.hostId == request.auth.uid;
+    }
+    
+    // Joueurs dans les parties MYcover
+    match /games/{gameId}/players/{playerId} {
+      // Tout le monde peut lire les joueurs des parties visibles
+      allow read: if request.auth != null;
+      
+      // Un joueur peut créer/modifier ses propres données
+      allow create, update: if request.auth != null && 
+                               request.auth.uid == playerId;
+      
+      // L'hôte peut modifier les données des joueurs
+      allow update: if request.auth != null && 
+                       exists(/databases/$(database)/documents/games/$(gameId)) &&
+                       get(/databases/$(database)/documents/games/$(gameId)).data.hostId == request.auth.uid;
+      
+      // Un joueur peut supprimer ses propres données
+      allow delete: if request.auth != null && 
+                       request.auth.uid == playerId;
+    }
+    
+    // Événements MYcover
+    match /mycover_events/{eventId} {
+      // Tout le monde peut lire les événements
+      allow read: if request.auth != null;
+      
+      // Tout le monde peut créer des événements
+      allow create: if request.auth != null;
+      
+      // Personne ne peut modifier/supprimer les événements
+      allow update, delete: if false;
+    }
+  }
+}
