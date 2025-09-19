@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 
-import { Mic, MicOff, Minimize2, Activity } from "lucide-react";
+import { Mic, MicOff, Minimize2, Activity, Minus, Plus } from "lucide-react";
 import IntelligentSphere from "./IntelligentSphere";
 import GeminiLiveAssistant, {
   SmartSuggestion,
@@ -31,6 +31,7 @@ export default function TeleSalesAssistant({
   const [isListening, setIsListening] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false); // Nouvel état pour réduire la fenêtre sans la minimiser
   const [isGeminiConnected, setIsGeminiConnected] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false); // Ajouté
 
@@ -309,7 +310,15 @@ export default function TeleSalesAssistant({
   if (!isSessionStarted) {
     return (
       <div className={`fixed bottom-4 right-4 z-50 ${className}`}>
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-[400px] h-[200px] flex flex-col items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-[400px] h-[200px] flex flex-col items-center justify-center relative">
+          <button
+            onClick={() => setIsMinimized(true)}
+            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Réduire"
+            aria-label="Réduire l'assistant"
+          >
+            <span className="text-lg leading-none">-</span>
+          </button>
           <h3 className="text-lg font-semibold text-cactus-600 mb-4">Assistant Canal+ IA</h3>
           {sessionClosed ? (
             <div className="mb-2 text-red-500 text-sm">Session terminée ou déconnectée.</div>
@@ -328,7 +337,7 @@ export default function TeleSalesAssistant({
 
   return (
     <div className={`fixed bottom-4 right-4 z-50 ${className}`}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-[450px] h-[650px] flex flex-col overflow-hidden">
+      <div className={`bg-white rounded-2xl shadow-2xl border border-gray-200 w-[450px] flex flex-col overflow-hidden transition-all duration-300 ${isCollapsed ? 'h-[140px]' : 'h-[650px]'}`}>
         {/* Header compact */}
         <div className="bg-cactus-600 p-4 text-white flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -347,6 +356,14 @@ export default function TeleSalesAssistant({
           </div>
           <div className="flex space-x-1">
             <button
+              onClick={() => setIsCollapsed(c => !c)}
+              className="p-1 hover:bg-cactus-700 rounded transition-colors"
+              title={isCollapsed ? "Déplier" : "Réduire"}
+              aria-label={isCollapsed ? "Déplier l'assistant" : "Réduire l'assistant"}
+            >
+              {isCollapsed ? <Plus className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+            </button>
+            <button
               onClick={startNewCall}
               className="p-1 hover:bg-cactus-700 rounded transition-colors"
               title="Nouvel appel"
@@ -361,85 +378,90 @@ export default function TeleSalesAssistant({
             </button>
           </div>
         </div>
-
-        {/* Zone principale - Sphère prend toute la place */}
-        <div className="flex-1 relative bg-gray-900">
-          <IntelligentSphere
-            isListening={isListening}
-            isAnalyzing={isAnalyzing}
-            suggestions={iaBubbles.map((s) => ({
-              id: s.id,
-              type:
-                s.type === "script_reminder"
-                  ? "script"
-                  : s.type === "objection_response"
-                  ? "relance"
-                  : "offre",
-              text: s.text,
-              context: s.context,
-              priority: s.priority,
-            }))}
-            scriptAlerts={[]}
-            completedSteps={[]}
-            suggestionLevel={suggestionLevel}
-          />
-        </div>
-
-        {/* Footer compact avec contrôles */}
-        <div className="bg-white p-4 border-t border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={toggleListening}
-              disabled={!isGeminiConnected}
-              className={`p-2 rounded-full transition-all duration-300 ${
-                isListening
-                  ? "bg-red-500 hover:bg-red-600 text-white shadow-md"
-                  : isGeminiConnected
-                  ? "bg-cactus-500 hover:bg-cactus-600 text-white shadow-sm"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
-              }`}
-            >
-              {isListening ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4" />
-              )}
-            </button>
-
-            {/* Statut */}
-            <div className="text-center">
-              <div className="text-xs text-gray-600">
-                {isListening
-                  ? "🔴 Écoute"
-                  : isAnalyzing
-                  ? "🧠 Analyse"
-                  : "✅ Prêt"}
-              </div>
-              <div className="text-xs text-gray-500">
-                {isGeminiConnected ? "Gemini Live" : "Connexion..."}
-              </div>
+        {!isCollapsed && (
+          <>
+            {/* Zone principale - Sphère */}
+            <div className="flex-1 relative bg-gray-900">
+              <IntelligentSphere
+                isListening={isListening}
+                isAnalyzing={isAnalyzing}
+                suggestions={iaBubbles.map((s) => ({
+                  id: s.id,
+                  type:
+                    s.type === "script_reminder"
+                      ? "script"
+                      : s.type === "objection_response"
+                      ? "relance"
+                      : s.type === "offer_transition"
+                      ? "offre" // transition traitée comme offre pour l'affichage
+                      : "offre",
+                  text: s.text,
+                  context: s.context,
+                  priority: s.priority,
+                }))}
+                scriptAlerts={[]}
+                completedSteps={[]}
+                suggestionLevel={suggestionLevel}
+              />
             </div>
 
-            {/* Progression du script (désactivé) */}
-            <div className="text-right">
-              <div className="text-xs font-medium text-gray-700">
-                {completionRate}%
+            {/* Footer compact avec contrôles */}
+            <div className="bg-white p-4 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={toggleListening}
+                  disabled={!isGeminiConnected}
+                  className={`p-2 rounded-full transition-all duration-300 ${
+                    isListening
+                      ? "bg-red-500 hover:bg-red-600 text-white shadow-md"
+                      : isGeminiConnected
+                      ? "bg-cactus-500 hover:bg-cactus-600 text-white shadow-sm"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  {isListening ? (
+                    <MicOff className="w-4 h-4" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Statut */}
+                <div className="text-center">
+                  <div className="text-xs text-gray-600">
+                    {isListening
+                      ? "🔴 Écoute"
+                      : isAnalyzing
+                      ? "🧠 Analyse"
+                      : "✅ Prêt"}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {isGeminiConnected ? "Gemini Live" : "Connexion..."}
+                  </div>
+                </div>
+
+                {/* Progression du script (désactivé) */}
+                <div className="text-right">
+                  <div className="text-xs font-medium text-gray-700">
+                    {completionRate}%
+                  </div>
+                  <div className="text-xs text-gray-500">{completedCount}/6</div>
+                </div>
               </div>
-              <div className="text-xs text-gray-500">{completedCount}/6</div>
+
+              {/* Barre de progression du script (désactivée) */}
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div
+                  className="bg-cactus-500 h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${completionRate}%` }}
+                />
+              </div>
+
+              {/* Indicateurs des étapes (désactivés) */}
+              <div className="flex justify-between mt-1">{/* Rien */}</div>
             </div>
-          </div>
-
-          {/* Barre de progression du script (désactivée) */}
-          <div className="w-full bg-gray-200 rounded-full h-1.5">
-            <div
-              className="bg-cactus-500 h-1.5 rounded-full transition-all duration-300"
-              style={{ width: `${completionRate}%` }}
-            />
-          </div>
-
-          {/* Indicateurs des étapes (désactivés) */}
-          <div className="flex justify-between mt-1">{/* Rien */}</div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -10,8 +10,190 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 admin.initializeApp();
 
-exports.registerUser = onCall({ region: "europe-west9" }, async (request) => {
-  const { email, password, firstName, lastName } = request.data;
+const cors = require('cors')({ origin: true });
+
+// =============================================================
+// Purge automatique des matchs passés
+// - Supprime les documents de la collection 'matches' dont startTime < (now - 48h)
+// - Exécuté chaque nuit à 03:10 heure de Paris
+// =============================================================
+exports.purgeOldMatches = onSchedule({
+  schedule: '10 3 * * *', // 03:10 tous les jours
+  timeZone: 'Europe/Paris',
+  region: 'europe-west1'
+}, async () => {
+  const db = admin.firestore();
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48h avant maintenant
+  console.log('[purgeOldMatches] Lancement purge, cutoff =', cutoff.toISOString());
+  try {
+    const snap = await db.collection('matches')
+      .where('startTime', '<', cutoff)
+      .limit(500) // sécurité batch
+      .get();
+    if (snap.empty) {
+      console.log('[purgeOldMatches] Aucun match à supprimer.');
+      return null;
+    }
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log(`[purgeOldMatches] ${snap.size} match(s) supprimé(s).`);
+  } catch (e) {
+    console.error('[purgeOldMatches] Erreur purge', e);
+  }
+  return null;
+});
+
+// =============================================================
+// Endpoint: top14Schedule (stub) - renvoie JSON des prochains matchs Rugby
+// À terme on peut remplacer par scraping / API officielle.
+// =============================================================
+exports.top14Schedule = onRequest({ region: 'europe-west9', timeoutSeconds: 15 }, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    return res.status(204).send('');
+  }
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
+  try {
+    // Jeu de données exemple (à substituer dynamiquement)
+    const now = new Date();
+    const baseDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 35, 0, 0);
+    const addDays = (n) => new Date(baseDay.getTime() + n * 86400000);
+    const matches = [
+      { id: 'm1', sport: 'rugby', competition: 'TOP14', round: 'J4', startTime: addDays(2).toISOString(), homeTeam: 'Stade Toulousain', awayTeam: 'RC Toulon', channel: 'CANAL+ SPORT', status: 'scheduled' },
+      { id: 'm2', sport: 'rugby', competition: 'TOP14', round: 'J4', startTime: addDays(3).toISOString(), homeTeam: 'Racing 92', awayTeam: 'Stade Français', channel: 'CANAL+ FOOT', status: 'scheduled' },
+      { id: 'm3', sport: 'rugby', competition: 'TOP14', round: 'J4', startTime: addDays(7).toISOString(), homeTeam: 'ASM Clermont', awayTeam: 'Union Bordeaux-Bègles', channel: 'CANAL+ SPORT 360', status: 'scheduled' },
+    ];
+    return res.json({ updatedAt: new Date().toISOString(), matches });
+  } catch (e) {
+    console.error('[top14Schedule] error', e);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// =============================================================
+// JustWatch Proxy (répare CORS côté backend au lieu du Worker CF)
+// Endpoint: /api/justwatch (voir firebase.json rewrite)
+// =============================================================
+exports.justwatchProxy = onRequest({ region: 'europe-west9', timeoutSeconds: 15, memory: '256MiB' }, async (req, res) => {
+  const allowedOrigins = [
+    'https://cactus-tech.fr',
+    'https://www.cactus-tech.fr',
+    'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  // Dev fallback port sometimes used if 5173 busy
+  'http://localhost:5174',
+  'http://127.0.0.1:5174'
+  ];
+  const origin = req.headers.origin;
+  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+  // Preflight
+  if (req.method === 'OPTIONS') {
+    res.set({
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400'
+    });
+    return res.status(204).send('');
+  }
+
+  if (req.method !== 'POST') {
+    res.set('Access-Control-Allow-Origin', allowOrigin);
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
+
+  try {
+    const contentType = (req.headers['content-type'] || '').toLowerCase();
+    let bodyText = req.rawBody ? req.rawBody.toString('utf8') : '';
+    if (!bodyText) bodyText = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+    if (bodyText.length > 200_000) {
+      throw new Error('Payload trop volumineux');
+    }
+    let parsed;
+    if (contentType.includes('application/json') || contentType.includes('text/plain')) {
+      try { parsed = JSON.parse(bodyText); } catch { /* si déjà objet */ }
+      if (!parsed && typeof req.body === 'object') parsed = req.body;
+    }
+    if (!parsed || !parsed.query) {
+      return res.status(400).set('Access-Control-Allow-Origin', allowOrigin).json({ error: 'Requête GraphQL invalide (champ query manquant)' });
+    }
+
+    const upstreamResp = await fetch('https://apis.justwatch.com/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; CactusJustWatchProxy/1.0)'
+      },
+      body: JSON.stringify(parsed)
+    });
+
+    const text = await upstreamResp.text();
+    res.set({
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Content-Type': upstreamResp.headers.get('content-type') || 'application/json',
+      'Vary': 'Origin'
+    });
+    return res.status(upstreamResp.status).send(text);
+  } catch (e) {
+    console.error('[justwatchProxy] Error', e);
+    res.set('Access-Control-Allow-Origin', origin || '*');
+    return res.status(500).json({ error: 'Proxy failure', details: e.message });
+  }
+});
+
+exports.registerUser = onRequest({ region: "europe-west9" }, (req, res) => {
+  cors(req, res, async () => {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Méthode non autorisée" });
+    }
+    const { email, password, firstName, lastName } = req.body;
+
+    if (!email || !password || !firstName || !lastName) {
+      return res.status(400).json({ error: "Tous les champs sont requis" });
+    }
+
+    try {
+      const userRecord = await admin.auth().createUser({
+        email: email,
+        password: password,
+        displayName: `${firstName} ${lastName}`,
+      });
+
+      await admin.firestore().collection("users").doc(userRecord.uid).set({
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      await admin
+        .firestore()
+        .collection("gameCredits")
+        .doc(userRecord.uid)
+        .set({
+          userId: userRecord.uid,
+          credits: 100,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+      return res.status(200).json({ uid: userRecord.uid, success: true });
+    } catch (error) {
+      return res.status(500).json({ error: error.message, rawCode: error.code });
+    }
+  });
+});
+
+// Callable équivalent pour correspondre au client (httpsCallable)
+exports.registerUserCallable = onCall({ region: "europe-west9" }, async (req) => {
+  const { email, password, firstName, lastName } = req.data || {};
 
   if (!email || !password || !firstName || !lastName) {
     throw new HttpsError("invalid-argument", "Tous les champs sont requis");
@@ -19,21 +201,37 @@ exports.registerUser = onCall({ region: "europe-west9" }, async (request) => {
 
   try {
     const userRecord = await admin.auth().createUser({
-      email: email,
-      password: password,
+      email,
+      password,
       displayName: `${firstName} ${lastName}`,
     });
 
     await admin.firestore().collection("users").doc(userRecord.uid).set({
-      firstName: firstName,
-      lastName: lastName,
-      email: email,
+      firstName,
+      lastName,
+      email,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
+    await admin
+      .firestore()
+      .collection("gameCredits")
+      .doc(userRecord.uid)
+      .set(
+        {
+          userId: userRecord.uid,
+          credits: 100,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
     return { uid: userRecord.uid, success: true };
   } catch (error) {
-    throw new HttpsError("internal", error.message, { rawCode: error.code });
+    const code = error.code || "internal";
+    const message = error.message || "Erreur interne";
+    throw new HttpsError("internal", message, { rawCode: code });
   }
 });
 
@@ -234,7 +432,13 @@ function buildHtml(sale, message) {
 }
 
 async function sendEmail({ to, subject, html }) {
-  const apiKey = "11c02e9e-61de-4037-99ad-0e313adb3a37";
+  // Récupération clé Sweego depuis config Firebase Functions ou variable d'env fallback
+  const functions = require('firebase-functions');
+  const apiKey = (functions.config().sweego && functions.config().sweego.apikey) || process.env.SWEEGO_API_KEY;
+  if (!apiKey) {
+    console.error('[sendEmail] Clé API Sweego manquante (config sweego.apikey ou env SWEEGO_API_KEY). Email NON envoyé:', { to, subject });
+    return; // On n'essaie pas l'appel sans clé
+  }
 
   const data = {
     channel: "email",
@@ -255,14 +459,16 @@ async function sendEmail({ to, subject, html }) {
         Accept: "application/json",
         "Api-Key": apiKey,
       },
+      timeout: 10000,
+      validateStatus: (s) => s < 500 // laisser passer 4xx pour logging
     });
-    console.log(`✅ Email envoyé à ${to}:`, response.data);
+    if (response.status >= 200 && response.status < 300) {
+      console.log(`✅ [Sweego] Email envoyé à ${to}:`, response.data);
+    } else {
+      console.error(`⚠️ [Sweego] Statut inattendu ${response.status} pour ${to}:`, response.data);
+    }
   } catch (err) {
-    console.error(
-      `❌ Échec envoi email à ${to}:`,
-      err.response?.data || err.message
-    );
-    // Ne throw pas ici pour ne pas bloquer les autres mails
+    console.error(`❌ [Sweego] Échec envoi email à ${to}:`, err.response?.data || err.message);
   }
 }
 
@@ -439,3 +645,47 @@ function buildProgrammeEmailHTML(items) {
     </html>
   `;
 }
+
+// Assure que "registerUser" reste un callable (évite l'erreur de changement de type)
+exports.registerUser = onCall({ region: "europe-west9" }, async (req) => {
+  const { email, password, firstName, lastName } = req.data || {};
+
+  if (!email || !password || !firstName || !lastName) {
+    throw new HttpsError("invalid-argument", "Tous les champs sont requis");
+  }
+
+  try {
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+      displayName: `${firstName} ${lastName}`,
+    });
+
+    await admin.firestore().collection("users").doc(userRecord.uid).set({
+      firstName,
+      lastName,
+      email,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await admin
+      .firestore()
+      .collection("gameCredits")
+      .doc(userRecord.uid)
+      .set(
+        {
+          userId: userRecord.uid,
+          credits: 100,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    return { uid: userRecord.uid, success: true };
+  } catch (error) {
+    const code = error.code || "internal";
+    const message = error.message || "Erreur interne";
+    throw new HttpsError("internal", message, { rawCode: code });
+  }
+});

@@ -216,7 +216,7 @@ const CallScriptStep5: React.FC<StepProps> = ({ callData, setCallData }) => {
         .filter((q) => !q.condition || q.condition(callData))
         .map((q) => (
           <div key={q.id} className="bg-white border p-4 rounded-lg space-y-2">
-            <p className="font-medium text-gray-900">{q.question}</p>
+            <p className="font-medium text-gray-900">... {q.question.replace(/\?+\s*$/, "").trim()} ...</p>
             {q.options ? (
               <div className="flex flex-wrap gap-2">
                 {q.options.map((option) => {

@@ -2,13 +2,16 @@ import React, { useState, useEffect } from "react";
 import { X, Users, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MrWhiteService, { GameEvent } from "../services/mrWhiteService";
+import { useAuth } from "../contexts/AuthContext";
 
 const GameNotification: React.FC = () => {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [dismissedEvents, setDismissedEvents] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
+    if (!user) return;
     const unsubscribe = MrWhiteService.subscribeToEvents((newEvents) => {
       // Ne garder que les événements des 5 dernières minutes
       const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
@@ -20,7 +23,7 @@ const GameNotification: React.FC = () => {
     });
 
     return unsubscribe;
-  }, []);
+  }, [user]);
 
   const handleJoinGame = (gameId: string) => {
     navigate(`/dashboard/mrwhite?join=${gameId}`);

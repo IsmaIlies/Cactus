@@ -127,7 +127,7 @@ const OfferSuggestionStep: React.FC<Props> = ({ callData, setCallData }) => {
         </button>
       </div>
 
-      <div className="bg-white border p-4 rounded-lg space-y-3 min-h-[150px] font-mono text-sm break-words">
+      <div className="bg-white border p-4 rounded-lg space-y-3 min-h-[150px] font-sans text-base leading-relaxed break-words">
         {messages.map((m, i) => (
           <div
             key={i}
@@ -146,7 +146,7 @@ const OfferSuggestionStep: React.FC<Props> = ({ callData, setCallData }) => {
 
         {streamingText && (
           <div
-            className="text-gray-800 bg-gray-100 p-3 rounded-md text-sm leading-relaxed break-words"
+            className="text-gray-800 bg-gray-100 p-3 rounded-md text-base leading-relaxed break-words font-sans"
             style={{
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",

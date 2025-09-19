@@ -1,0 +1,348 @@
+﻿rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Fonction pour v  rifier si l'utilisateur a un r  le d'administration
+    function hasAdminRole() {
+      return request.auth != null && 
+             (request.auth.token.admin == true || 
+              request.auth.token.direction == true || 
+              request.auth.token.superviseur == true ||
+              request.auth.token.ta == true ||
+              (request.auth.token.role is string && (
+                lower(request.auth.token.role) == 'ta' ||
+                lower(request.auth.token.role) == 'admin' ||
+                lower(request.auth.token.role) == 'direction' ||
+                lower(request.auth.token.role) == 'superviseur'
+              )));
+    }
+
+    // Fonction stricte: uniquement ADMIN (pas TA / direction / superviseur)
+    function isAdminStrict() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        (request.auth.token.role is string && lower(request.auth.token.role) == 'admin')
+      );
+    }
+
+    // Helper: autoriser certains updates "techniques" (ex: timestamp de ping)
+    function onlyUpdatingTimestamp() {
+      // updateDoc() n'envoie que les champs modifi  s : ici uniquement updatedAt
+      return request.resource != null &&
+             request.resource.data.keys().hasOnly(["updatedAt"]) &&
+             request.resource.data.updatedAt is timestamp;
+    }
+
+    // R  gles pour la collection users
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if hasAdminRole();
+    }
+    // Sous-collection todos d'un utilisateur
+    match /users/{userId}/todos/{todoId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // R  gles pour la collection typingStatus (statut de saisie)
+    match /typingStatus/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // R  gles pour la collection sales
+    match /sales/{saleId} {
+  // Permettre    tous les utilisateurs authentifi  s de lire les ventes
+  allow read: if request.auth != null;
+
+  // Permettre aux utilisateurs de cr  er des ventes s'ils sont propri  taires
+  allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+
+  // Permettre aux utilisateurs de mettre    jour ou supprimer leurs propres ventes
+  // ou aux administrateurs/direction/superviseurs de tout modifier/supprimer
+  allow update, delete: if request.auth != null && 
+                        (request.auth.uid == resource.data.userId || hasAdminRole());
+}
+    
+    match /users/{userId}/chatHistories/{historyId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/chatHistories/{historyId}/messages/{messageId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // R  gles pour la collection contactsArgues (CA)
+    match /contactsArgues/{docId} {
+      // Tous les utilisateurs connect  s peuvent lire
+      allow read: if request.auth != null;
+      // Seuls les utilisateurs avec r  le admin, direction ou superviseur peuvent cr  er/modifier/supprimer
+      allow create, update, delete: if hasAdminRole();
+    }
+    
+    // R  gles pour la collection missions
+    match /missions/{missionId} {
+      // Tous les utilisateurs connect  s peuvent lire
+      allow read: if request.auth != null;
+      // Seuls les utilisateurs avec r  le admin, direction ou superviseur peuvent   crire
+      allow write: if hasAdminRole();
+    }
+    
+    // R  gles pour la collection objectives
+    match /objectives/{objectiveId} {
+      // Tous les utilisateurs connect  s peuvent lire
+      allow read: if request.auth != null;
+      // Seuls les utilisateurs avec r  le admin, direction ou superviseur peuvent cr  er/modifier/supprimer
+      allow create, update, delete: if hasAdminRole();
+    }
+    
+    // R  gles pour les sous-collections des missions
+    match /missions/{missionId}/sales/{saleId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      // Permettre aux admins/direction/superviseurs de tout modifier/supprimer
+      allow update, delete: if request.auth != null && 
+                            (request.auth.uid == resource.data.userId || hasAdminRole());
+    }
+    
+    match /missions/{missionId}/contactsArgues/{docId} {
+      // Tous les utilisateurs connect  s peuvent lire
+      allow read: if request.auth != null;
+      // Seuls les utilisateurs avec r  le admin, direction ou superviseur peuvent cr  er/modifier/supprimer
+      allow create, update, delete: if hasAdminRole();
+    }
+    
+    match /missions/{missionId}/objectives/{objectiveId} {
+      // Tous les utilisateurs connect  s peuvent lire
+      allow read: if request.auth != null;
+      // Seuls les utilisateurs avec r  le admin, direction ou superviseur peuvent cr  er/modifier/supprimer
+      allow create, update, delete: if hasAdminRole();
+    }
+
+    // ========================================
+    // R  GLES SIMPLES POUR LE JEU MR. WHITE
+    // ========================================
+    
+    // Sessions de jeu Mr. White
+    match /mrwhite_games/{gameId} {
+      // Tout le monde peut lire les parties
+      allow read: if request.auth != null;
+      
+      // Tout le monde peut cr  er une partie
+      allow create: if request.auth != null && 
+                       request.resource.data.hostId == request.auth.uid;
+      
+      // L'h  te peut modifier sa partie, les joueurs peuvent se joindre/voter
+      allow update: if request.auth != null;
+      
+      // Seul l'h  te peut supprimer sa partie
+      allow delete: if request.auth != null && 
+                   request.auth.uid == resource.data.hostId;
+    }
+    
+    //   v  nements globaux Mr. White
+    match /mrwhite_events/{eventId} {
+      // Tout le monde peut lire les   v  nements
+      allow read: if request.auth != null;
+      
+      // Tout le monde peut cr  er des   v  nements
+      allow create: if request.auth != null;
+      
+      // Personne ne peut modifier/supprimer les   v  nements
+      allow update, delete: if false;
+    }
+
+    // ========================================
+    // R  GLES POUR LE JEU MYCOVER
+    // ========================================
+    
+    // Parties MYcover
+    match /games/{gameId} {
+      // Tout le monde peut lire les parties visibles
+      allow read: if request.auth != null && resource.data.isVisible == true;
+      
+      // Tout le monde peut cr  er une partie
+      allow create: if request.auth != null && 
+                       request.resource.data.hostId == request.auth.uid;
+      
+      // L'h  te peut modifier sa partie. Les autres peuvent uniquement pousser un rafra  chissement updatedAt.
+      allow update: if request.auth != null && (
+                       resource.data.hostId == request.auth.uid ||
+                       onlyUpdatingTimestamp()
+                     );
+      
+      // L'h  te peut supprimer sa partie
+      allow delete: if request.auth != null && 
+                       resource.data.hostId == request.auth.uid;
+    }
+    
+    // Joueurs dans les parties MYcover
+    match /games/{gameId}/players/{playerId} {
+      // Tout le monde peut lire les joueurs des parties visibles
+      allow read: if request.auth != null;
+      
+      // Un joueur peut cr  er/modifier ses propres donn  es
+      allow create, update: if request.auth != null && 
+                               request.auth.uid == playerId;
+      
+      // L'h  te peut modifier les donn  es des joueurs
+      allow update: if request.auth != null && 
+                       exists(/databases/$(database)/documents/games/$(gameId)) &&
+                       get(/databases/$(database)/documents/games/$(gameId)).data.hostId == request.auth.uid;
+      
+      // Un joueur peut supprimer ses propres donn  es
+      allow delete: if request.auth != null && 
+                       request.auth.uid == playerId;
+    }
+    
+    //   v  nements MYcover
+    match /mycover_events/{eventId} {
+      // Tout le monde peut lire les   v  nements
+      allow read: if request.auth != null;
+      
+      // Tout le monde peut cr  er des   v  nements
+      allow create: if request.auth != null;
+      
+      // Personne ne peut modifier/supprimer les   v  nements
+      allow update, delete: if false;
+    }
+
+    // ========================
+    // CR  DITS / PARIS INTERNES (g  n  riques)
+    // ========================
+    match /gameCredits/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if hasAdminRole();
+    }
+
+    match /betHistory/{eventId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.bettorUserId;
+      allow update, delete: if false;
+    }
+
+    match /betsCasino/{betId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.bettorUserId;
+      allow update: if request.auth != null && request.auth.uid == resource.data.bettorUserId;
+      allow delete: if hasAdminRole();
+    }
+
+    // ========================
+    // SUGGESTIONS (FAQ / id  es)
+    // ========================
+    match /suggestions/{suggestionId} {
+      // Lecture: tout utilisateur authentifi  
+      allow read: if request.auth != null;
+      // Cr  ation: l'utilisateur authentifi   doit   tre propri  taire du doc et fournir un texte
+      allow create: if request.auth != null &&
+                    request.auth.uid == request.resource.data.userId &&
+                    request.resource.data.text is string;
+      // Update / delete: propri  taire ou r  le admin/direction/superviseur
+      allow update, delete: if request.auth != null &&
+                             (request.auth.uid == resource.data.userId || hasAdminRole());
+    }
+
+    // ========================
+    // POKER DUEL (prototype)
+    // ========================
+    // Table unique: pokerDuel/main
+    match /pokerDuel/{docId} {
+      allow read: if request.auth != null;
+      // Prototype: autorise   criture    tout utilisateur connect   (   restreindre ensuite via Cloud Functions)
+      allow write: if request.auth != null;
+    }
+    // Pr  sence spectateurs / joueurs
+    match /pokerPresence/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ========================
+    // FORMATION / E-LEARNING
+    // ========================
+    // Scores de quiz (lecture globale pour leaderboard,   criture seulement par l'utilisateur propri  taire du score)
+    match /quizScores/{scoreId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.module is string
+        && request.resource.data.questions is list
+        && request.resource.data.score is number
+        && request.resource.data.createdAt is number;
+      // Pas de mise    jour (immutables) sauf r  les admin
+      allow update: if false;
+      allow delete: if hasAdminRole();
+    }
+
+    // Progression agr  g  e par utilisateur (un document par uid)
+    match /progression/{uid} {
+  // Acc  s lecture : owner OU r  le admin (get). Listing complet r  serv      l'admin.
+  allow get: if request.auth != null && (request.auth.uid == uid || hasAdminRole());
+  // Autoriser la liste compl  te uniquement aux r  les admin (leaderboard global possible c  t   back-office)
+  allow list: if request.auth != null && hasAdminRole();
+  // Cr  ation / mise    jour uniquement par l'utilisateur sur son propre doc
+  allow create: if request.auth != null && request.auth.uid == uid && request.resource.data.global is number;
+  allow update: if request.auth != null && request.auth.uid == uid && request.resource.data.global is number;
+  // Suppression r  serv  e admin
+  allow delete: if hasAdminRole();
+    }
+
+    // ========================
+    // MESSAGES (Team Chat)
+    // ========================
+    // R  gles basiques pour le chat temps r  el.
+    // Lecture: tous les utilisateurs authentifi  s.
+    // Cr  ation: l'exp  diteur doit   tre l'utilisateur connect   et fournir les champs essentiels.
+    // Mise    jour / suppression: auteur du message ou r  le admin/direction/superviseur.
+    // (Si on souhaite plus tard permettre les r  actions par d'autres utilisateurs, on adaptera avec une r  gle sp  cifique.)
+    match /messages/{messageId} {
+  // TEMP DEBUG:   largir lecture pour identifier probl  me permission. A restreindre apr  s validation.
+  allow read: if request.auth != null;
+      // Cr  ation: auteur + contraintes:
+      //  - Public: channel == 'public'
+      //  - Priv  : participants list de 2 uids incluant l'auteur
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.senderId
+        && request.resource.data.sender is string
+        && request.resource.data.text is string
+        && request.resource.data.channel is string
+        && (
+          request.resource.data.channel in ['public','public_fr','public_civ'] ||
+          (request.resource.data.participants is list &&
+           request.resource.data.participants.size() == 2 &&
+           request.auth.uid in request.resource.data.participants) ||
+          (request.resource.data.participantA is string &&
+           request.resource.data.participantB is string &&
+           request.auth.uid in [request.resource.data.participantA, request.resource.data.participantB])
+        );
+      // Update / delete: auteur ou r  le admin (permettra   dition / suppression). On ne restreint pas le contenu modifi   ici, mais on peut ajouter des validations si besoin.
+      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.senderId || hasAdminRole());
+    }
+
+    // ========================
+    // DOCUMENT PDF PARTAGE (programme)
+    // ========================
+    // R  gle sp  cifique : le document programmePdf est lisible par tout utilisateur AUTHENTIFIE (plus public)
+    match /shared/programmePdf {
+      // Lecture: utilisateur connect   uniquement
+      allow read: if request.auth != null;
+      // Ecriture / modification / suppression strictement r  serv  es aux admins stricts
+      allow create, update, delete: if isAdminStrict();
+    }
+
+    match /shared/{docId} {
+      allow read: if request.auth != null; // Tous les utilisateurs authentifi  s (inclut TA)
+      // Upload / modification / suppression UNIQUEMENT admin strict
+      allow create, update, delete: if isAdminStrict();
+    }
+
+  // modeTvPresence legacy supprim  
+  }
+}
+

@@ -30,8 +30,16 @@ import { CallData } from "../pages/CallScriptPage";
 import { ProgramCard } from "../pages/AiAssistantPage";
 
 const genAI = new GoogleGenAI({
-  apiKey: "AIzaSyDqpjxQoiubpPOE2tIxztb0SB61QX01Zas", // ⚠️ Ne jamais exposer en prod
+  apiKey: "AIzaSyDqpjxQoiubpPOE2tIxztb0SB61QX01Zas", // ⚠️ Ne jamais exposer en prod (à déplacer dans une variable d'environnement)
 });
+
+// Instruction système globale pour forcer les réponses en français
+const FRENCH_SYSTEM_INSTRUCTION = `Tu réponds toujours strictement en FRANÇAIS.
+Contraintes :
+- Si l'utilisateur parle dans une autre langue, tu réponds en français.
+- Tu ne traduis PAS le code ou les identifiants techniques.
+- Style : clair, professionnel, concis.
+Si une réponse est demandée dans une autre langue, reformule en français.`;
 
 export async function* streamOfferScript(
   callData: CallData
@@ -45,8 +53,7 @@ export async function* streamOfferScript(
     model,
     contents: prompt,
     config: {
-      systemInstruction:
-        "Tu es un conseiller Orange et un vendeur remarquable qui vend des offres canal sans même qu'on s'en rende compte que tu vends une offre canal. Ton ton est dynamique et fluide.",
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu es un conseiller Orange et un vendeur remarquable qui vend des offres Canal sans que cela paraisse insistant. Ton ton est dynamique, fluide, naturel, orienté bénéfices client. Réponds uniquement en français.`,
       temperature: 0.7,
       maxOutputTokens: 512,
     },
@@ -141,8 +148,7 @@ Retourne uniquement un JSON strictement conforme à ce schéma :
 }
     `,
     config: {
-      systemInstruction:
-        "Tu es un conseiller Orange et un vendeur remarquable qui répond aux objections des clients de manière rassurante et claire pour réaliser la vente sur le coup.",
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu es un conseiller Orange qui répond aux objections de façon rassurante, claire, concise pour maximiser la conversion. Le champ 'response' doit être en français.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -187,8 +193,7 @@ export async function getObjectionsFromScript(
   }
   `,
     config: {
-      systemInstruction:
-        "Tu génères des objections potentielles d'un client à partir du script commercial.",
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu génères des objections POTENTIELLES (en français) d'un client à partir du script commercial.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "object",
@@ -240,7 +245,8 @@ export async function streamGeminiResponse(
     model,
     contents,
     config: {
-      tools: [{ googleSearch: {} }], // Ajout de la recherche Google
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nAssistant conversationnel multithématique. Utilise un ton naturel et utile.`,
+      tools: [{ googleSearch: {} }],
       temperature: 0.7,
       maxOutputTokens: 1024,
       ...(options?.signal ? { signal: options.signal } : {}),
@@ -327,6 +333,7 @@ Pas d’introduction, pas de conclusion, juste les données.
       },
     ],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu extrais des contenus récents et formates uniquement en JSON conforme demandé.`,
       tools: [{ googleSearch: {} }],
     },
   });
@@ -375,6 +382,7 @@ Ne retourne QUE le JSON strictement conforme à ce schéma.
       },
     ],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nNe retourne que le JSON demandé, sans texte additionnel.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "array",
@@ -464,6 +472,7 @@ Ne réponds qu'avec les informations demandées, sans introduction ni conclusion
       },
     ],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu fournis un texte descriptif concis en français.`,
       tools: [{ googleSearch: {} }],
     },
   });
@@ -514,6 +523,7 @@ Retourne uniquement un JSON strictement conforme, sans texte supplémentaire.
       },
     ],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nStructure uniquement selon le schéma JSON fourni.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "array",
@@ -563,6 +573,7 @@ export async function streamGeminiDetails(
     model: "models/gemini-2.0-flash",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nFournis des informations concises et utiles en français.`,
       tools: [{ googleSearch: {} }],
       temperature: 0.7,
       maxOutputTokens: 512,
@@ -608,6 +619,7 @@ Réponds uniquement avec le titre, sans guillemets ni explication.
     model: "models/gemini-2.0-flash",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu génères des titres de conversation courts (<=5 mots).`,
       temperature: 0.5,
       maxOutputTokens: 50,
     },
@@ -655,6 +667,7 @@ Réponds uniquement avec le titre, sans guillemets ni explication.
     model: "models/gemini-2.0-flash",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
+      systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu génères des titres de conversation courts (<=5 mots).`,
       temperature: 0.5,
       maxOutputTokens: 50,
     },

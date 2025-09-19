@@ -26,12 +26,12 @@ export interface CallData {
     favoriteFilm?: string;
     favoriteActor?: string;
     favoriteSeries?: string;
-    favoriteFilmGenres?: string[]; // ✅ nouveau champ
-    favoriteSeriesGenres?: string[]; // ✅ nouveau champ
+    favoriteFilmGenres?: string[];
+    favoriteSeriesGenres?: string[];
     deviceUsage?: string;
   };
   notes?: string;
-  offerScript?: string; // ✅ ici
+  offerScript?: string;
   messages?: {
     from: "IA" | "Client";
     text: string;
@@ -48,6 +48,7 @@ const CallScriptPage = () => {
   });
   const [isCallActive, setIsCallActive] = useState(false);
   const [, setCallDuration] = useState(0);
+  const [showInfoPopup, setShowInfoPopup] = useState(true);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -94,9 +95,8 @@ const CallScriptPage = () => {
                 , conseiller Orange.
               </p>
               <p className="text-gray-800">
-                Je vous appelle car vous êtes un client fidèle et j'aimerais
-                faire un point avec vous avez sur comment vous regarder la télé
-                et vos services actuels."
+                Je vous appelle très rapidement 
+                sur votre usage et divertissement audiovisuel."
               </p>
             </div>
           </div>
@@ -139,6 +139,7 @@ const CallScriptPage = () => {
                     </p>
                   </div>
                 </div>
+  {/* ...existing code... */}
               </button>
 
               <button className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
@@ -526,6 +527,37 @@ const CallScriptPage = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {showInfoPopup && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-xl px-6">
+          <div className="bg-white border border-cactus-300 shadow-lg rounded-xl p-5 flex flex-col gap-3 relative animate-fade-in">
+            <button
+              className="absolute top-2 right-2 text-cactus-500 hover:text-cactus-700 text-lg font-bold"
+              onClick={() => setShowInfoPopup(false)}
+              title="Fermer"
+            >
+              ×
+            </button>
+            <h2 className="text-lg font-semibold text-cactus-700 mb-1">Mail d'accompagnement</h2>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              <span className="font-semibold text-cactus-700">Ce texte est à utiliser comme mail d'accompagnement après votre appel.</span><br /><br />
+              Comme convenu, je vous transmets par ce mail le récapitulatif de l’offre présentée lors de notre échange.<br />
+              Je vous invite à en prendre connaissance et reste à votre disposition pour toute précision complémentaire.<br />
+              Vous pouvez me joindre directement au&nbsp;
+              <span className="font-bold text-cactus-800 bg-cactus-100 px-2 py-1 rounded">01 62 22 00 31</span>
+            </p>
+          </div>
+        </div>
+      )}
+      {!showInfoPopup && (
+        <button
+          className="fixed top-6 right-8 z-50 bg-cactus-600 hover:bg-cactus-700 text-white rounded-full shadow-lg p-3 flex items-center justify-center transition-colors"
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+          onClick={() => setShowInfoPopup(true)}
+          title="Afficher l'information"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="#fff"/><text x="12" y="16" textAnchor="middle" fontSize="12" fill="#2d7a46">i</text></svg>
+        </button>
+      )}
       <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Script d'appel</h1>

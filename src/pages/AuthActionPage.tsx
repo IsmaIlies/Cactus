@@ -92,9 +92,9 @@ const AuthActionPage = () => {
           }
 
           if (attempts >= maxAttempts) {
-            console.log("⚠️ Délai dépassé, redirection vers verify-email");
+            console.log("⚠️ Délai dépassé, redirection vers dashboard");
             clearInterval(checkSyncInterval);
-            navigate("/verify-email", { replace: true });
+            navigate("/dashboard", { replace: true });
           }
         }, checkInterval);
 

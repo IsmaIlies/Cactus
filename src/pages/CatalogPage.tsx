@@ -7,6 +7,7 @@ import fetchContentFromAllProviders, {
   AVAILABLE_GENRES,
   EXCLUDABLE_GENRES,
 } from "../services/justwatchService";
+import { FALLBACK_SENTINEL_ID } from "../services/justwatchService";
 
 export interface StreamingContent {
   id: string;
@@ -87,10 +88,13 @@ const CatalogPage = () => {
   const [sortBy, setSortBy] = useState<"POPULAR" | "RELEASE_YEAR" | "TITLE">(
     "RELEASE_YEAR"
   );
+  const [degraded, setDegraded] = useState(false);
+  const [manualReloadKey, setManualReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
-      setLoading(true);
+      setLoading(true); setDegraded(false);
       try {
         const content = await fetchContentFromAllProviders({
           providers: selectedProviders,
@@ -103,14 +107,17 @@ const CatalogPage = () => {
           type: selectedType,
           sortBy: sortBy,
         });
+        if(cancelled) return;
         setResults(content);
+        if(content.some(c=> c.id === FALLBACK_SENTINEL_ID)) setDegraded(true);
       } catch (error) {
-        console.error("Erreur lors du chargement:", error);
+        if(!cancelled){ console.error("Erreur lors du chargement:", error); setDegraded(true); }
       } finally {
-        setLoading(false);
+        if(!cancelled) setLoading(false);
       }
     };
     fetchData();
+    return ()=>{ cancelled = true; };
   }, [
     searchQuery,
     selectedProviders,
@@ -121,6 +128,7 @@ const CatalogPage = () => {
     maxYear,
     selectedType,
     sortBy,
+    manualReloadKey,
   ]);
 
   const toggle = (
@@ -489,6 +497,16 @@ const CatalogPage = () => {
                 </div>
               )}
             </div>
+            {degraded && !loading && (
+              <div className="mb-6 p-4 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm flex flex-col gap-2">
+                <div className="font-semibold flex items-center gap-2">⚠ Mode dégradé (proxy catalogue indisponible)</div>
+                <p className="leading-snug">Le service distant ne répond pas (CORS ou réseau). Les données affichées sont limitées. Réessaie ou contacte un administrateur si le problème persiste.</p>
+                <div className="flex gap-2">
+                  <button onClick={()=> setManualReloadKey(k=>k+1)} className="px-3 py-1.5 rounded-md bg-cactus-600 text-white text-xs font-medium hover:bg-cactus-700">Réessayer</button>
+                  <button onClick={()=> clearAllFilters()} className="px-3 py-1.5 rounded-md border border-amber-300 bg-white text-amber-700 text-xs font-medium hover:bg-amber-100">Réinitialiser filtres</button>
+                </div>
+              </div>
+            )}
 
             {/* Grille de contenu */}
             {loading ? (

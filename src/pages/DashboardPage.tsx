@@ -1,6 +1,8 @@
-import React from "react";
-import { useLocation } from "react-router-dom";
+﻿import React from "react";
+import RightSidebar from "../components/RightSidebar";
+import { useLocation, useParams, Navigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import NewMessageNotifier from "../components/NewMessageNotifier";
 import DashboardHome from "./DashboardHome";
 import SalesPage from "./SalesPage";
 import SettingsPage from "./SettingsPage";
@@ -8,38 +10,64 @@ import AiAssistantPage from "./AiAssistantPage";
 import CatalogPage from "./CatalogPage";
 import CallScriptPage from "./CallScriptPage";
 import MrWhitePage from "./MrWhitePage";
-import RightSidebar from "../components/RightSidebar";
+import PokerDuelPage from "./PokerDuelPage";
 import MyCoverPage from "./MyCoverPage";
 import OffersPage from "./OffersPage";
 import FaqPage from "./FaqPage";
+import NouveautesPage from "./NouveautesPage";
+import { useRegion } from '../contexts/RegionContext';
 
-const DashboardPage = () => {
+const DashboardPage: React.FC = () => {
   const location = useLocation();
+  // Right sidebar enabled except on ModeTVCasino page
   const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(true);
 
-  // Détermine la page active à partir de l'URL
+  // Ferme automatiquement la sidebar droite sur la page NouveautÃ©s (plein focus contenu)
+  React.useEffect(() => {
+    if (location.pathname.startsWith('/dashboard/nouveautes')) {
+      setIsRightSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
+  const { region } = useParams();
+  const regionLower = (region || '').toLowerCase();
+  if (region && regionLower !== 'fr' && regionLower !== 'civ') {
+    return <Navigate to="/dashboard/fr" replace />;
+  }
+  // Sync URL param with region context (FR/CIV)
+  const { region: ctxRegion, setRegion } = useRegion();
+  React.useEffect(() => {
+    const code = regionLower === 'civ' ? 'CIV' : 'FR';
+    if (ctxRegion !== code) {
+      try { setRegion(code as any); } catch {}
+    }
+  }, [regionLower, ctxRegion, setRegion]);
+  const base = `/dashboard/${regionLower}`;
+
+  // DÃ©termine la page active Ã  partir de l'URL
+  const p = location.pathname;
   let activePage = "home";
-  if (location.pathname === "/dashboard") activePage = "home";
-  else if (location.pathname.startsWith("/dashboard/script"))
-    activePage = "script";
-  else if (location.pathname.startsWith("/dashboard/catalog"))
-    activePage = "catalog";
-  else if (location.pathname.startsWith("/dashboard/sales"))
-    activePage = "sales";
-  else if (location.pathname.startsWith("/dashboard/ai")) activePage = "ai";
-  else if (location.pathname.startsWith("/dashboard/mrwhite")) activePage = "mrwhite";
-  else if (location.pathname.startsWith("/dashboard/mycover")) activePage = "mycover";
-  else if (location.pathname.startsWith("/dashboard/offers")) activePage = "offers";
-  else if (location.pathname.startsWith("/dashboard/faq")) activePage = "faq";
-  else if (location.pathname.startsWith("/dashboard/settings"))
-    activePage = "settings";
+  if (p === base) activePage = "home";
+  else if (p.startsWith(`${base}/script`)) activePage = "script";
+  else if (p.startsWith(`${base}/catalog`)) activePage = "catalog";
+  else if (p.startsWith(`${base}/sales`)) activePage = "sales";
+  else if (p.startsWith(`${base}/ai`)) activePage = "ai";
+  else if (p.startsWith(`${base}/mrwhite`)) activePage = "mrwhite";
+  else if (p.startsWith(`/modetv-disabled`)) activePage = "modetv"; // legacy path kept
+  else if (p.startsWith(`${base}/mycover`)) activePage = "mycover";
+  else if (p.startsWith(`${base}/offers`)) activePage = "offers";
+  else if (p.startsWith(`${base}/faq`)) activePage = "faq";
+  else if (p.startsWith(`${base}/nouveautes`)) activePage = "nouveautes";
+  else if (p.startsWith(`${base}/settings`)) activePage = "settings";
 
   return (
     <div className="flex h-screen bg-sand-50 overflow-hidden">
       <Sidebar />
       <div
         className={`flex-1 overflow-hidden transition-all duration-300 ${
-          isRightSidebarOpen ? "mr-64" : "mr-4"
+          activePage !== 'modetv'
+            ? (isRightSidebarOpen ? 'mr-64' : 'mr-4')
+            : ''
         }`}
       >
         <div className="h-full overflow-hidden">
@@ -80,6 +108,11 @@ const DashboardPage = () => {
             <MrWhitePage />
           </div>
           <div 
+            style={{ display: activePage === "modetv" ? "block" : "none" }}
+            className="h-full overflow-auto p-0"
+          > {activePage === 'modetv' ? <PokerDuelPage /> : null}
+          </div>
+          <div 
             style={{ display: activePage === "mycover" ? "block" : "none" }}
             className="h-full overflow-auto p-6"
           >
@@ -103,14 +136,25 @@ const DashboardPage = () => {
           >
             <SettingsPage />
           </div>
+          <div
+            style={{ display: activePage === "nouveautes" ? "block" : "none" }}
+            className="h-full overflow-auto p-0"
+          >
+            <NouveautesPage />
+          </div>
         </div>
       </div>
-      <RightSidebar
-        isOpen={isRightSidebarOpen}
-        onToggle={setIsRightSidebarOpen}
-      />
+      {activePage !== 'modetv' && (
+        <RightSidebar
+          isOpen={isRightSidebarOpen}
+          onToggle={setIsRightSidebarOpen}
+        />
+      )}
+    {/* Notifications nouveaux messages (global) */}
+    <NewMessageNotifier />
     </div>
   );
 };
 
 export default DashboardPage;
+

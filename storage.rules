@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Nouveau dossier pour les programmes: programme-pdf/<timestamp>-<slug>.pdf
+    match /programme-pdf/{fileName} {
+      // Lecture publique (facile à intégrer côté agents / iframe)
+      allow read: if true;
+      // Écriture réservée aux comptes porteurs d'un rôle privilégié ou claim admin
+      allow write: if request.auth != null && (
+        request.auth.token.admin == true ||
+        (request.auth.token.role is string && lower(request.auth.token.role) in ['admin','direction','superviseur'])
+      );
+    }
+
+    // Ancien fichier unique (garde compat si existant) : shared/programme.pdf
+    match /shared/programme.pdf {
+      allow read: if true; // on l'aligne sur la stratégie publique
+      allow write: if request.auth != null && (
+        request.auth.token.admin == true ||
+        (request.auth.token.role is string && lower(request.auth.token.role) in ['admin','direction','superviseur'])
+      );
+    }
+
+    // Par défaut: refus
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

@@ -14,13 +14,22 @@ interface TodoInputProps {
 const TodoInput: React.FC<TodoInputProps> = ({ userUID }) => {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [input, setInput] = useState("");
+  const [permError, setPermError] = useState<string | null>(null);
 
   // 🔁 Écoute temps réel
   useEffect(() => {
-    if (!userUID) return;
-
-    const unsubscribe = listenToTodos(userUID, setTodos);
-    return () => unsubscribe();
+    if (!userUID) {
+      setTodos([]);
+      return;
+    }
+    try {
+      const unsubscribe = listenToTodos(userUID, setTodos);
+      return () => unsubscribe();
+    } catch (e: any) {
+      if (e?.code === 'permission-denied') {
+        setPermError('Accès refusé à tes tâches (permissions).');
+      }
+    }
   }, [userUID]);
 
   // ➕ Ajouter une tâche
@@ -43,6 +52,8 @@ const TodoInput: React.FC<TodoInputProps> = ({ userUID }) => {
 
   return (
     <div>
+      {!userUID && <div className="text-xs text-gray-500 mb-2">Connecte-toi pour gérer tes tâches.</div>}
+      {permError && <div className="text-xs text-red-500 mb-2">{permError}</div>}
       <div className="flex gap-2 mb-2">
         <input
           type="text"

@@ -3,22 +3,23 @@ import React, { useState } from "react";
 const offers = [
   {
     title: "CANAL+",
-    img: "/canalplus1.png",
+  img: "/Offre canal +.png",
     alt: "Offre Canal+"
   },
   {
     title: "CANAL+ CINÉ SERIES",
-    img: "/canalplus2.png",
+  img: "/Offre canal+ ciné series.png",
     alt: "Offre Canal+ Ciné Séries"
   },
   {
     title: "CANAL+ SPORT",
-    img: "/canalplus3.png",
+  img: "/Offre canal+ sport.png",
     alt: "Offre Canal+ Sport"
   },
   {
     title: "100% CANAL+",
-    img: "/canalplus4.png",
+  // % in filename must be encoded in URL, otherwise request may break
+  img: "/Offre canal+ 100%25.png",
     alt: "Offre 100% Canal+"
   }
 ];

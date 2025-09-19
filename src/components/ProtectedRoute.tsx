@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     // Afficher un loader ou rien pendant que l'état auth est en cours de chargement
@@ -19,9 +19,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
 
   // Vérifier si l'email est vérifié
-  if (user && !user.emailVerified) {
-    return <Navigate to="/verify-email" replace />;
-  }
+  // Note: email verification gate removed - allow access once authenticated
 
   return <>{children}</>;
 };

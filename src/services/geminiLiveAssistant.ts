@@ -22,7 +22,7 @@ export interface SalesAlert {
 
 export interface SmartSuggestion {
   id: string;
-  type: 'script_reminder' | 'objection_response' | 'upsell' | 'closing_technique';
+  type: 'script_reminder' | 'objection_response' | 'upsell' | 'closing_technique' | 'offer_transition';
   text: string;
   context: string;
   priority: 'low' | 'medium' | 'high';
@@ -113,6 +113,8 @@ class GeminiLiveAssistant {
   private responseQueue: any[] = [];
   private isConnected: boolean = false;
   private context: ConversationContext;
+  // Anti-spam pour les transitions automatiques
+  private lastOfferTransitionAt: number = 0;
   
   // Callbacks pour l'interface utilisateur
   private onTranscriptUpdate?: (text: string, speaker: 'agent' | 'client') => void;
@@ -372,9 +374,9 @@ Analyse cette intervention et réponds en JSON selon le format défini.`;
         this.context.clientProfile.engagementLevel = analysis.engagement_level;
       }
 
-      // Générer nouvelles suggestions
+      // Générer nouvelles suggestions reçues de l'IA
       if (analysis.suggestions) {
-        this.context.suggestions = analysis.suggestions.map((suggestion: any) => ({
+        const baseSuggestions: SmartSuggestion[] = analysis.suggestions.map((suggestion: any) => ({
           id: `suggestion_${Date.now()}_${Math.random()}`,
           type: suggestion.type,
           text: suggestion.text,
@@ -383,6 +385,44 @@ Analyse cette intervention et réponds en JSON selon le format défini.`;
           timestamp: Date.now(),
           clickable: true
         }));
+
+        // Détection d'objection pendant la présentation d'offre -> générer transition automatique
+        const now = Date.now();
+        const objectionSuggestion = baseSuggestions.find(s => s.type === 'objection_response');
+        const isDuringOfferPhase = ['offer_presentation', 'objection_handling'].includes(this.context.scriptProgress.currentStep);
+        const cooldownPassed = now - this.lastOfferTransitionAt > 8000; // 8s anti-spam
+
+        if (objectionSuggestion && isDuringOfferPhase && cooldownPassed) {
+          const textLower = (objectionSuggestion.text + ' ' + objectionSuggestion.context).toLowerCase();
+
+            // Heuristiques simples pour personnaliser la transition
+          let transitionCore = '';
+          if (textLower.includes('sport')) {
+            transitionCore = "Même si le sport n'est pas votre priorité, l'offre inclut aussi cinéma, séries et documentaires premium qui vont vraiment enrichir vos soirées.";
+          } else if (textLower.includes('cher') || textLower.includes('prix')) {
+            transitionCore = "L'intérêt c'est surtout le rapport qualité/prix : avec tous les contenus inclus, l'abonnement revient bien moins cher que si vous preniez chaque service séparément.";
+          } else if (textLower.includes('réfléchir')) {
+            transitionCore = "Justement, pour vous aider à décider sereinement, vous profitez de la période initiale avec accès complet aux contenus majeurs.";
+          } else if (textLower.includes('déjà') || textLower.includes('amazon') || textLower.includes('netflix')) {
+            transitionCore = "Cette offre vient compléter parfaitement ce que vous avez déjà, sans duplication inutile et avec des exclus Canal+.";
+          } else {
+            transitionCore = "L'idée est de vous proposer la version la plus équilibrée : cinéma récent, séries originales Canal+, documentaires et éventuellement le sport si un jour l'envie revient.";
+          }
+
+          const transitionSuggestion: SmartSuggestion = {
+            id: `transition_${now}_${Math.random()}`,
+            type: 'offer_transition',
+            text: transitionCore + " Souhaitez-vous que je vous récapitule en 20 secondes ce que vous gagnez concrètement ?",
+            context: "Transition automatique après objection pour ramener naturellement vers la valeur de l'offre",
+            priority: 'medium',
+            timestamp: now,
+            clickable: true
+          };
+          baseSuggestions.push(transitionSuggestion);
+          this.lastOfferTransitionAt = now;
+        }
+
+        this.context.suggestions = baseSuggestions;
       }
 
       // Générer nouvelles alertes

@@ -98,10 +98,30 @@ export const AVAILABLE_GENRES = [
 // Genres qui peuvent être exclus (tous les genres disponibles)
 export const EXCLUDABLE_GENRES = AVAILABLE_GENRES;
 
+const FETCH_TIMEOUT_MS = 12000;
+// Cloud Function proxy (rewrite Firebase hosting -> justwatchProxy)
+const WORKER_URL = "/api/justwatch"; // relative path, évite CORS
+
+// Jeu de données fallback ultra minimal si le proxy est down / CORS
+export const FALLBACK_SENTINEL_ID = "fallback/demo";
+const LOCAL_FALLBACK: StreamingContent[] = [
+  {
+  id: FALLBACK_SENTINEL_ID,
+    title: "Catalogue temporairement indisponible",
+    type: "movie",
+    platform: "(proxy)",
+    releaseDate: new Date(2024,0,1),
+    description: "Le service JustWatch ne répond pas (CORS ou réseau). Réessayez plus tard.",
+    imageUrl: { avif: "", webp: "", jpeg: "", fallback: "" },
+    rating: "U",
+    genres: ["doc"],
+  }
+];
+
 const fetchContentFromAllProviders = async (
   filters: FetchFilters = {}
 ): Promise<StreamingContent[]> => {
-  const url = "https://justwatch.cactus-saas-dev.workers.dev/";
+  const url = WORKER_URL;
 
   const query = `
     query GetPopularTitles(
@@ -200,21 +220,56 @@ const fetchContentFromAllProviders = async (
   });
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
+    // Tentative 1: POST application/json standard
+    const attempt = async(contentType:string, rawBody:string) => {
+      const controller = new AbortController();
+      const t = setTimeout(()=> controller.abort(), FETCH_TIMEOUT_MS);
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": contentType },
+        body: rawBody,
+        signal: controller.signal,
+      });
+      clearTimeout(t);
+      return resp;
+    };
 
-    const data = await response.json();
+    let response: Response | null = null;
+    let firstError: any = null;
+    try {
+      response = await attempt("application/json", body);
+    } catch(e){
+      firstError = e;
+    }
+
+    // Si échec réseau / CORS, retenter avec text/plain
+    if(!response){
+      try {
+        response = await attempt("text/plain", body);
+        console.warn('[JustWatch] Retraitement via text/plain fallback');
+      } catch(e2){
+        console.error('[JustWatch] Double échec (json & text/plain)', firstError, e2);
+        return LOCAL_FALLBACK;
+      }
+    }
+
+    if(!response.ok){
+      console.error(`[JustWatch] HTTP ${response.status}`);
+      return LOCAL_FALLBACK;
+    }
+
+    let data: any = null;
+    try { data = await response.json(); }
+    catch(parseErr){
+      console.error('[JustWatch] Parse JSON échoué', parseErr);
+      return LOCAL_FALLBACK;
+    }
     if (!data?.data?.popularTitles?.edges) return [];
 
     return data.data.popularTitles.edges.map((edge: any) => {
       const node = edge.node;
       const content = node.content;
-
       const posterUrl = content.posterUrl;
-
       return {
         id: content.fullPath,
         title: content.title,
@@ -228,11 +283,15 @@ const fetchContentFromAllProviders = async (
         director: content.credits?.[0]?.name || undefined,
         rating: content.ageCertification || undefined,
         genres: content.genres?.map((g: any) => g.shortName),
-      };
+      } as StreamingContent;
     });
-  } catch (err) {
-    console.error("Erreur JustWatch:", err);
-    return [];
+  } catch (err:any) {
+    if(err?.name === 'AbortError'){
+      console.error('[JustWatch] Timeout après', FETCH_TIMEOUT_MS, 'ms');
+    } else {
+      console.error('[JustWatch] Erreur réseau/CORS probable:', err);
+    }
+    return LOCAL_FALLBACK;
   }
 };
 

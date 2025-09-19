@@ -1,0 +1,20 @@
+[
+  {
+    "origin": [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "https://cactus-mm.web.app",
+      "https://cactus-mm.firebaseapp.com",
+      "https://cactus-tech.fr",
+      "https://www.cactus-tech.fr"
+    ],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "x-goog-meta-*",
+      "x-goog-resumable"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

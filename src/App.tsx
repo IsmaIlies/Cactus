@@ -2,22 +2,27 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import RegisterPage from "./pages/RegisterPage";
-import DashboardPage from "./pages/DashboardPage";
+import DashboardPage from "./pages/DashboardPage"; // unified dashboard component
+// Regional dashboard pages unified into single DashboardPage with region scoping.
+import TeamChatPage from './pages/TeamChatPage';
 import AuthActionPage from "./pages/AuthActionPage";
 import TeleSalesAssistantTestPage from "./pages/TeleSalesAssistantTestPage";
 import TeleSalesAssistant from "./components/TeleSalesAssistant";
 import AssistantTestPage from "./pages/AssistantTestPage";
 import { AuthProvider } from "./contexts/AuthContext";
+import { RegionProvider } from './contexts/RegionContext';
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
-import VerifyEmailPage from "./pages/VerifyEmailPage";
 import DiagnosticPage from "./pages/DiagnosticPage";
 import ChecklistReminderPopup from "./components/ChecklistReminderPopup";
 import GameNotification from "./components/GameNotification";
+import ELearningPage from "./pages/ELearningPage";
+import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
 
 function App() {
   return (
     <AuthProvider>
+      <RegionProvider>
       <Routes>
         <Route
           path="/login"
@@ -43,7 +48,6 @@ function App() {
             </PublicRoute>
           }
         />
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/diagnostic" element={<DiagnosticPage />} />
         <Route path="/assistant-test" element={<TeleSalesAssistantTestPage />} />
         <Route path="/assistant-demo" element={
@@ -61,12 +65,34 @@ function App() {
         <Route path="/assistant-live" element={<AssistantTestPage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route
-          path="/dashboard/*"
+          path="/admin/programme"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <AdminProgrammePdfUploader />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/dashboard/teamchat"
+          element={
+            <ProtectedRoute>
+              <TeamChatPage />
+            </ProtectedRoute>
+          }
+        />
+  {/* Route paramétrée régionale et fallback */}
+        <Route
+          path="/dashboard/:region/teamchat"
+          element={
+            <ProtectedRoute>
+              <TeamChatPage />
+            </ProtectedRoute>
+          }
+        />  <Route path="/dashboard/:region/*" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+  <Route path="/dashboard" element={<Navigate to="/dashboard/fr" replace />} />
+        <Route
+          path="/elearning"
+          element={<ELearningPage />}
         />
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -74,6 +100,7 @@ function App() {
       <ChecklistReminderPopup />
       {/* Notifications globales pour Mr. White */}
       <GameNotification />
+      </RegionProvider>
     </AuthProvider>
   );
 }

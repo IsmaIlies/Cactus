@@ -1,14 +1,24 @@
-import { useState, useEffect, useRef } from "react";
-import { BarChart2, TrendingUp } from "lucide-react";
+// pages/DashboardHome.tsx
+import { useState, useEffect, useMemo, useRef } from "react";
+import { BarChart2, TrendingUp, ListChecks } from "lucide-react";
 import StatCard from "../components/StatCard";
 import TodoInput from "../components/TodoInput";
 import ChartComponent from "../components/ChartComponent";
 import TeamSales from "../components/TeamSales";
 import RecentSales from "../components/RecentSales";
 import PerformanceTable from "../components/PerformanceTable";
-import { getValidatedSalesThisMonth, Sale } from "../services/salesService";
 import ObjectiveService, { Objective } from "../services/objectiveService";
 import { useAuth } from "../contexts/AuthContext";
+import NotificationSystem from "../components/NotificationSystem";
+import CallClosuresPanel from "../components/CallClosuresPanel";
+import callClosures from "../data/callClosures";
+import { getUserCredits, ensureUserCredits } from "../services/gameService";
+import { listenToRealTimeEvents } from "../services/realTimeService";
+
+// ⚠️ On importe maintenant la fonction qui ramène **toutes** les ventes du mois
+import { Sale } from "../services/salesService";
+import useMonthlySales from "../hooks/useMonthlySales";
+import { useRegion } from "../contexts/RegionContext";
 
 const offers = [
   { id: "canal", name: "CANAL+" },
@@ -17,150 +27,185 @@ const offers = [
   { id: "canal-100", name: "CANAL+ 100%" },
 ];
 
+// Petit composant pour isoler l’horloge (évite les re-render massifs)
+function ClockAndBreaks({
+  firstName,
+  userUID,
+}: {
+  firstName: string;
+  userUID?: string | null;
+}) {
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const formattedTime = new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(currentTime);
+  const formattedDate = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(currentTime);
+
+  return (
+    <div className="flex justify-between items-start mb-2 relative gap-4">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">
+          Bonjour {firstName}, prêt pour votre journée ?
+        </h1>
+        <div className="text-sm text-gray-600 mb-2">
+          🕒 {formattedTime} — {formattedDate}
+        </div>
+        <div className="bg-gradient-to-br from-cactus-50 via-white to-cactus-100 rounded-lg shadow p-3 border border-cactus-200 max-w-md">
+          <h2 className="text-base font-bold text-cactus-700 mb-1 flex items-center gap-2">
+            <span>📝</span> Ma to-do
+          </h2>
+          {userUID && <TodoInput userUID={String(userUID)} />}
+        </div>
+      </div>
+  {/* Pause timers supprimés */}
+    </div>
+  );
+}
+
 const DashboardHome = () => {
   const { user } = useAuth();
-  const [sales, setSales] = useState<Sale[]>([]);
+  const { sales } = useMonthlySales();
+  const { region } = useRegion();
+  const [casinoCredits, setCasinoCredits] = useState<number | null>(null);
+  // ventes mensuelles fournies par hook
   const [objectives, setObjectives] = useState<Objective[]>([]);
-  const [offerDistributionView, setOfferDistributionView] = useState<
-    "personal" | "team"
-  >("team");
-  const [chartView, setChartView] = useState<"evolution" | "objective">(
-    "evolution"
-  );
+  // Bouton Clôtures d'appel (affichage à venir)
+  const [showClosures, setShowClosures] = useState(false);
+  const [offerDistributionView, setOfferDistributionView] =
+    useState<"personal" | "team">("team");
+  const [chartView, setChartView] =
+    useState<"evolution" | "objective">("evolution");
 
-  // Heure et date actuelles
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Une seule source de vérité pour "now"
+  const now = useMemo(() => new Date(), []);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ID utilisateur (Firebase renvoie uid)
+  const currentUserId =
+    (user as any)?.uid ?? (user as any)?.id ?? null;
+
+  // Tick léger (optionnel, si tu veux des calculs temps-réel ailleurs)
   useEffect(() => {
     timerRef.current = setInterval(() => {
-      setCurrentTime(new Date());
+      // rien à faire ici si tous les calculs sont mémoïsé par sales/objectives
     }, 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
+  // Load / ensure casino credits une fois user chargé
   useEffect(() => {
-    const fetchData = async () => {
+    let mounted = true;
+    if (!currentUserId) return;
+    (async () => {
       try {
-        const [salesData, objectivesData] = await Promise.all([
-          getValidatedSalesThisMonth(),
-          ObjectiveService.getObjectives(),
-        ]);
-        setSales(salesData);
-        
-        // Filtrer les objectifs du mois en cours
+        await ensureUserCredits(currentUserId);
+        const c = await getUserCredits(currentUserId);
+        if (mounted) setCasinoCredits(c);
+      } catch {
+        if (mounted) setCasinoCredits(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [currentUserId]);
+
+  // Rafraîchir ventes/objectifs quand on change de mois
+  const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  useEffect(() => {
+    const loadObjectives = async () => {
+      try {
+        const objectivesData = await ObjectiveService.getObjectives();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
-        const currentMonthObjectives = objectivesData.filter(obj => 
-          obj.period === 'month' && 
-          obj.year === currentYear && 
-          obj.month === currentMonth &&
-          obj.isActive
+        const currentMonthObjectives = objectivesData.filter(
+          (obj) =>
+            obj.period === "month" &&
+            obj.year === currentYear &&
+            obj.month === currentMonth &&
+            obj.isActive
         );
-        
         setObjectives(currentMonthObjectives);
-      } catch (error) {
-        console.error('Erreur lors du chargement des données:', error);
-        setSales([]);
+      } catch (e) {
+        console.error('Erreur objectifs', e);
         setObjectives([]);
       }
     };
-    fetchData();
-  }, [user?.id]);
-
-  // Affichage du mois en cours (ex: "Juillet 2025")
-  const now = new Date();
-  const currentMonthLabel = now.toLocaleDateString("fr-FR", {
-    month: "long",
-    year: "numeric",
-  });
+    loadObjectives();
+  }, [currentUserId, monthKey, now]);
 
   const parseDate = (date: any) => {
     if (!date) return null;
     if (date.toDate) return date.toDate(); // Firestore Timestamp
     if (typeof date === "string") return new Date(date);
+    if (date instanceof Date) return date;
     return null;
   };
 
-  const isToday = (date: any) => {
-    const d = parseDate(date);
+  const isSameDay = (a: Date, b: Date) =>
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear();
+
+  const isToday = (dateLike: any) => {
+    const d = parseDate(dateLike);
     if (!d) return false;
-    const now = new Date();
-    return (
-      d.getDate() === now.getDate() &&
-      d.getMonth() === now.getMonth() &&
-      d.getFullYear() === now.getFullYear()
-    );
+    return isSameDay(d, new Date());
   };
 
-  const isThisMonth = (date: any) => {
-    const d = parseDate(date);
+  const isThisMonth = (dateLike: any) => {
+    const d = parseDate(dateLike);
     if (!d) return false;
-    const now = new Date();
-    return (
-      d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    );
+    const t = new Date();
+    return d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
   };
 
-  // Construire une map userId => userName (nom de la vente la plus récente)
-  const userNames: Record<string, string> = {};
+  // Vente validée = basketStatus OK/VALID FINALE (fallback legacy : consent === "yes")
+  const isValidated = (s: Sale) => {
+    const bs = (s as any).basketStatus as string | undefined;
+    if (bs && ["OK", "Valid SOFT", "VALID FINALE"].includes(bs)) return true;
+    if ((s as any).consent === "yes") return true;
+    return false;
+  };
 
-  // Trier les ventes par date décroissante pour avoir les plus récentes en premier
-  const sortedSales = [...sales].sort((a, b) => {
-    const dateA = parseDate(a.date);
-    const dateB = parseDate(b.date);
-    if (!dateA || !dateB) return 0;
-    return dateB.getTime() - dateA.getTime();
-  });
-
-  // Récupérer le nom le plus récent pour chaque userId
-  sortedSales.forEach((s) => {
-    if (s.userId && s.name && !userNames[s.userId]) {
-      userNames[s.userId] = s.name;
-    }
-  });
-
-  // Les ventes sont déjà filtrées par mois et validées dans le service
-  const personalSales = sales.filter((s) => s.userId === user?.id);
-  const personalSalesToday = personalSales.filter((s) => isToday(s.date));
-  const personalSalesMonth = personalSales; // toutes les ventes du mois en cours
-  const teamSalesToday = sales.filter((s) => isToday(s.date));
-
-  // Ventes de la semaine (lundi à aujourd'hui inclus)
   const getStartOfWeek = (date: Date) => {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Lundi de cette semaine
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Lundi
     const monday = new Date(d.setDate(diff));
-    monday.setHours(0, 0, 0, 0); // Début de journée lundi
+    monday.setHours(0, 0, 0, 0);
     return monday;
   };
-  
-  const startOfWeek = getStartOfWeek(now);
-  const endOfWeek = new Date(now);
-  endOfWeek.setHours(23, 59, 59, 999); // Fin de journée aujourd'hui
-  
-  const isThisWeek = (date: any) => {
-    const d = parseDate(date);
+  const startOfWeek = useMemo(() => getStartOfWeek(now), [now]);
+  const endOfWeek = useMemo(() => {
+    const e = new Date(now);
+    e.setHours(23, 59, 59, 999);
+    return e;
+  }, [now]);
+
+  const isThisWeek = (dateLike: any) => {
+    const d = parseDate(dateLike);
     if (!d) return false;
     return d >= startOfWeek && d <= endOfWeek;
   };
-  const personalSalesWeek = personalSales.filter((s: Sale) =>
-    isThisWeek(s.date)
-  );
-  const teamSalesWeek = sales.filter((s: Sale) => isThisWeek(s.date));
 
-  const salesByUser: Record<string, { daily: number; monthly: number }> = {};
-  sales.forEach((s) => {
-    const uid = s.userId;
-    if (!salesByUser[uid]) salesByUser[uid] = { daily: 0, monthly: 0 };
-    // Comptage journalier : uniquement ventes validées
-    if (isToday(s.date) && s.consent === "yes") salesByUser[uid].daily++;
-    // Comptage mensuel : uniquement ventes validées
-    if (isThisMonth(s.date) && s.consent === "yes") salesByUser[uid].monthly++;
-  });
+  const safeMax = (arr: (number | null)[], fallback = 1) => {
+    const nums = arr.filter((v): v is number => typeof v === "number");
+    return nums.length ? Math.max(...nums) : fallback;
+  };
 
   const getLocalDateString = (date: Date) => {
     const y = date.getFullYear();
@@ -169,102 +214,259 @@ const DashboardHome = () => {
     return `${y}-${m}-${d}`;
   };
 
-  const labels: string[] = [];
-  const personalCountByDay: number[] = [];
-  const teamCountByDay: number[] = [];
+  // Toutes les grosses agrégations sont mémoïsées sur [sales, currentUserId, now]
+  const memo = useMemo(() => {
+    // Map userId => nom le plus récent
+    const userNames: Record<string, string> = {};
+    const sortedSales = [...sales].sort((a, b) => {
+      const dateA = parseDate(a.date)?.getTime() ?? 0;
+      const dateB = parseDate(b.date)?.getTime() ?? 0;
+      return dateB - dateA;
+    });
+    sortedSales.forEach((s) => {
+      const uid = (s as any).userId;
+      const nm = (s as any).name;
+      if (uid && nm && String(nm).trim() && !userNames[uid]) {
+        userNames[uid] = String(nm).trim();
+      }
+    });
 
-  // Données pour le graphique d'objectif (cumul)
-  const cumulativeTeamSales: number[] = [];
-  const objectiveTarget: number[] = [];
-  
-  // Trouver l'objectif de ventes du mois en cours
-  const salesObjective = objectives.find(obj => obj.type === 'sales' && obj.scope === 'team');
-  const personalObjective = objectives.find(obj => obj.type === 'sales' && obj.scope === 'personal' && obj.userId === user?.id);
-  const MONTHLY_OBJECTIVE = salesObjective?.target || 160; // Utiliser l'objectif équipe ou 160 par défaut
+  const personalSales = sales.filter((s) => (s as any).userId === currentUserId);
+  // Validées uniquement
+  // Validées journalières / hebdo (utilisées côté FR uniquement pour affichage)
+  const personalSalesValidatedToday = personalSales.filter((s) => isToday((s as any).date) && isValidated(s));
+  const personalSalesValidatedWeek = personalSales.filter((s) => isThisWeek((s as any).date) && isValidated(s));
+  const personalSalesMonth = personalSales.filter((s) => isValidated(s));
+  const teamSalesToday = sales.filter((s) => isToday((s as any).date) && isValidated(s));
+  const teamSalesWeek = sales.filter((s) => isThisWeek((s as any).date) && isValidated(s));
+  const teamSalesMonth = sales.filter((s) => isValidated(s));
+  // Totaux toutes ventes (incluant non validées) — pour affichage indicateurs bruts
+  const personalSalesTodayTotal = personalSales.filter((s) => isToday((s as any).date));
+  const personalSalesWeekTotal = personalSales.filter((s) => isThisWeek((s as any).date));
+  const personalSalesMonthTotal = personalSales; // déjà sur le mois
 
-  // Générer tous les jours du mois en cours (uniquement les jours de semaine)
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = now.getDate();
+    // Agrégations par user (journalier / mensuel) en ne comptant que les validées
+    const salesByUser: Record<string, { daily: number; monthly: number }> = {};
+  sales.forEach((s) => {
+      const uid = (s as any).userId;
+      if (!uid) return; // ignore les ventes sans userId
+      if (!salesByUser[uid]) salesByUser[uid] = { daily: 0, monthly: 0 };
+      if (isToday((s as any).date) && isValidated(s)) salesByUser[uid].daily++;
+      if (isThisMonth((s as any).date) && isValidated(s)) salesByUser[uid].monthly++;
+    });
 
-  // Calculer le nombre de jours ouvrés dans le mois
-  let workingDaysInMonth = 0;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const currentDay = new Date(year, month, day);
-    const dayOfWeek = currentDay.getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      workingDaysInMonth++;
-    }
-  }
-
-  let cumulativeSales = 0;
-  let workingDayIndex = 0;
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const currentDay = new Date(year, month, day);
-    const dayOfWeek = currentDay.getDay(); // 0 = dimanche, 6 = samedi
-
-    // Ignorer les weekends (samedi = 6, dimanche = 0)
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      continue;
-    }
-
-    workingDayIndex++;
-    const dayStr = getLocalDateString(currentDay);
-
-    // Afficher le numéro du jour
-    labels.push(day.toString());
-
-    // Si le jour est dans le futur, on met null pour ne pas tracer la courbe
-    if (day <= today) {
-      const personalSalesForDay = Math.round(
-        sales.filter((s) => {
-          if (s.userId !== user?.id) return false;
-          const d = parseDate(s.date);
-          if (!d) return false;
-          return getLocalDateString(d) === dayStr;
-        }).length
-      );
-
-      const teamSalesForDay = Math.round(
-        sales.filter((s) => {
-          const d = parseDate(s.date);
-          if (!d) return false;
-          return getLocalDateString(d) === dayStr;
-        }).length
-      );
-
-      personalCountByDay.push(personalSalesForDay);
-      teamCountByDay.push(teamSalesForDay);
-
-      // Cumul pour le graphique d'objectif
-      cumulativeSales += teamSalesForDay;
-      cumulativeTeamSales.push(cumulativeSales);
-    } else {
-      // Jour futur : null pour ne pas tracer la courbe
-      personalCountByDay.push(null as any);
-      teamCountByDay.push(null as any);
-      cumulativeTeamSales.push(null as any);
-    }
-
-    // Objectif linéaire basé sur les jours ouvrés
-    const expectedSalesForDay = Math.round(
-      (MONTHLY_OBJECTIVE / workingDaysInMonth) * workingDayIndex
+    // Objectifs
+    const salesObjective = objectives.find(
+      (obj) => obj.type === "sales" && obj.scope === "team"
     );
-    objectiveTarget.push(expectedSalesForDay);
-  }
+    const personalObjective = objectives.find(
+      (obj) =>
+        obj.type === "sales" &&
+        obj.scope === "personal" &&
+        obj.userId === currentUserId
+    );
+    const MONTHLY_OBJECTIVE = salesObjective?.target || 160;
+
+    // Générer jours ouvrés du mois
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayNum = new Date().getDate();
+
+    let workingDaysInMonth = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const currentDay = new Date(year, month, day);
+      const dayOfWeek = currentDay.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        workingDaysInMonth++;
+      }
+    }
+
+    const labels: string[] = [];
+    const personalCountByDay: number[] = [];
+    const teamCountByDay: number[] = [];
+    const cumulativeTeamSales: (number | null)[] = [];
+    const objectiveTarget: number[] = [];
+
+    let cumulativeSales = 0;
+    let workingDayIndex = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const currentDay = new Date(year, month, day);
+      const dayOfWeek = currentDay.getDay(); // 0 = dimanche, 6 = samedi
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+      workingDayIndex++;
+      const dayStr = getLocalDateString(currentDay);
+      labels.push(day.toString());
+
+      if (day <= todayNum) {
+        const personalSalesForDay = sales.filter((s) => {
+          if ((s as any).userId !== currentUserId) return false;
+          const d = parseDate((s as any).date);
+          if (!d) return false;
+          return getLocalDateString(d) === dayStr;
+        }).length;
+
+        const teamSalesForDay = sales.filter((s) => {
+          const d = parseDate((s as any).date);
+          if (!d) return false;
+          return getLocalDateString(d) === dayStr;
+        }).length;
+
+        personalCountByDay.push(personalSalesForDay);
+        teamCountByDay.push(teamSalesForDay);
+
+        cumulativeSales += teamSalesForDay;
+        cumulativeTeamSales.push(cumulativeSales);
+      } else {
+        personalCountByDay.push(null as any);
+        teamCountByDay.push(null as any);
+        cumulativeTeamSales.push(null);
+      }
+
+      const expectedSalesForDay = Math.round(
+        (MONTHLY_OBJECTIVE / workingDaysInMonth) * workingDayIndex
+      );
+      objectiveTarget.push(expectedSalesForDay);
+    }
+
+    const maxPersonal = safeMax(personalCountByDay, 0);
+    const maxTeam = safeMax(teamCountByDay, 0);
+    const dynamicMaxY = Math.max(maxPersonal, maxTeam, 1) + 2;
+
+    const maxCumulative = safeMax(cumulativeTeamSales, 0);
+    const maxObjective = safeMax(objectiveTarget, 0);
+    const objectiveMaxY = Math.max(maxCumulative, maxObjective, MONTHLY_OBJECTIVE) + 10;
+
+    // 3 dernières ventes perso
+    const recentSalesData = [...sales]
+      .filter((s) => (s as any).userId === currentUserId)
+      .sort((a, b) => {
+        const da = parseDate((a as any).date)?.getTime() ?? 0;
+        const db = parseDate((b as any).date)?.getTime() ?? 0;
+        return db - da;
+      })
+      .slice(0, 3)
+      .map(({ id, date, offer, name }) => {
+        const parsedDate = parseDate(date);
+        return {
+          date: parsedDate
+            ? `${parsedDate.toLocaleDateString()} ${parsedDate.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : "",
+          type: offers.find((o) => o.id === (offer as any))?.name || (offer as any),
+          id,
+          name,
+        };
+      });
+
+    const performanceData = Object.entries(salesByUser)
+      .filter(([uid]) => !!uid)
+      .map(([uid, { daily, monthly }]) => ({
+        name: uid === String(currentUserId) ? "Moi" : userNames[uid] || uid,
+        dailySales: daily,
+        monthlySales: monthly,
+      }));
+
+    const teamSalesTodayData = Object.entries(salesByUser)
+      .filter(([uid]) => !!uid)
+      .map(([uid, data]) => ({
+        name: uid === String(currentUserId) ? "Moi" : userNames[uid] || uid,
+        sales: data.daily,
+      }));
+
+    return {
+      userNames,
+  personalSales,
+  personalSalesMonth,
+  teamSalesToday,
+  teamSalesWeek,
+  teamSalesMonth,
+  personalSalesTodayTotal,
+  personalSalesWeekTotal,
+  personalSalesMonthTotal,
+  personalSalesValidatedToday,
+  personalSalesValidatedWeek,
+      labels,
+      personalCountByDay,
+      teamCountByDay,
+      cumulativeTeamSales,
+      objectiveTarget,
+      dynamicMaxY,
+      objectiveMaxY,
+      recentSalesData,
+      performanceData,
+      teamSalesTodayData,
+      salesObjective,
+      personalObjective,
+      MONTHLY_OBJECTIVE,
+    };
+  }, [sales, currentUserId, now, objectives]);
+
+  const {
+  personalSales,
+  personalSalesMonth,
+  teamSalesToday,
+  teamSalesWeek,
+  teamSalesMonth,
+  personalSalesTodayTotal,
+  personalSalesWeekTotal,
+  personalSalesMonthTotal,
+  personalSalesValidatedToday,
+  personalSalesValidatedWeek,
+    labels,
+    personalCountByDay,
+    teamCountByDay,
+    cumulativeTeamSales,
+    objectiveTarget,
+    dynamicMaxY,
+    objectiveMaxY,
+    recentSalesData,
+    performanceData,
+    teamSalesTodayData,
+    salesObjective,
+    personalObjective,
+    MONTHLY_OBJECTIVE,
+  } = memo;
+
+  type Notification = {
+    message: string;
+    type: "sale" | "message" | "objective";
+  };
+
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    const unsubscribe = listenToRealTimeEvents((newNotification) => {
+      setNotifications((prev) => {
+        const isDuplicate = prev.some(
+          (notification) => notification.message === newNotification.message
+        );
+        if (!isDuplicate) {
+          return [...prev, newNotification];
+        }
+        return prev;
+      });
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const computeOfferDistribution = (source: any[]) => {
+    const knownIds = new Set(offers.map((o) => o.id));
     const counts = offers.map(
-      (o) => source.filter((s) => s.offer === o.id).length
+      (o) => source.filter((s) => (s as any).offer === o.id).length
     );
+    const others = source.filter((s) => !knownIds.has((s as any).offer)).length;
     return {
-      labels: offers.map((o) => o.name),
+      labels: [...offers.map((o) => o.name), "Autres"],
       datasets: [
         {
-          data: counts,
-          backgroundColor: ["#3c964c", "#e5d8c3", "#90d0d8", "#f5a76c"],
+          data: [...counts, others],
+          backgroundColor: ["#3c964c", "#e5d8c3", "#90d0d8", "#f5a76c", "#d1d5db"],
           borderWidth: 0,
         },
       ],
@@ -289,20 +491,6 @@ const DashboardHome = () => {
     },
   };
 
-  // Calculer le maximum dynamique pour l'axe Y
-  const maxPersonal = Math.max(...personalCountByDay.filter((v) => v !== null));
-  const maxTeam = Math.max(...teamCountByDay.filter((v) => v !== null));
-  const dynamicMaxY = Math.max(maxPersonal, maxTeam, 1) + 2; // +2 pour l'espace visuel
-
-  // Calculer le maximum pour le graphique d'objectif
-  const maxCumulative = Math.max(
-    ...cumulativeTeamSales.filter((v) => v !== null)
-  );
-  const maxObjective = Math.max(...objectiveTarget);
-  const objectiveMaxY =
-    Math.max(maxCumulative, maxObjective, MONTHLY_OBJECTIVE) + 10;
-
-  // Options pour forcer l'axe Y à afficher uniquement des entiers sur le line chart
   const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -326,16 +514,13 @@ const DashboardHome = () => {
         max: dynamicMaxY,
         ticks: {
           stepSize: 1,
-          callback: function (value: number) {
-            if (Number.isInteger(value)) return value;
-            return "";
-          },
+          callback: (value: unknown) =>
+            Number.isInteger(Number(value)) ? String(value) : "",
         },
       },
     },
   };
 
-  // Options pour le graphique d'objectif
   const objectiveChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -359,134 +544,46 @@ const DashboardHome = () => {
         max: objectiveMaxY,
         ticks: {
           stepSize: Math.ceil(objectiveMaxY / 10),
-          callback: function (value: number) {
-            if (Number.isInteger(value)) return value;
-            return "";
-          },
+          callback: (value: unknown) =>
+            Number.isInteger(Number(value)) ? String(value) : "",
         },
       },
     },
   };
 
-  // 3 dernières ventes personnelles avec nom
-  const recentSalesData = [...sales]
-    .filter((s) => s.userId === user?.id)
-    .sort((a, b) => (b.date > a.date ? 1 : -1))
-    .slice(0, 3)
-    .map(({ id, date, offer, name }) => {
-      const parsedDate = parseDate(date);
-      return {
-        date: parsedDate
-          ? `${parsedDate.toLocaleDateString()} ${parsedDate.toLocaleTimeString(
-              [],
-              { hour: "2-digit", minute: "2-digit" }
-            )}`
-          : "",
-        type: offers.find((o) => o.id === offer)?.name || offer,
-        id,
-        name,
-      };
-    });
-
-  const performanceData = Object.entries(salesByUser).map(
-    ([uid, { daily, monthly }]) => ({
-      name: uid === user?.id ? "Moi" : userNames[uid] || uid,
-      dailySales: daily,
-      monthlySales: monthly,
-    })
-  );
-
-  // teamSalesData n'est plus utilisé, on peut le supprimer
-
-  const teamSalesTodayData = Object.entries(salesByUser).map(([uid, data]) => ({
-    name: uid === user?.id ? "Moi" : userNames[uid] || uid,
-    sales: data.daily, // ici ventes du jour
-  }));
-
-  // Calculs pour les objectifs
-  const teamSalesCount = sales.length;
-
-  const teamObjectiveProgress = salesObjective
-    ? ObjectiveService.calculateProgressPercentage(salesObjective, teamSalesCount)
-    : 0;
-
-  // Formatage heure et date
-  const formattedTime = currentTime.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const formattedDate = currentTime.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-
-  // Prénom
-  const firstName = user?.displayName?.split(" ")[0] || user?.email?.split("@")[0] || "Utilisateur";
-
-  // Pauses (11h30 et 17h)
-  const getPauseTimer = (targetHour: number, targetMinute: number) => {
-    const now = currentTime;
-    const pause = new Date(now);
-    pause.setHours(targetHour, targetMinute, 0, 0);
-    let diff = (pause.getTime() - now.getTime()) / 1000; // secondes
-    if (diff < 0) diff += 24 * 3600; // prochaine pause si déjà passée
-    const h = Math.floor(diff / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    const s = Math.floor(diff % 60);
-    return `${h > 0 ? h + "h " : ""}${m}m ${s}s`;
-  };
+  // Prénom utilisateur
+  const firstName =
+    user?.displayName?.split(" ")[0] || user?.email?.split("@")[0] || "Utilisateur";
 
   return (
     <div className="space-y-6">
-      {/* Accueil personnalisé */}
-      <div className="flex justify-between items-center mb-2 relative">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Bonjour {firstName}, prêt pour votre journée ?
-          </h1>
-          <div className="text-sm text-gray-600 mb-2">
-            🕒 {formattedTime} — {formattedDate}
-          </div>
-          {/* Espace to-do manuel pour le TA, taille normale */}
-          <div className="bg-gradient-to-br from-cactus-50 via-white to-cactus-100 rounded-lg shadow p-3 border border-cactus-200 max-w-md">
-            <h2 className="text-base font-bold text-cactus-700 mb-1 flex items-center gap-2">
-              <span>📝</span> Ma to-do
-            </h2>
-            <TodoInput userUID={user!.id} />
-          </div>
-        </div>
-        {/* Mini-pauses en haut à droite */}
-        <div className="absolute right-0 top-0 flex flex-col items-end text-[11px] text-gray-500 gap-1 pr-2 pt-1">
-          <div>
-            Pause 11h30&nbsp;
-            <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-[9px]">
-              {getPauseTimer(11, 30)}
-            </span>
-          </div>
-          <div>
-            Pause 17h&nbsp;
-            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[9px]">
-              {getPauseTimer(17, 0)}
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* En-tête : horloge + todo */}
+      <ClockAndBreaks firstName={firstName} userUID={currentUserId ? String(currentUserId) : null} />
+
+      {/* Stats + objectifs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="col-span-3 grid grid-cols-3 gap-4">
           <StatCard
             title="Mes ventes du jour"
-            value={personalSalesToday.length.toString()}
-            subtitle={`sur ${teamSalesToday.length} ventes équipe`}
+            value={(region === 'FR' ? personalSalesValidatedToday.length : personalSalesTodayTotal.length).toString()}
+            subtitle={`sur ${teamSalesToday.length} validées équipe`}
             icon={<BarChart2 className="w-5 h-5 text-cactus-600" />}
           />
           <StatCard
             title="Mes ventes de la semaine"
-            value={personalSalesWeek.length.toString()}
-            subtitle={`sur ${teamSalesWeek.length} ventes équipe`}
+            value={(region === 'FR' ? personalSalesValidatedWeek.length : personalSalesWeekTotal.length).toString()}
+            subtitle={`sur ${teamSalesWeek.length} validées équipe`}
             icon={<BarChart2 className="w-5 h-5 text-cactus-600" />}
           />
           <StatCard
             title="Mes ventes du mois"
-            value={personalSalesMonth.length.toString()}
-            subtitle={`sur ${sales.length} ventes équipe`}
+            value={(region === 'FR' ? personalSalesMonth.length : personalSalesMonthTotal.length).toString()}
+            subtitle={`sur ${teamSalesMonth.length} validées équipe`}
             icon={<TrendingUp className="w-5 h-5 text-cactus-600" />}
           />
         </div>
-        {/* Carte d'objectif équipe et perso */}
+
+        {/* Objectifs */}
         <div className="col-span-2 grid grid-cols-2 gap-4">
           <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
             <div className="flex items-center justify-between mb-3">
@@ -496,29 +593,38 @@ const DashboardHome = () => {
             {salesObjective ? (
               <>
                 <div className="text-2xl font-bold text-gray-900 mb-1">
-                  {teamSalesCount}/{salesObjective.target}
+                  {sales.length}/{salesObjective.target}
                 </div>
                 <div className="flex items-center space-x-2 mb-2">
                   <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(teamObjectiveProgress, 100)}%` }}
+                      style={{
+                        width: `${Math.min(
+                          ObjectiveService.calculateProgressPercentage(
+                            salesObjective,
+                            sales.length
+                          ),
+                          100
+                        )}%`,
+                      }}
                     />
                   </div>
                   <span className="text-sm font-medium text-gray-600">
-                    {teamObjectiveProgress}%
+                    {ObjectiveService.calculateProgressPercentage(
+                      salesObjective,
+                      sales.length
+                    )}
+                    %
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">
-                  {salesObjective.label}
-                </p>
+                <p className="text-xs text-gray-500">{salesObjective.label}</p>
               </>
             ) : (
-              <div className="text-sm text-gray-500">
-                Aucun objectif défini
-              </div>
+              <div className="text-sm text-gray-500">Aucun objectif défini</div>
             )}
           </div>
+
           <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700">Objectif Perso</h3>
@@ -531,38 +637,46 @@ const DashboardHome = () => {
                 </div>
                 <div className="flex items-center space-x-2 mb-2">
                   <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="bg-cactus-600 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(ObjectiveService.calculateProgressPercentage(personalObjective, personalSalesMonth.length), 100)}%` }}
+                      style={{
+                        width: `${Math.min(
+                          ObjectiveService.calculateProgressPercentage(
+                            personalObjective,
+                            personalSalesMonth.length
+                          ),
+                          100
+                        )}%`,
+                      }}
                     />
                   </div>
                   <span className="text-sm font-medium text-gray-600">
-                    {ObjectiveService.calculateProgressPercentage(personalObjective, personalSalesMonth.length)}%
+                    {ObjectiveService.calculateProgressPercentage(
+                      personalObjective,
+                      personalSalesMonth.length
+                    )}
+                    %
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">
-                  {personalObjective.label}
-                </p>
+                <p className="text-xs text-gray-500">{personalObjective.label}</p>
               </>
             ) : (
-              <div className="text-sm text-gray-500">
-                Aucun objectif personnel défini
-              </div>
+              <div className="text-sm text-gray-500">Aucun objectif personnel défini</div>
             )}
           </div>
         </div>
       </div>
 
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-medium text-gray-900">
-              {chartView === "evolution"
-                ? "Évolution des ventes"
-                : "Évolution de l'objectif"}
+              {chartView === "evolution" ? "Évolution des ventes" : "Évolution de l'objectif"}
             </h2>
-            <div className="flex rounded-lg border border-gray-200 p-1">
+            <div className="flex rounded-lg border border-gray-200 p-1" role="tablist" aria-label="Vue des graphiques">
               <button
+                aria-label="Afficher l'évolution des ventes"
                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
                   chartView === "evolution"
                     ? "bg-cactus-600 text-white"
@@ -573,6 +687,7 @@ const DashboardHome = () => {
                 Évolution
               </button>
               <button
+                aria-label="Afficher l'évolution de l'objectif"
                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
                   chartView === "objective"
                     ? "bg-cactus-600 text-white"
@@ -612,7 +727,7 @@ const DashboardHome = () => {
                     },
                   ],
                 }}
-                options={lineChartOptions}
+                options={lineChartOptions as any}
               />
             ) : (
               <ChartComponent
@@ -641,7 +756,7 @@ const DashboardHome = () => {
                     },
                   ],
                 }}
-                options={objectiveChartOptions}
+                options={objectiveChartOptions as any}
               />
             )}
           </div>
@@ -649,11 +764,10 @@ const DashboardHome = () => {
 
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-medium text-gray-900">
-              Répartition des offres
-            </h2>
-            <div className="flex rounded-lg border border-gray-200 p-1">
+            <h2 className="text-lg font-medium text-gray-900">Répartition des offres</h2>
+            <div className="flex rounded-lg border border-gray-200 p-1" role="tablist" aria-label="Répartition des offres">
               <button
+                aria-label="Répartition personnelle"
                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
                   offerDistributionView === "personal"
                     ? "bg-cactus-600 text-white"
@@ -664,6 +778,7 @@ const DashboardHome = () => {
                 Moi
               </button>
               <button
+                aria-label="Répartition équipe"
                 className={`px-3 py-1 text-sm rounded-md transition-colors ${
                   offerDistributionView === "team"
                     ? "bg-cactus-600 text-white"
@@ -683,18 +798,69 @@ const DashboardHome = () => {
                   ? computeOfferDistribution(personalSales)
                   : computeOfferDistribution(sales)
               }
-              options={pieChartOptions}
+              options={pieChartOptions as any}
             />
           </div>
         </div>
       </div>
 
+      {/* Ventes du jour + tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Total ventes équipe du jour */}
+        <div className="col-span-2 mb-2">
+          <div className="bg-cactus-100 border border-cactus-200 rounded-lg px-4 py-2 text-cactus-700 font-semibold text-lg flex items-center gap-2 shadow-sm w-fit">
+            <span>Ventes de l'équipe aujourd'hui :</span>
+            <span className="text-cactus-900 text-2xl font-bold">
+              {teamSalesToday.length}
+            </span>
+          </div>
+        </div>
         <TeamSales members={teamSalesTodayData} />
         <RecentSales sales={recentSalesData} />
       </div>
 
       <PerformanceTable salespeople={performanceData} />
+
+      {/* Notifications + widget live */}
+      <NotificationSystem
+        notifications={notifications}
+        setNotifications={setNotifications}
+      />
+
+  {/* LiveStatsWidget temporairement désactivé */}
+
+      {/* Bonus : petits crédits si tu veux les afficher */}
+      {casinoCredits != null && (
+        <div className="text-xs text-gray-600">
+          🎰 Crédits casino : <span className="font-semibold">{casinoCredits}</span>
+        </div>
+      )}
+
+      {/* Bouton flottant: Clôtures d'appel (UI uniquement, contenu à venir) */}
+      <div className="fixed bottom-24 right-6 z-40 select-none">
+        <button
+          type="button"
+          title="Clôtures d'appel"
+          aria-label="Ouvrir les clôtures d'appel"
+          aria-expanded={showClosures}
+          onClick={() => setShowClosures(true)}
+          className="relative group focus:outline-none"
+        >
+          {/* halo animé */}
+          <div className="absolute inset-0 rounded-full bg-cactus-500/30 blur-xl group-hover:bg-cactus-500/40 transition-colors duration-300 animate-pulse" />
+          {/* bouton principal */}
+          <div className="relative flex items-center gap-2 px-5 py-3 rounded-full text-white shadow-xl ring-2 ring-white/20 bg-gradient-to-r from-cactus-700 via-cactus-600 to-green-600 hover:to-cactus-500 hover:scale-105 active:scale-95 transition-all duration-300">
+            <ListChecks className="w-5 h-5" />
+            <span className="font-semibold">Clôtures d’appel</span>
+            <span className="ml-1 text-[10px] uppercase tracking-wide bg-white/15 px-2 py-0.5 rounded-full animate-pulse">
+              New
+            </span>
+          </div>
+        </button>
+      </div>
+
+  {/* Panel de clôtures d'appel */}
+  <CallClosuresPanel open={showClosures} onClose={() => setShowClosures(false)} closures={callClosures} />
     </div>
   );
 };

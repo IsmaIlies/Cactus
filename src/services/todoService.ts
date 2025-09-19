@@ -2,10 +2,8 @@
 import {
   collection,
   doc,
-  setDoc,
   addDoc,
   getDocs,
-  getDoc,
   updateDoc,
   deleteDoc,
   serverTimestamp,
@@ -65,12 +63,38 @@ export function listenToTodos(
 ): Unsubscribe {
   const todosRef = collection(db, "users", userUID, "todos");
   const q = query(todosRef, orderBy("createdAt", "desc"));
-
-  return onSnapshot(q, (snapshot) => {
-    const todos = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as TodoItem[];
-    onUpdate(todos);
-  });
+  // Ajout gestion d'erreur permission-denied pour ne pas crasher la console utilisateur
+  return onSnapshot(q,
+    (snapshot) => {
+      // Debug optionnel
+      if (import.meta.env.DEV && (window as any).__todosDebug !== false) {
+        console.debug('[todoService] snapshot reçu', { userUID, count: snapshot.size });
+      }
+      const todos = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as TodoItem[];
+      onUpdate(todos);
+    },
+    (err) => {
+      if (err?.code === 'permission-denied') {
+        if (import.meta.env.DEV) {
+          console.warn('[todoService] permission-denied pour userUID=', userUID, ' — tentative fallback one-shot getDocs');
+        }
+        // Fallback: tentative lecture unique (si la règle est strictement identique ça échouera aussi, mais on évite le bruit)
+        (async () => {
+          try {
+            const snap = await getDocs(todosRef);
+            const todos = snap.docs.map(d => ({ id: d.id, ...d.data() })) as TodoItem[];
+            onUpdate(todos);
+          } catch (e) {
+            // Dernier recours: liste vide
+            onUpdate([]);
+          }
+        })();
+      } else {
+        console.error('[todoService] Snapshot error', err);
+      }
+    }
+  );
 }

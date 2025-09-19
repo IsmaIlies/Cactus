@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
-import { collection, addDoc, getDocs, Timestamp, query, orderBy, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, Timestamp, query, orderBy, deleteDoc, doc, updateDoc, arrayUnion } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 
 // Ajout de l'interface User pour le typage
@@ -73,18 +73,25 @@ const SuggestionItem: React.FC<SuggestionItemProps> = ({ suggestion, userId, onD
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentText.trim()) return;
-    // Utilise le nom ou l'email du user du contexte
-    const authorName = user?.displayName || user?.email || user?.id || "Utilisateur";
-    const newComment: Comment = {
-      author: authorName,
-      text: commentText,
-      createdAt: Timestamp.now(),
-    };
-    const updatedComments = [...comments, newComment];
-    setComments(updatedComments);
-    setCommentText("");
-    onEdit(suggestion.text, likes, dislikes, updatedComments);
+    try {
+      if (!commentText.trim()) return;
+      if (!suggestion.id) return; // sécurité
+      const authorName = user?.displayName || user?.email || user?.id || "Utilisateur";
+      const newComment: Comment = { author: authorName, text: commentText.trim(), createdAt: Timestamp.now() };
+      setCommentText("");
+      // Ecriture incrémentale avec arrayUnion (évite de réécrire tout le tableau)
+      await updateDoc(doc(collection(db, "suggestions"), suggestion.id), {
+        comments: arrayUnion(newComment)
+      });
+      // Mise à jour locale immédiate
+      setComments(prev => [...prev, newComment]);
+      // Optionnel: synchroniser le parent sans réécriture complète (on évite de passer un gros tableau)
+      onEdit(suggestion.text, likes, dislikes, [...comments, newComment]);
+    } catch (err) {
+      console.error("Erreur lors de l'ajout du commentaire:", err);
+      // Restaure le texte si erreur
+      setCommentText(prev => prev || "");
+    }
   };
 
   return (

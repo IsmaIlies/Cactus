@@ -17,8 +17,8 @@ import {
   sendPasswordResetEmail,
   updatePassword,
   verifyBeforeUpdateEmail,
+  createUserWithEmailAndPassword,
 } from "firebase/auth";
-import { getFunctions, httpsCallable } from "firebase/functions";
 import { doc, setDoc, getFirestore } from "firebase/firestore";
 
 import { getIdTokenResult } from "firebase/auth";
@@ -35,9 +35,9 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean; // <-- ajoute cette ligne
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; code?: string; message?: string }>;
   loginWithMicrosoft: () => Promise<boolean>;
-  register: (userData: RegisterData) => Promise<boolean>;
+  register: (userData: RegisterData) => Promise<{ success: boolean; code?: string; message?: string }>;
   logout: () => void;
   updateUserEmail: (
     newEmail: string,
@@ -115,29 +115,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; code?: string; message?: string }> => {
+    const rawInput = email;
+  const trimmed = rawInput.trim();
+  // Utiliser exactement ce que l'utilisateur saisit (plus d'ajout automatique de domaine)
+  const normalizedEmail = trimmed; // Laisser Firebase lever 'auth/invalid-email' si format incorrect
     try {
-      // Ajouter automatiquement "@mars-marketing.fr" si pas de "@" dans l'email
-      const formattedEmail = email.includes("@")
-        ? email
-        : `${email}@mars-marketing.fr`;
-
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        formattedEmail,
-        password
-      );
-      const user = userCredential.user;
+      const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      const u = userCredential.user;
       setUser({
-        id: user.uid,
-        displayName: user.displayName || "",
-        email: user.email || "",
-        emailVerified: user.emailVerified, // <--- AJOUT ICI
+        id: u.uid,
+        displayName: u.displayName || "",
+        email: u.email || normalizedEmail,
+        emailVerified: u.emailVerified,
       });
-      return true;
-    } catch (error) {
-      console.error("Erreur login", error);
-      return false;
+      return { success: true };
+    } catch (err: any) {
+      const code: string = err?.code || 'auth/unknown';
+      // Auto retry simple pour les erreurs réseau transitoires
+      if (code === 'auth/network-request-failed') {
+        if (!navigator.onLine) {
+          return { success: false, code, message: 'Aucune connexion internet détectée. Vérifiez votre réseau.' };
+        }
+        // Petit délai puis nouvelle tentative unique
+        try {
+          await new Promise(r => setTimeout(r, 600));
+          const retryCred = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+          const ru = retryCred.user;
+          setUser({
+            id: ru.uid,
+            displayName: ru.displayName || '',
+            email: ru.email || normalizedEmail,
+            emailVerified: ru.emailVerified,
+          });
+          return { success: true };
+        } catch (retryErr: any) {
+          const retryCode: string = retryErr?.code || code;
+          if (localStorage.getItem('authDebug') === '1') {
+            console.warn('[authDebug] retry login failed', retryCode, retryErr);
+          }
+        }
+      }
+      let message = 'Erreur de connexion';
+      switch (code) {
+        case 'auth/invalid-credential':
+        case 'auth/wrong-password':
+          message = 'Mot de passe incorrect ou identifiants invalides';
+          break;
+        case 'auth/user-not-found':
+          message = 'Utilisateur introuvable';
+          break;
+        case 'auth/too-many-requests':
+          message = 'Trop de tentatives. Réessayez plus tard ou réinitialisez le mot de passe.';
+          break;
+        case 'auth/user-disabled':
+          message = 'Compte désactivé. Contactez l’administrateur.';
+          break;
+        case 'auth/invalid-email':
+          message = 'Adresse email invalide';
+          break;
+        case 'auth/network-request-failed':
+          message = navigator.onLine
+            ? 'Problème réseau ou blocage (pare-feu / proxy / adblock). Réessayez ou changez de connexion.'
+            : 'Vous êtes hors ligne. Reconnectez-vous puis réessayez.';
+          break;
+        default:
+          message = message + ` (${code})`;
+      }
+      if (localStorage.getItem('authDebug') === '1') {
+        console.warn('[authDebug] login failed', { code, err });
+      }
+      return { success: false, code, message };
     }
   };
 
@@ -145,21 +193,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     return false;
   };
 
-  const register = async (userData: RegisterData): Promise<boolean> => {
-    const functions = getFunctions(undefined, "europe-west9");
-    const registerUser = httpsCallable(functions, "registerUser");
-
+  const register = async (userData: RegisterData): Promise<{ success: boolean; code?: string; message?: string }> => {
+    const attempt = async () => {
+      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+      return userCredential.user;
+    };
     try {
-      await registerUser({
-        email: userData.email,
-        password: userData.password,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-      });
+      let created;
+      try {
+        created = await attempt();
+      } catch (err: any) {
+        if (err?.code === 'auth/network-request-failed') {
+          // Si offline clair -> message direct
+          if (!navigator.onLine) {
+            return { success: false, code: err.code, message: 'Pas de connexion internet détectée. Vérifie ton réseau.' };
+          }
+          // court retry après 600ms (similaire login)
+          try {
+            await new Promise(r => setTimeout(r, 600));
+            created = await attempt();
+          } catch (retryErr: any) {
+            const retryCode = retryErr?.code || err.code;
+            if (localStorage.getItem('authDebug') === '1') console.warn('[authDebug] register retry failed', retryCode, retryErr);
+            return { success: false, code: retryCode, message: navigator.onLine ? 'Appel Firebase Auth bloqué (pare-feu / proxy / adblock ?) ou latence réseau. Essaye autre connexion ou désactive filtrages.' : 'Vous êtes hors ligne.' };
+          }
+        } else {
+          throw err;
+        }
+      }
 
-      return true;
+      // Set displayName
+      const displayName = `${userData.firstName} ${userData.lastName}`.trim();
+      try {
+        await updateProfile(created, { displayName });
+      } catch (e) {
+        // non-blocking
+        console.warn('updateProfile failed', e);
+      }
+
+      // Create Firestore user doc
+      try {
+        const db = getFirestore();
+        const userDocRef = doc(db, 'users', created.uid);
+        await setDoc(userDocRef, {
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          displayName,
+          email: userData.email,
+          createdAt: Date.now(),
+        }, { merge: true });
+      } catch (e) {
+        console.warn('setDoc user failed', e);
+      }
+
+      // Send verification email (best effort)
+      try {
+        await sendEmailVerification(created);
+      } catch (e) {
+        console.warn('sendEmailVerification failed', e);
+      }
+
+      return { success: true };
     } catch (error: any) {
-      throw error; // on remonte l'erreur brute
+      console.error('register error (client create):', error);
+      const code: string | undefined = error?.code || undefined;
+      let message: string = error?.message || 'Erreur inscription';
+      if (code === 'auth/network-request-failed') {
+        message = navigator.onLine
+          ? 'Connexion au service Auth impossible (blocage réseau ?). Réessaye, change de réseau ou désactive un éventuel proxy/adblock.'
+          : 'Vous semblez hors ligne. Reconnectez-vous et réessayez.';
+      }
+      return { success: false, code, message };
     }
   };
 
@@ -281,12 +385,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const resetPassword = async (email: string): Promise<boolean> => {
     try {
-      // Ajouter automatiquement "@mars-marketing.fr" si pas de "@" dans l'email
-      const formattedEmail = email.includes("@")
-        ? email
-        : `${email}@mars-marketing.fr`;
-
-      await sendPasswordResetEmail(auth, formattedEmail);
+      // Ne plus ajouter automatiquement de domaine : utiliser exactement la saisie
+      await sendPasswordResetEmail(auth, email);
       return true;
     } catch (error) {
       console.error("Erreur envoi email de réinitialisation:", error);
