@@ -1,9 +1,10 @@
+
 /**
  * Migration Script: Ajoute `region: 'FR'` à tous les documents `sales` sans champ `region`.
  * Utilisation:
  *   1. Créer un service account Firestore (rôle Datastore User ou Editor minimum).
  *   2. Exporter la variable d'environnement GOOGLE_APPLICATION_CREDENTIALS vers le chemin du JSON.
- *      PowerShell: $env:GOOGLE_APPLICATION_CREDENTIALS="C:\\chemin\\serviceAccount.json"
+ *      PowerShell: $env:GOOGLE_APPLICATION_CREDENTIALS="C:\chemin\serviceAccount.json"
  *   3. Installer la dépendance firebase-admin (ajoutée dans package.json).
  *   4. Exécuter: npx ts-node scripts/migrateSalesRegionFR.ts  (ou: npm run migrate:sales-region)
  */
@@ -62,7 +63,6 @@ async function migrateSalesRegionFR(): Promise<MigrationStats> {
     lastDoc = snap.docs[snap.docs.length - 1];
     if (snap.size < BATCH_LIMIT) more = false; // fin pagination
   }
-
   return stats;
 }
 
