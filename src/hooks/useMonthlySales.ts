@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, useCallback } from 'react';
 import { Sale } from '../services/salesService';
-import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, Timestamp, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useRegion } from '../contexts/RegionContext';
 
@@ -38,6 +38,18 @@ export function useMonthlySales(options: UseMonthlySalesOptions = {}): MonthlySa
   const [validatedSales, setValidatedSales] = useState<Sale[] | null>(includeValidated ? [] : null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  // Agents CIV explicitement listés (noms insensibles Ã  la casse)
+  const CIV_AGENT_NAMES = [
+    'DYLAN OUATTARA',
+    'Vinny Eymard Ray-Stephane Bodoua',
+    'Benji',
+    'Guy Laroche KOUADIO',
+    'eunice oulai'
+  ];
+  const [civAgentIds, setCivAgentIds] = useState<string[]>([]);
+  const [civAgentNameSet] = useState<Set<string>>(
+    () => new Set(CIV_AGENT_NAMES.map(n => n.trim().toLowerCase()))
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,6 +67,30 @@ export function useMonthlySales(options: UseMonthlySalesOptions = {}): MonthlySa
     }
   }, [region, includeValidated]);
 
+  // Résoudre les userIds des agents CIV quand on est sur la région CIV
+  useEffect(() => {
+    let active = true;
+    const resolveIds = async () => {
+      if (region !== 'CIV') { setCivAgentIds([]); return; }
+      try {
+        const usersSnap = await getDocs(collection(db, 'users'));
+        if (!active) return;
+        const ids = usersSnap.docs
+          .map(d => ({ id: d.id, ...(d.data() as any) }))
+          .filter(u => {
+            const composite = (u.name || [u.firstName, u.lastName].filter(Boolean).join(' ')).trim();
+            return composite && civAgentNameSet.has(composite.toLowerCase());
+          })
+          .map(u => u.id);
+        setCivAgentIds(ids);
+      } catch {
+        if (active) setCivAgentIds([]);
+      }
+    };
+    resolveIds();
+    return () => { active = false; };
+  }, [region, civAgentNameSet]);
+
   useEffect(() => {
     // bornes de month
     const now = new Date();
@@ -68,8 +104,19 @@ export function useMonthlySales(options: UseMonthlySalesOptions = {}): MonthlySa
     setLoading(true);
     const unsub = onSnapshot(qRef, (snap) => {
       const docs: Sale[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      // Filtrage client: CIV => uniquement CIV ; FR => FR + legacy sans region
-      const allowed = docs.filter((s:any)=> s?.region === region || (!s?.region && region === 'FR'));
+      // Filtrage client:
+      // - FR => ventes FR + legacy sans region
+      // - CIV => ventes CIV + ventes de la liste d'agents CIV (mÃªme si region manquante ou FR)
+      const allowed = docs.filter((s:any)=>{
+        if (region === 'FR') return (s?.region === 'FR' || !s?.region);
+        // region CIV
+        if (s?.region === 'CIV') return true;
+        const uid = s?.userId as string | undefined;
+        if (uid && civAgentIds.includes(uid)) return true;
+        const nm = (s?.name || '').toString().trim().toLowerCase();
+        if (nm && civAgentNameSet.has(nm)) return true;
+        return false;
+      });
       setSales(allowed);      if (includeValidated) {
         const isValidated = (s: Sale) => {
           const bs = (s as any).basketStatus as string | undefined;
@@ -87,7 +134,7 @@ export function useMonthlySales(options: UseMonthlySalesOptions = {}): MonthlySa
       setLoading(false);
     });
     return () => unsub();
-  }, [includeValidated, refreshKey, region]);
+  }, [includeValidated, refreshKey, region, civAgentIds, civAgentNameSet]);
 
   return { loading, error, sales, validatedSales, refresh: load, region: region as 'FR' | 'CIV' };
 }

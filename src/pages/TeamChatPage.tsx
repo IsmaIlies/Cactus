@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, Timestamp, setDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, Timestamp, setDoc, serverTimestamp, updateDoc, arrayUnion, getDocs, orderBy, limit } from 'firebase/firestore';
 
 type User = { id: string; name: string; lastActive?: number; status?: string };
 type Message = { id?: string; tempId?: string; channel: string; sender: string; senderId: string; text: string; timestamp?: any; fileName?: string; fileType?: string; fileUrl?: string; participants?: string[]; readers?: string[]; pending?: boolean; error?: boolean; editedAt?: any };
@@ -197,7 +197,17 @@ const TeamChatPage: React.FC = () => {
         setPublicMessages(list);
         if(!isPrivate) setLoading(false);
       },
-      err=>{ console.error('Listener public error', err); setLoading(false); }
+      async err=>{
+        console.error('Listener public error', err);
+        // Fallback: charge un lot initial de messages pour affichage
+        try {
+          const snap = await getDocs(query(col, where('channel','==', PUBLIC_CHANNEL), orderBy('timestamp','desc'), limit(100)));
+          const list = snap.docs.map(d=>({id:d.id, ...(d.data() as any)} as Message))
+            .sort((a,b)=>(a.timestamp?.toMillis?.()||0)-(b.timestamp?.toMillis?.()||0));
+          setPublicMessages(list);
+        } catch(e){ console.error('Fallback public getDocs error', e); }
+        setLoading(false);
+      }
     );
     return ()=>unsub();
   },[currentUser]);
@@ -219,12 +229,21 @@ const TeamChatPage: React.FC = () => {
           setPrivateMessages(list);
           setLoading(false);
         },
-        err=>{
+        async err=>{
           console.error('Listener privé (channel) erreur', err);
           if(!fallback){
             fallback = true;
             attachParticipantsFallback();
-          } else setLoading(false);
+          } else {
+            // Dernier recours: récupérer les derniers messages privés via lecture unique
+            try {
+              const snap = await getDocs(query(col, where('channel','==', privateChannelId), orderBy('timestamp','desc'), limit(100)));
+              const list = snap.docs.map(d=>({id:d.id, ...(d.data() as any)} as Message))
+                .sort((a,b)=>(a.timestamp?.toMillis?.()||0)-(b.timestamp?.toMillis?.()||0));
+              setPrivateMessages(list);
+            } catch(e){ console.error('Fallback privé getDocs error', e); }
+            setLoading(false);
+          }
         }
       );
     };
@@ -239,7 +258,19 @@ const TeamChatPage: React.FC = () => {
           setPrivateMessages(list);
           setLoading(false);
         },
-        err=>{ console.error('Listener privé (participants fallback) erreur', err); setLoading(false); }
+        async err=>{
+          console.error('Listener privé (participants fallback) erreur', err);
+          // Lecture unique de secours
+          try {
+            const snap = await getDocs(query(col, where('participants','array-contains', currentUser.id), orderBy('timestamp','desc'), limit(100)));
+            const list = snap.docs
+              .map(d=>({id:d.id, ...(d.data() as any)} as Message))
+              .filter(m=> Array.isArray(m.participants) && m.participants.includes(selectedUser))
+              .sort((a,b)=>(a.timestamp?.toMillis?.()||0)-(b.timestamp?.toMillis?.()||0));
+            setPrivateMessages(list);
+          } catch(e){ console.error('Fallback privé participants getDocs error', e); }
+          setLoading(false);
+        }
       );
     };
     attachChannel();

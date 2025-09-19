@@ -123,6 +123,7 @@ const DashboardHome = () => {
     };
   }, [currentUserId]);
 
+
   // Rafraîchir ventes/objectifs quand on change de mois
   const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
   useEffect(() => {
@@ -666,6 +667,7 @@ const DashboardHome = () => {
           </div>
         </div>
       </div>
+
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

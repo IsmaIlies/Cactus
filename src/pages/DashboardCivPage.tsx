@@ -42,6 +42,8 @@ const DashboardCivPage: React.FC = () => {
     return () => { active = false; };
   }, [region]);
 
+  // Pas de tableau ad hoc de ventes: on se repose sur les graphiques existants (Dashboard Home)
+
   if (region && region !== 'CIV') {
     return <div className="p-6 text-red-400">Accès refusé (mauvaise région)</div>;
   }

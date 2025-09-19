@@ -1,7 +1,7 @@
 // src/firebase.ts
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from 'firebase/storage';
 
 export const firebaseConfig = {
@@ -19,6 +19,10 @@ export const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Configure Firestore to better handle restricted networks/dev environments
+// Fixes issues like 400 on Write/Listen channel by falling back to long polling
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 export const firebaseApp = app;
 export const storage = getStorage(app);

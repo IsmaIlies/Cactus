@@ -117,6 +117,15 @@ const getNextWeekday = (targetWeekday: number, from = new Date()) => {
 const isSameDay = (a: Date, b: Date) => a.getTime() === b.getTime();
 
 const NouveautesPage: React.FC = () => {
+  // Lightbox pour Visuels Clubs
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  useEffect(()=>{
+    const onKey = (e: KeyboardEvent) => {
+      if(e.key === 'Escape') setLightbox(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return ()=> window.removeEventListener('keydown', onKey);
+  },[]);
   // FOOT Schedules
   // (Contenu des grilles : rester statique tant que tu ne fournis pas de source dynamique)
   const mardi: ScheduleEntry[] = [
@@ -276,7 +285,13 @@ const NouveautesPage: React.FC = () => {
 
   <SectionBlock title="Visuels Clubs" subtitle="Calendriers clubs">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <figure className="relative group border border-white/10 rounded-lg overflow-hidden bg-white/5 aspect-[3/4]">
+            <figure
+              className="relative group border border-white/10 rounded-lg overflow-hidden bg-white/5 aspect-[3/4] cursor-zoom-in focus-within:ring-2 focus-within:ring-emerald-400/50"
+              role="button"
+              tabIndex={0}
+              onClick={()=> setLightbox({ src: '/cal-marseille.jpg', alt: 'Calendrier des matchs de Marseille' })}
+              onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLightbox({ src: '/cal-marseille.jpg', alt: 'Calendrier des matchs de Marseille' }); } }}
+            >
               <img
                 src="/cal-marseille.jpg"
                 alt="Calendrier des matchs de Marseille"
@@ -285,7 +300,13 @@ const NouveautesPage: React.FC = () => {
               />
               <figcaption className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-2 text-[11px] text-white/80">Marseille</figcaption>
             </figure>
-            <figure className="relative group border border-white/10 rounded-lg overflow-hidden bg-white/5 aspect-[3/4]">
+            <figure
+              className="relative group border border-white/10 rounded-lg overflow-hidden bg-white/5 aspect-[3/4] cursor-zoom-in focus-within:ring-2 focus-within:ring-emerald-400/50"
+              role="button"
+              tabIndex={0}
+              onClick={()=> setLightbox({ src: '/cal-monaco.jpg', alt: 'Calendrier des matchs de Monaco' })}
+              onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLightbox({ src: '/cal-monaco.jpg', alt: 'Calendrier des matchs de Monaco' }); } }}
+            >
               <img
                 src="/cal-monaco.jpg"
                 alt="Calendrier des matchs de Monaco"
@@ -294,7 +315,13 @@ const NouveautesPage: React.FC = () => {
               />
               <figcaption className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-2 text-[11px] text-white/80">Monaco</figcaption>
             </figure>
-            <figure className="relative group border border-white/10 rounded-lg overflow-hidden bg-white/5 aspect-[3/4]">
+            <figure
+              className="relative group border border-white/10 rounded-lg overflow-hidden bg-white/5 aspect-[3/4] cursor-zoom-in focus-within:ring-2 focus-within:ring-emerald-400/50"
+              role="button"
+              tabIndex={0}
+              onClick={()=> setLightbox({ src: '/cal-psg.jpg', alt: 'Calendrier des matchs du PSG' })}
+              onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); setLightbox({ src: '/cal-psg.jpg', alt: 'Calendrier des matchs du PSG' }); } }}
+            >
               <img
                 src="/cal-psg.jpg"
                 alt="Calendrier des matchs du PSG"
@@ -306,6 +333,31 @@ const NouveautesPage: React.FC = () => {
           </div>
           {/* Paragraphe info images retirÃ© */}
         </SectionBlock>
+      {/* Lightbox overlay */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Agrandissement visuel club"
+          onClick={()=> setLightbox(null)}
+        >
+          <div className="relative max-w-[95vw] max-h-[90vh]" onClick={e=> e.stopPropagation()}>
+            <button
+              onClick={()=> setLightbox(null)}
+              className="absolute -top-3 -right-3 h-9 w-9 rounded-full bg-white/90 text-cactus-900 flex items-center justify-center shadow-lg hover:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              aria-label="Fermer"
+            >
+              ✕
+            </button>
+            <img
+              src={lightbox.src}
+              alt={lightbox.alt}
+              className="block max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
