@@ -149,6 +149,9 @@ const ProgrammePdfTopBar: React.FC = () => {
       let msg = 'Upload échoué';
       if (e?.code) msg += ` (${e.code})`;
       if (e?.message) msg += `: ${e.message}`;
+      if (e?.code === 'storage/unauthorized' || e?.code === 'permission-denied' || /403/.test(e?.message||'')) {
+        msg += '\nPermissions: Ton compte n\'a pas les droits d\'écriture pour le bucket. Assure-toi d\'être connecté et d\'avoir le rôle admin/direction/superviseur ou un email autorisé.';
+      }
       if (e?.message?.toLowerCase().includes('cors')) {
         msg += '\nCORS: Configuration bucket (CORS) ou préflight bloqué (OPTIONS). Vérifie origin http://localhost:5173 autorisé.';
       }
