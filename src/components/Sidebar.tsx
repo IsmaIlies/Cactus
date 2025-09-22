@@ -176,19 +176,6 @@ const Sidebar = () => {
           <Gift className="w-5 h-5 mr-3" />
           Offres Canal+
         </NavLink>
-        <NavLink
-          to={`${base}/teamchat`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <span className="inline-block w-5 h-5 mr-3 bg-cactus-600 rounded-full flex items-center justify-center text-white font-bold">🌵</span>
-          <span>Chat d'équipe</span>
-        </NavLink>
         {/*
         <NavLink
           to="/dashboard/modetv"

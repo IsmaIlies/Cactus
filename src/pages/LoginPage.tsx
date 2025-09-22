@@ -155,7 +155,12 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-cactus-600 to-cactus-800">
       <div className="w-full max-w-md">
-        <div className="text-center mb-10">
+        <div className="text-center mb-10 flex flex-col items-center">
+          <img
+            src="/cactus-icon.svg"
+            alt="Logo Cactus"
+            className="w-20 h-20 mb-4 drop-shadow-lg"
+          />
           <h1 className="text-5xl font-bold text-white mb-2">Cactus</h1>
           <p className="text-cactus-100">
             Plateforme d'assistance à la télévente
