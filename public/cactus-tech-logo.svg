@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 140" role="img" aria-labelledby="title desc">
+  <title id="title">Logo Cactus</title>
+  <desc id="desc">Logotype minimaliste Cactus, contraste élevé et accent néon vert.</desc>
+  <defs>
+    <linearGradient id="panelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1120" />
+      <stop offset="100%" stop-color="#111a2b" />
+    </linearGradient>
+    <linearGradient id="strokeGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <linearGradient id="textGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="50%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+    <filter id="panelShadow" x="-20%" y="-25%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#020617" flood-opacity="0.45" />
+    </filter>
+    <filter id="textGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#panelShadow)">
+    <rect x="34" y="24" width="352" height="92" rx="24" fill="url(#panelGradient)" />
+    <rect x="34.5" y="24.5" width="351" height="91" rx="23.5" fill="none" stroke="url(#strokeGradient)" stroke-width="1" opacity="0.9" />
+  </g>
+
+  <g text-anchor="middle">
+    <text x="210" y="86" fill="url(#textGradient)" font-family="'Poppins','Urbanist','Segoe UI',sans-serif" font-weight="600" font-size="56" letter-spacing="8" filter="url(#textGlow)">
+      CACTUS
+    </text>
+    <text x="210" y="108" fill="#cbd5f5" font-family="'Inter','Segoe UI',sans-serif" font-size="18" letter-spacing="10">
+      TECH
+    </text>
+  </g>
+</svg>

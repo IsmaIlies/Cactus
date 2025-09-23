@@ -157,13 +157,12 @@ const LoginPage = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-10 flex flex-col items-center">
           <img
-            src="/cactus-icon.svg"
-            alt="Logo Cactus"
-            className="w-20 h-20 mb-4 drop-shadow-lg"
+            src="/cactus-tech-logo.svg"
+            alt="Logo Cactus Tech"
+            className="w-60 max-w-full h-auto mb-5 drop-shadow-lg"
           />
-          <h1 className="text-5xl font-bold text-white mb-2">Cactus</h1>
-          <p className="text-cactus-100">
-            Plateforme d'assistance à la télévente
+          <p className="text-cactus-100 text-lg">
+            SaaS TMK Solution powered by IA
           </p>
         </div>
 
