@@ -15,6 +15,7 @@ import MyCoverPage from "./MyCoverPage";
 import OffersPage from "./OffersPage";
 import FaqPage from "./FaqPage";
 import NouveautesPage from "./NouveautesPage";
+import MySalesPage from "./MySalesPage";
 import { useRegion } from '../contexts/RegionContext';
 
 const DashboardPage: React.FC = () => {
@@ -51,6 +52,7 @@ const DashboardPage: React.FC = () => {
   else if (p.startsWith(`${base}/script`)) activePage = "script";
   else if (p.startsWith(`${base}/catalog`)) activePage = "catalog";
   else if (p.startsWith(`${base}/sales`)) activePage = "sales";
+  else if (p.startsWith(`${base}/my-sales`)) activePage = "my-sales";
   else if (p.startsWith(`${base}/ai`)) activePage = "ai";
   else if (p.startsWith(`${base}/mrwhite`)) activePage = "mrwhite";
   else if (p.startsWith(`/modetv-disabled`)) activePage = "modetv"; // legacy path kept
@@ -94,6 +96,12 @@ const DashboardPage: React.FC = () => {
             className="h-full overflow-auto p-6"
           >
             <SalesPage />
+          </div>
+          <div 
+            style={{ display: activePage === "my-sales" ? "block" : "none" }}
+            className="h-full overflow-auto p-6"
+          >
+            <MySalesPage />
           </div>
           <div 
             style={{ display: activePage === "ai" ? "block" : "none" }}
@@ -157,4 +165,3 @@ const DashboardPage: React.FC = () => {
 };
 
 export default DashboardPage;
-

@@ -41,7 +41,7 @@ const StepA: React.FC<StepAProps> = ({
       <div className="grid gap-6">
         <div>
           <label htmlFor="numeroId" className="text-sm font-medium text-gray-700">
-            Numéro d'ID
+            Numéro DID
           </label>
           <div className="mt-1 flex gap-2">
             <input
@@ -51,7 +51,7 @@ const StepA: React.FC<StepAProps> = ({
               value={form.numeroId}
               onChange={(e) => onChange("numeroId", e.target.value)}
               onBlur={() => onBlur("numeroId")}
-              placeholder="Saisir le numéro d’ID"
+              placeholder="Saisir le numéro DID"
               className={`${inputClass} flex-1`}
             />
             <button

@@ -86,7 +86,7 @@ const SalesEntry: React.FC = () => {
     const typeContext = context?.typeOffre ?? form.typeOffre;
     switch (field) {
       case "numeroId":
-        if (!trimmed) return "Numéro d'ID requis";
+        if (!trimmed) return "Numéro DID requis";
         if (trimmed.length < 3) return "3 caractères minimum";
         return "";
       case "typeOffre":

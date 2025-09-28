@@ -14,9 +14,9 @@ const leadSources: Array<{ key: keyof LeadKpiSnapshot; label: string }> = [
 ];
 
 const initialSnapshot: LeadKpiSnapshot = {
-  hipto: { mobiles: 0, box: 0 },
-  dolead: { mobiles: 0, box: 0 },
-  mm: { mobiles: 0, box: 0 },
+  hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+  dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+  mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
 };
 
 const lineChartOptions = {

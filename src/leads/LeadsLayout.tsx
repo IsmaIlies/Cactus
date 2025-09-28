@@ -1,6 +1,10 @@
-import { Outlet } from "react-router-dom";
 import LeadsSidebar from "./components/LeadsSidebar";
 import React from "react";
+import { Routes, Route } from "react-router-dom";
+import LeadsDashboardPage from "./pages/LeadsDashboardPage";
+import SalesEntry from "./pages/SalesEntry";
+import LeadsChecklistPage from "./pages/LeadsChecklistPage";
+import MyLeadSalesPage from "./pages/MyLeadSalesPage";
 
 const LeadsLayout = () => {
   React.useEffect(() => {
@@ -44,7 +48,13 @@ const LeadsLayout = () => {
       <main className="flex-1 overflow-auto">
         <div className="max-w-5xl mx-auto px-8 py-10">
           <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl shadow-2xl shadow-black/20 p-8 min-h-[60vh]">
-            <Outlet />
+            <Routes>
+              <Route path="dashboard" element={<LeadsDashboardPage />} />
+              <Route path="sales" element={<SalesEntry />} />
+              <Route path="my-sales" element={<MyLeadSalesPage />} />
+              <Route path="checklist" element={<LeadsChecklistPage />} />
+              <Route path="*" element={<LeadsDashboardPage />} />
+            </Routes>
           </div>
         </div>
       </main>
