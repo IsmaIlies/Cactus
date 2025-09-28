@@ -18,6 +18,20 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && (request.auth.uid == resource.data.userId || hasAdminRole());
     }
 
+    match /leads_sales/{saleId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.mission == "ORANGE_LEADS"
+        && request.resource.data.origineLead in ["hipto", "dolead", "mm"]
+        && request.resource.data.mobileCount is number
+        && request.resource.data.boxCount is number
+        && request.resource.data.numeroId is string
+        && request.resource.data.typeOffre is string
+        && request.resource.data.telephone is string
+        && request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
+    }
+
     match /messages/{messageId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
@@ -142,5 +156,4 @@ service cloud.firestore {
     }
   }
 }
-
 

@@ -109,7 +109,22 @@ const LoginPage = () => {
   const { login, loginWithMicrosoft } = useAuth();
   const { setRegion } = useRegion();
   const [selectedRegion, setSelectedRegion] = useState<'FR' | 'CIV'>(() => (localStorage.getItem('activeRegion') as 'FR' | 'CIV') || 'FR');
+  const [mission, setMission] = useState<'CANAL_PLUS' | 'ORANGE_LEADS'>(() => {
+    try {
+      const stored = localStorage.getItem('activeMission');
+      return stored === 'ORANGE_LEADS' ? 'ORANGE_LEADS' : 'CANAL_PLUS';
+    } catch {
+      return 'CANAL_PLUS';
+    }
+  });
   const navigate = useNavigate();
+
+  const handleMissionSelect = (value: 'CANAL_PLUS' | 'ORANGE_LEADS') => {
+    setMission(value);
+    try {
+      localStorage.setItem('activeMission', value);
+    } catch {}
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,8 +135,13 @@ const LoginPage = () => {
   const { success, message } = await login(email, password);
       if (success) {
         localStorage.setItem('activeRegion', selectedRegion);
+        localStorage.setItem('activeMission', mission);
         setRegion(selectedRegion);
-        navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+        if (mission === 'ORANGE_LEADS') {
+          navigate('/leads/dashboard');
+        } else {
+          navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+        }
       } else {
         setError(message || "Identifiants invalides");
       }
@@ -140,8 +160,13 @@ const LoginPage = () => {
       const success = await loginWithMicrosoft();
       if (success) {
         localStorage.setItem('activeRegion', selectedRegion);
+        localStorage.setItem('activeMission', mission);
         setRegion(selectedRegion);
-        navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+        if (mission === 'ORANGE_LEADS') {
+          navigate('/leads/dashboard');
+        } else {
+          navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+        }
       } else {
         setError("Échec de la connexion avec Microsoft. Veuillez réessayer.");
       }
@@ -205,6 +230,35 @@ const LoginPage = () => {
             </div>
 
             <div className="pt-2 border-t border-gray-200 space-y-2">
+              <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-3">
+                <p className="text-xs font-medium text-gray-700">Mission</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleMissionSelect('CANAL_PLUS')}
+                    aria-pressed={mission === 'CANAL_PLUS'}
+                    className={`w-full rounded-lg border px-4 py-3 text-left transition focus:outline-none focus:ring-2 focus:ring-offset-2 text-sm font-semibold ${
+                      mission === 'CANAL_PLUS'
+                        ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-900/30 focus:ring-gray-900'
+                        : 'bg-white text-gray-900 border-gray-300 hover:border-gray-400 hover:bg-gray-100 focus:ring-gray-400'
+                    }`}
+                  >
+                    <span className="block text-base font-semibold tracking-wide">CANAL+</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMissionSelect('ORANGE_LEADS')}
+                    aria-pressed={mission === 'ORANGE_LEADS'}
+                    className={`w-full rounded-lg border px-4 py-3 text-left transition focus:outline-none focus:ring-2 focus:ring-offset-2 text-sm font-semibold ${
+                      mission === 'ORANGE_LEADS'
+                        ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-400/40 focus:ring-orange-400'
+                        : 'bg-white text-gray-900 border-orange-200 hover:border-orange-300 hover:bg-orange-50 focus:ring-orange-300'
+                    }`}
+                  >
+                    <span className="block text-base font-semibold tracking-wide">ORANGE LEADS</span>
+                  </button>
+                </div>
+              </div>
               <div className="bg-gray-50 border border-gray-200 rounded p-3">
                 <p className="text-xs font-medium text-gray-700 mb-2">Région</p>
                 <div className="flex items-center gap-6 text-xs">
