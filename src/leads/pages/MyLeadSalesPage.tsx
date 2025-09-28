@@ -61,6 +61,8 @@ const MyLeadSalesPage: React.FC = () => {
   const totalBox = summary?.box ?? 0;
   const mobileSosh = summary?.mobileSosh ?? 0;
   const internetSosh = summary?.internetSosh ?? 0;
+  const mobileNonSosh = Math.max(0, totalMobiles - mobileSosh);
+  const internetNonSosh = Math.max(0, totalBox - internetSosh);
 
   const flattenedSales = React.useMemo(() => {
     return sales.flatMap((sale) => {
@@ -102,8 +104,8 @@ const MyLeadSalesPage: React.FC = () => {
       </header>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <StatTile label="Mobiles" value={loadingSummary ? "--" : totalMobiles.toString()} />
-        <StatTile label="Internet" value={loadingSummary ? "--" : totalBox.toString()} />
+        <StatTile label="Mobiles" value={loadingSummary ? "--" : mobileNonSosh.toString()} />
+        <StatTile label="Internet" value={loadingSummary ? "--" : internetNonSosh.toString()} />
         <StatTile label="Mobile SOSH" value={loadingSummary ? "--" : mobileSosh.toString()} />
         <StatTile label="Internet SOSH" value={loadingSummary ? "--" : internetSosh.toString()} />
       </div>
@@ -149,8 +151,9 @@ const MyLeadSalesPage: React.FC = () => {
 
       <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md shadow-xl">
         <p className="text-sm text-blue-100/70">
-          Les ventes ci-dessus correspondent au mois sélectionné. Les catégories SOSH sont détectées
-          automatiquement selon l'intitulé de chaque offre enregistrée.
+          Les ventes ci-dessus correspondent au mois sélectionné. Les totaux "Mobiles" et "Internet" excluent
+          les ventes SOSH, listées séparément. Les catégories SOSH sont détectées automatiquement selon
+          l'intitulé de chaque offre enregistrée.
         </p>
       </div>
     </div>

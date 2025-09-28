@@ -36,41 +36,34 @@ type LeadSaleInput = {
   };
 };
 
-const MOBILE_SOSH_KEYWORDS = ["sosh", "sim"];
-const INTERNET_SOSH_KEYWORDS = ["sosh", "livebox", "boîte sosh"];
+export const categorize = (typeOffre: string | undefined | null) => {
+  const type = (typeOffre || "").trim().toLowerCase();
+  const zero = { internet: 0, mobile: 0, internetSosh: 0, mobileSosh: 0 } as const;
 
-const categorizeSale = (label: string) => {
-  const value = label.toLowerCase();
-  const isMobile = value.includes("mobile") || value.includes("fm ") || value.includes("fmr");
-  const isInternet = value.includes("internet") || value.includes("livebox") || value.includes("fibre");
-  const isMobileSosh = MOBILE_SOSH_KEYWORDS.some((keyword) => value.includes(keyword)) && isMobile;
-  const isInternetSosh = INTERNET_SOSH_KEYWORDS.some((keyword) => value.includes(keyword)) && isInternet;
-  return {
-    mobiles: isMobile ? 1 : 0,
-    internet: isInternet ? 1 : 0,
-    mobileSosh: isMobileSosh ? 1 : 0,
-    internetSosh: isInternetSosh ? 1 : 0,
-  };
+  switch (type) {
+    case "mobile":
+      return { ...zero, mobile: 1 };
+    case "internet":
+      return { ...zero, internet: 1 };
+    case "internetsosh":
+      return { ...zero, internetSosh: 1 };
+    case "mobilesosh":
+      return { ...zero, mobileSosh: 1 };
+    case "internet + mobile":
+      return { ...zero, internet: 1, mobile: 1 };
+    case "internetsosh + mobilesosh":
+      return { ...zero, internetSosh: 1, mobileSosh: 1 };
+    default:
+      return { ...zero };
+  }
 };
 
 export const saveLeadSale = async (payload: LeadSaleInput) => {
-  const normalizedType = payload.typeOffre.toLowerCase();
-  const baseCategory = categorizeSale(payload.intituleOffre);
-  const extrasTotals = (payload.additionalOffers || []).reduce(
-    (acc, offer) => {
-      const category = categorizeSale(offer.intituleOffre || "");
-      acc.mobiles += category.mobiles;
-      acc.internet += category.internet;
-      acc.mobileSosh += category.mobileSosh;
-      acc.internetSosh += category.internetSosh;
-      return acc;
-    },
-    { mobiles: 0, internet: 0, mobileSosh: 0, internetSosh: 0 }
-  );
-  const mobileCount = baseCategory.mobiles + extrasTotals.mobiles;
-  const boxCount = baseCategory.internet + extrasTotals.internet;
-  const mobileSoshCount = baseCategory.mobileSosh + extrasTotals.mobileSosh;
-  const internetSoshCount = baseCategory.internetSosh + extrasTotals.internetSosh;
+  const baseCategory = categorize(payload.typeOffre);
+  const mobileCount = baseCategory.mobile;
+  const boxCount = baseCategory.internet;
+  const mobileSoshCount = baseCategory.mobileSosh;
+  const internetSoshCount = baseCategory.internetSosh;
 
   const docRef = collection(db, COLLECTION_PATH);
   await addDoc(docRef, {
@@ -112,10 +105,11 @@ export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) =
       if (createdDate < todayStart) return;
       const origin = (data?.origineLead || "").toLowerCase();
       if (origin === "hipto" || origin === "dolead" || origin === "mm") {
-        aggregated[origin].mobiles += Number(data?.mobileCount || 0);
-        aggregated[origin].box += Number(data?.boxCount || 0);
-        aggregated[origin].mobileSosh += Number(data?.mobileSoshCount || 0);
-        aggregated[origin].internetSosh += Number(data?.internetSoshCount || 0);
+        const cat = categorize(data?.typeOffre);
+        aggregated[origin].mobiles += cat.mobile;
+        aggregated[origin].box += cat.internet;
+        aggregated[origin].mobileSosh += cat.mobileSosh;
+        aggregated[origin].internetSosh += cat.internetSosh;
       }
     });
 
@@ -150,8 +144,9 @@ export const subscribeToLeadMonthlySeries = (
       if (!createdAt) return;
       const key = formatDateKey(createdAt.toDate());
       const bucket = map.get(key) || { mobiles: 0, box: 0 };
-      bucket.mobiles += Number(data?.mobileCount || 0);
-      bucket.box += Number(data?.boxCount || 0);
+      const cat = categorize(data?.typeOffre);
+      bucket.mobiles += cat.mobile;
+      bucket.box += cat.internet;
       map.set(key, bucket);
     });
 
@@ -196,10 +191,11 @@ export const subscribeToLeadAgentSummary = (
 
     snapshot.forEach((doc) => {
       const data = doc.data() as any;
-      summary.mobiles += Number(data?.mobileCount || 0);
-      summary.box += Number(data?.boxCount || 0);
-      summary.mobileSosh += Number(data?.mobileSoshCount || 0);
-      summary.internetSosh += Number(data?.internetSoshCount || 0);
+      const cat = categorize(data?.typeOffre);
+      summary.mobiles += cat.mobile;
+      summary.box += cat.internet;
+      summary.mobileSosh += cat.mobileSosh;
+      summary.internetSosh += cat.internetSosh;
     });
 
     callback(summary);
