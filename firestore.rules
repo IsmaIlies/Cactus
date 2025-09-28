@@ -28,7 +28,10 @@ service cloud.firestore {
         && request.resource.data.numeroId is string
         && request.resource.data.typeOffre is string
         && request.resource.data.telephone is string
-        && request.resource.data.createdAt is timestamp;
+        && (
+          request.resource.data.createdAt is timestamp ||
+          request.resource.data.createdAt == request.time
+        );
       allow update, delete: if false;
     }
 
@@ -156,4 +159,3 @@ service cloud.firestore {
     }
   }
 }
-

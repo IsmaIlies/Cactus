@@ -106,8 +106,8 @@ export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) =
       const origin = (data?.origineLead || "").toLowerCase();
       if (origin === "hipto" || origin === "dolead" || origin === "mm") {
         const cat = categorize(data?.typeOffre);
-        aggregated[origin].mobiles += cat.mobile;
-        aggregated[origin].box += cat.internet;
+        aggregated[origin].mobiles += cat.mobile + cat.mobileSosh;
+        aggregated[origin].box += cat.internet + cat.internetSosh;
         aggregated[origin].mobileSosh += cat.mobileSosh;
         aggregated[origin].internetSosh += cat.internetSosh;
       }
@@ -145,8 +145,8 @@ export const subscribeToLeadMonthlySeries = (
       const key = formatDateKey(createdAt.toDate());
       const bucket = map.get(key) || { mobiles: 0, box: 0 };
       const cat = categorize(data?.typeOffre);
-      bucket.mobiles += cat.mobile;
-      bucket.box += cat.internet;
+      bucket.mobiles += cat.mobile + cat.mobileSosh;
+      bucket.box += cat.internet + cat.internetSosh;
       map.set(key, bucket);
     });
 
