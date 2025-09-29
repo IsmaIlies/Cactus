@@ -23,6 +23,9 @@ import { doc, setDoc, getFirestore } from "firebase/firestore";
 
 import { getIdTokenResult } from "firebase/auth";
 
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+const ACTIVITY_EVENTS = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
+
 interface User {
   id: string;
   displayName: string;
@@ -38,7 +41,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; code?: string; message?: string }>;
   loginWithMicrosoft: () => Promise<boolean>;
   register: (userData: RegisterData) => Promise<{ success: boolean; code?: string; message?: string }>;
-  logout: () => void;
+  logout: (reason?: string) => void;
   updateUserEmail: (
     newEmail: string,
     currentPassword: string
@@ -79,6 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const inactivityTimeoutRef = React.useRef<number | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -267,14 +271,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      setUser(null);
-    } catch (error) {
-      console.error("Erreur logout", error);
+  const logout = React.useCallback((reason?: string) => {
+    if (typeof window !== 'undefined') {
+      if (reason) {
+        localStorage.setItem('logoutReason', reason);
+      } else {
+        localStorage.removeItem('logoutReason');
+      }
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+        inactivityTimeoutRef.current = null;
+      }
     }
-  };
+    signOut(auth).catch((error) => {
+      console.error("Erreur logout", error);
+    });
+    setUser(null);
+  }, [setUser]);
 
   const updateUserEmail = async (
     newEmail: string,
@@ -458,6 +471,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return { success: false, error: errorMessage };
     }
   };
+
+  const resetInactivityTimer = React.useCallback(() => {
+    if (!user || typeof window === 'undefined') return;
+    if (inactivityTimeoutRef.current) {
+      window.clearTimeout(inactivityTimeoutRef.current);
+    }
+    inactivityTimeoutRef.current = window.setTimeout(() => {
+      logout('inactivity');
+    }, INACTIVITY_TIMEOUT_MS);
+  }, [user, logout]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!user) {
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+        inactivityTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const handleActivity = () => resetInactivityTimer();
+    ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, handleActivity));
+    window.addEventListener('focus', handleActivity);
+    const visibilityHandler = () => {
+      if (!document.hidden) {
+        resetInactivityTimer();
+      }
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+
+    resetInactivityTimer();
+
+    return () => {
+      ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, handleActivity));
+      window.removeEventListener('focus', handleActivity);
+      document.removeEventListener('visibilitychange', visibilityHandler);
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+        inactivityTimeoutRef.current = null;
+      }
+    };
+  }, [user, resetInactivityTimer]);
 
 
   const value = {

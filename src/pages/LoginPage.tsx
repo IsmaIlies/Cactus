@@ -30,6 +30,14 @@ const LoginPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const reason = localStorage.getItem('logoutReason');
+    if (reason === 'inactivity') {
+      setError("Votre session a expiré après 30 minutes d'inactivité.");
+      localStorage.removeItem('logoutReason');
+    }
+  }, []);
+
   const testConnectivity = async () => {
     setTesting(true);
     setNetworkOk(null);
