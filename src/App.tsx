@@ -21,7 +21,9 @@ import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
 import LeadsLayout from "./leads/LeadsLayout";
 import LeadsDashboardPage from "./leads/pages/LeadsDashboardPage";
 import SalesEntry from "./leads/pages/SalesEntry";
+import Checklist from "./pages/ChecklistPage";
 import LeadsChecklistPage from "./leads/pages/LeadsChecklistPage";
+import ChecklistArchivePage from "./pages/ChecklistArchivePage";
 
 function App() {
   return (
@@ -53,6 +55,7 @@ function App() {
           }
         />
         <Route path="/diagnostic" element={<DiagnosticPage />} />
+        <Route path="/checklist" element={<Checklist />} />
         <Route path="/assistant-test" element={<TeleSalesAssistantTestPage />} />
         <Route path="/assistant-demo" element={
           <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900">
@@ -66,7 +69,8 @@ function App() {
             </div>
           </div>
         } />
-        <Route path="/assistant-live" element={<AssistantTestPage />} />
+  <Route path="/assistant-live" element={<AssistantTestPage />} />
+  <Route path="/checklist-archive" element={<ChecklistArchivePage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route
           path="/leads/*"

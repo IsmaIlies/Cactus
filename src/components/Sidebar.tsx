@@ -42,6 +42,8 @@ const Sidebar = () => {
   const region = (params.region as 'fr' | 'civ') || (localStorage.getItem('activeRegion')?.toLowerCase() as 'fr' | 'civ') || 'fr';
   const base = `/dashboard/${region}`;
 
+    const [openChecklist, setOpenChecklist] = React.useState(false);
+
   return (
   <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-y-auto">
       <div className="p-6 border-b border-cactus-700">
@@ -150,6 +152,30 @@ const Sidebar = () => {
           <DollarSign className="w-5 h-5 mr-3" />
           Ventes
         </NavLink>
+
+        <NavLink
+              to="/checklist"
+              className={({ isActive }) =>
+                `flex items-center px-6 py-3 text-sm font-medium rounded-md transition-colors ${
+                  isActive ? "bg-cactus-700 text-white" : "text-cactus-100 hover:bg-cactus-700/80 hover:text-white"
+                }`
+              }
+            >
+              <span className="w-4 h-4 mr-3 flex items-center justify-center">✅</span>
+              <span>Faire ma checklist</span>
+            </NavLink>
+
+          <NavLink
+              to="/checklist-archive"
+              className={({ isActive }) =>
+                `flex items-center px-6 py-3 text-sm font-medium rounded-md transition-colors ${
+                  isActive ? "bg-cactus-700 text-white" : "text-cactus-100 hover:bg-cactus-700/80 hover:text-white"
+                }`
+              }
+            >
+              <span className="w-4 h-4 mr-3 flex items-center justify-center">🗂️</span>
+              <span>Archives</span>
+            </NavLink>
 
         <NavLink
           to={`${base}/my-sales`}

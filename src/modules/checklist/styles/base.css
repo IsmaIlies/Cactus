@@ -1,0 +1,1266 @@
+
+.cactus-hours-theme .session-fieldset {
+  background: var(--table-bg) !important;
+}
+/* --- UI MODERNE POUR CHECKLIST --- */
+body, html {
+	font-family: 'Inter', system-ui, Arial, sans-serif;
+	background: linear-gradient(135deg, #0b261a 60%, #1ecf88 100%) !important;
+}
+
+.cactus-hours-theme .table-container {
+		background: var(--table-bg);
+		border-radius: 18px;
+		box-shadow: 0 4px 24px 0 rgba(30, 207, 136, 0.10);
+		padding: 0;
+		margin-top: 32px;
+		width: 100%;
+		max-width: 100%;
+		border: 1.5px solid var(--color-border);
+}
+
+.cactus-hours-theme .table-scroll {
+		border-radius: 18px;
+		overflow-x: auto;
+		width: 100%;
+		height: 100%;
+		max-width: 100%;
+}
+
+.cactus-hours-theme table {
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--table-bg);
+  box-shadow: 0 2px 12px 0 rgba(30, 207, 136, 0.10);
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.cactus-hours-theme th, .cactus-hours-theme td {
+  background: var(--table-bg);
+  color: #f5fdf8;
+  border-bottom: 1px solid rgba(30, 207, 136, 0.15);
+  border-right: 1px solid rgba(30, 207, 136, 0.12);
+  font-size: 1.08em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 16px 10px;
+  word-break: break-word;
+  transition: background 0.18s;
+  text-align: center;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg-alt);
+  color: #fff;
+  font-size: 1.13em;
+  font-weight: 800;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom: 2px solid #1ecf88;
+  border-right: 1px solid rgba(30, 207, 136, 0.12);
+}
+.cactus-hours-theme th:last-child, .cactus-hours-theme td:last-child {
+  border-right: none;
+}
+.cactus-hours-theme tr {
+  background: var(--table-bg);
+  border-radius: 0;
+}
+.cactus-hours-theme tbody tr:hover {
+  background: var(--table-bg-hover);
+}
+
+.cactus-hours-theme .checklist-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+}
+
+.cactus-hours-theme tbody tr:nth-child(even) {
+  background: var(--table-bg-alt);
+}
+
+.cactus-hours-theme th.col-day-th {
+  text-align: center !important;
+}
+
+
+.cactus-hours-theme .day-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cactus-hours-theme .day-field__inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 18px;
+  background: rgba(16, 48, 33, 0.55);
+  border: 1px solid rgba(30, 207, 136, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(30, 207, 136, 0.08);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cactus-hours-theme .day-field__inputWrap:focus-within {
+  border-color: rgba(30, 207, 136, 0.7);
+  box-shadow: 0 0 0 3px rgba(30, 207, 136, 0.24);
+}
+
+.cactus-hours-theme .day-field__inputWrap::before {
+  content: '\1F4C5';
+  font-size: 0.95rem;
+  color: #9cf7cd;
+}
+
+.cactus-hours-theme .day-field__inputControl {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #f5fdf8;
+  font-size: 0.98rem;
+}
+
+.cactus-hours-theme .day-field__inputControl:disabled {
+  opacity: 0.7;
+}
+
+.cactus-hours-theme .day-field__inputControl::-webkit-calendar-picker-indicator {
+  filter: invert(80%);
+}
+
+.cactus-hours-theme .day-field__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.78rem;
+  color: #f5fdf8;
+}
+
+.cactus-hours-theme .day-field__weekday {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+}
+
+.cactus-hours-theme .day-field__status {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(27, 110, 70, 0.35);
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.cactus-hours-theme .day-field__status--synced {
+  border-color: rgba(30, 207, 136, 0.45);
+  color: #6fe3aa;
+}
+
+.cactus-hours-theme .day-field__status--local {
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #f6d48a;
+}
+
+.cactus-hours-theme .day-field__status--today {
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #9cc2ff;
+}
+
+.cactus-hours-theme .day-field__status--duplicate {
+  border-color: rgba(244, 114, 182, 0.4);
+  color: #f7b4da;
+}
+
+
+
+.cactus-hours-theme .checklist-row--synced td:first-child {
+  box-shadow: inset 4px 0 0 0 rgba(30, 207, 136, 0.65);
+}
+
+
+.cactus-hours-theme .checklist-row--today td {
+  background-image: linear-gradient(90deg, rgba(30, 207, 136, 0.08), rgba(30, 207, 136, 0));
+}
+
+
+.cactus-hours-theme .total-col--value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #9cf7cd;
+  background: var(--table-bg) !important;
+}
+
+
+/* Compact mode pour les lignes dupliquées */
+
+.cactus-hours-theme .session-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  border-radius: 14px;
+  background: rgba(16, 48, 33, 0.45);
+  border: 1px solid rgba(30, 207, 136, 0.12);
+  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.cactus-hours-theme .session-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: #f5fdf8;
+}
+
+
+.cactus-hours-theme .session-times {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  width: 100%;
+}
+
+.cactus-hours-theme .session-times .input--time {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  background: rgba(16, 48, 33, 0.55);
+  border: 1px solid rgba(30, 207, 136, 0.12);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.cactus-hours-theme .session-times .input--time {
+  width: 100%;
+  background: rgba(16, 48, 33, 0.55);
+  border: 1px solid rgba(30, 207, 136, 0.12);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.cactus-hours-theme .session-times .input--time:focus {
+  border-color: rgba(30, 207, 136, 0.55);
+  box-shadow: 0 0 0 2px rgba(30, 207, 136, 0.15);
+}
+
+.checklist-row--compact td, .checklist-row--compact input, .checklist-row--compact select, .checklist-row--compact .date-chip {
+	font-size: 0.95em;
+	padding: 2px 4px !important;
+	height: 28px;
+}
+.checklist-row--compact .input,
+.checklist-row--compact .input--time,
+.checklist-row--compact .select {
+	min-width: 0;
+	width: 70px;
+	font-size: 0.95em;
+	padding: 2px 4px;
+	height: 24px;
+}
+.checklist-row--compact .table-actions button {
+	font-size: 0.95em;
+	padding: 2px 8px;
+	min-width: 80px;
+	max-width: 110px;
+	height: 24px;
+	border-radius: 6px;
+}
+
+.cactus-hours-theme td.actions-col {
+  background: var(--table-bg);
+  border-right: none;
+  padding: 0 12px 0 8px !important;
+}
+
+.cactus-hours-theme td.actions-col .table-actions {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px 10px 0;
+}
+
+.cactus-hours-theme .table-actions__primary {
+  background: #0b261a !important;
+  color: #e3fef1 !important;
+  border-radius: 12px;
+  border: 1px solid rgba(30, 207, 136, 0.28);
+  padding: 8px 16px;
+  font-weight: 700;
+  min-width: 110px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(5, 26, 18, 0.6);
+}
+
+.cactus-hours-theme .table-actions__primary:hover {
+  border-color: rgba(30, 207, 136, 0.5);
+  box-shadow: 0 8px 24px rgba(5, 26, 18, 0.8);
+}
+
+.cactus-hours-theme .table-actions__secondary {
+  background: #0b261a !important;
+  color: #b5f0d6 !important;
+  border: 1px solid rgba(30, 207, 136, 0.18);
+  border-radius: 12px;
+  padding: 6px 12px;
+  min-width: 92px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.cactus-hours-theme .table-actions__secondary:hover {
+  border-color: rgba(30, 207, 136, 0.4);
+  background: #103021;
+}
+
+.cactus-hours-theme .table-actions__danger {
+  background: #2d1411 !important;
+  color: #fddad3 !important;
+  border: 1px solid rgba(239, 83, 80, 0.4);
+  border-radius: 12px;
+  padding: 6px 12px;
+  min-width: 98px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.cactus-hours-theme .table-actions__danger:hover {
+  border-color: rgba(239, 83, 80, 0.6);
+  background: #3b1813;
+}
+
+.checklist-row--compact td.actions-col .table-actions__primary,
+.checklist-row--compact td.actions-col .table-actions__secondary,
+.checklist-row--compact td.actions-col .table-actions__danger {
+  height: 30px;
+  padding: 4px 8px;
+  min-width: 72px;
+  font-size: 0.92em;
+  border-radius: 8px;
+}
+
+/* Amélioration générale du tableau */
+.cactus-hours-theme th, .cactus-hours-theme td {
+  border-bottom: 1px solid #1d6a43;
+  background: var(--table-bg);
+  color: #f5fdf8;
+  padding: 0 8px;
+  text-align: center;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg);
+  color: #fff;
+  font-size: 1.08em;
+  font-weight: 800;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom: 2px solid #1ecf88;
+}
+.cactus-hours-theme th:first-child, .cactus-hours-theme td:first-child {
+  text-align: left;
+  min-width: 200px;
+  max-width: 240px;
+  padding-left: 18px;
+}
+.cactus-hours-theme th:last-child, .cactus-hours-theme td:last-child {
+  border-right: none;
+}
+.cactus-hours-theme tr {
+  background: var(--table-bg);
+}
+.cactus-hours-theme tbody tr:hover {
+  background: var(--table-bg);
+}
+
+/* --- */
+.cactus-hours-theme{--color-bg:#0b261a;--color-bg-2:#0e2f21;--color-surface:#0b261a;--color-surface-2:#0b261a;--color-border:#12402a;--table-bg:#0b261a;--table-bg-alt:#103021;--table-bg-hover:#133727;--color-text:#f5fdf8;--color-text-secondary:#c7e6d6;--color-accent:#1ecf88;--accent-2:#12c690;--brand-glow:#1ecf88;--radius:12px;--gap:16px;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.cactus-hours-theme .page-shell{padding:24px 24px;display:flex;flex-direction:column;gap:var(--gap);background:radial-gradient(1200px 600px at -10% -20%, rgba(30,173,121,.25), transparent 60%),linear-gradient(180deg, var(--color-bg), var(--color-bg-2));min-height:100%;border-radius:16px}
+.cactus-hours-theme .page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.cactus-hours-theme .page-title{margin:0;font-size:36px;letter-spacing:.2px;color:var(--color-text)}
+.cactus-hours-theme .section-subtitle{font-size:12.5px;color:var(--color-text-secondary)}
+.cactus-hours-theme .status-line{display:flex;gap:10px;align-items:center;color:var(--color-text-secondary)}
+.cactus-hours-theme .toolbar{display:flex;gap:10px;align-items:center}
+.cactus-hours-theme .input,.cactus-hours-theme .select,.cactus-hours-theme .textarea{background:rgba(17,63,40,.65);backdrop-filter:blur(3px);color:var(--color-text);border:1px solid var(--color-border);border-radius:12px;padding:12px 14px}
+.cactus-hours-theme .input--time{width:110px}
+.cactus-hours-theme .button{background:var(--color-accent);color:#052215;border:none;border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}
+.cactus-hours-theme .button--ghost{background:transparent;border:1px solid var(--color-border);color:var(--color-text)}
+.cactus-hours-theme .button--secondary{background:#0b8a63}
+.cactus-hours-theme .button--danger{background:#e35363}
+.cactus-hours-theme .alert{background:rgba(227,83,99,.12);border:1px solid #e35363;color:#fff;border-radius:12px;padding:14px}
+.cactus-hours-theme .card{background:linear-gradient(180deg, rgba(17,63,40,.6), rgba(17,63,40,.45));border:1px solid var(--color-border);border-radius:16px;padding:18px}
+.cactus-hours-theme .table-container{
+	background:var(--table-bg);
+	border:1px solid var(--color-border);
+	border-radius:18px;
+			width:100%;
+			max-width:100%;
+			margin-left:auto;
+			margin-right:auto;
+			padding:0;
+			box-sizing:border-box;
+			overflow-x:auto;
+}
+.cactus-hours-theme .table-scroll{
+	overflow:auto;
+	border-radius:18px;
+			width:100%;
+			height:100%;
+			max-width:100%;
+			padding:0;
+			box-sizing:border-box;
+			overflow-x:auto;
+}
+.cactus-hours-theme table{
+			width:100% !important;
+			min-width:0 !important;
+			max-width:100% !important;
+			margin:0;
+			border-collapse:collapse;
+			table-layout:fixed;
+}
+.cactus-hours-theme th,.cactus-hours-theme td{
+	padding-left:0 !important;
+	padding-right:0 !important;
+}
+.cactus-hours-theme th,.cactus-hours-theme td{border-bottom:1px solid var(--color-border);padding:10px;text-align:left;color:var(--color-text)}
+.cactus-hours-theme th{position:sticky;top:0;background:linear-gradient(180deg, rgba(17,69,43,.95), rgba(17,69,43,.8));z-index:1}
+.cactus-hours-theme .time-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cactus-hours-theme .operation-cell{
+  min-width:200px;
+  background: var(--table-bg) !important;
+}
+
+.cactus-hours-theme .badge{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;color:#052215;font-weight:700;background:#0ea5a0;box-shadow:0 0 0 1px rgba(0,0,0,.1) inset}
+.cactus-hours-theme .badge--small{font-size:12px;padding:2px 8px;text-transform:uppercase;letter-spacing:.4px}
+.cactus-hours-theme .total-highlight{font-weight:800;font-size:28px;letter-spacing:.3px;color:var(--color-accent)}
+
+/* Brand title/subtitle styles */
+.cactus-hours-theme .brand-title{font-weight:800;font-size:24px;letter-spacing:0.8px;text-transform:uppercase;background:linear-gradient(90deg, var(--brand-glow), var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.cactus-hours-theme .brand-subtitle{font-size:12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.8px}
+
+/* Utility */
+.cactus-hours-theme .accent-text{color:var(--color-accent);font-weight:800}
+
+/* Archives styles */
+.cactus-hours-theme .archive-wrap{border:1px solid var(--color-border);border-radius:20px;padding:18px;background:linear-gradient(180deg, rgba(17,63,40,.6), rgba(17,63,40,.45))}
+.cactus-hours-theme .archive-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+.cactus-hours-theme .archive-day{border:1px solid var(--color-border);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.cactus-hours-theme .archive-entry{border:1px dashed rgba(25,93,59,.5);border-radius:18px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cactus-hours-theme .archive-entry-col{display:flex;flex-direction:column;gap:4px}
+.cactus-hours-theme .archive-time{ color:#fff }
+.cactus-hours-theme .icon-badge{width:22px;height:22px;border-radius:999px;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--color-border);color:var(--color-text-secondary);font-weight:800}
+/* Dispute confirmation line */
+.cactus-hours-theme .dispute-line{ color:#ffd166; font-weight:600; margin-top:6px }
+
+/* Date chip under the day input */
+.cactus-hours-theme .date-chip{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;background:linear-gradient(90deg, rgba(30,207,136,.16), rgba(18,198,144,.14));color:var(--color-accent);font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.cactus-hours-theme .date-chip--muted{opacity:.9}
+
+/* Top tabs */
+.cactus-hours-theme .top-tabs{display:flex;gap:8px}
+.cactus-hours-theme .top-tab{padding:6px 12px;border-radius:999px;border:1px solid var(--color-border);background:transparent;color:var(--color-text-secondary);font-weight:600;cursor:pointer}
+.cactus-hours-theme .top-tab--active{background:var(--color-accent);color:#052215;border-color:transparent}
+
+/* Enhanced text styles */
+.cactus-hours-theme .date-label{ text-transform:uppercase; letter-spacing:.6px; color:var(--color-text-secondary); font-weight:800 }
+.cactus-hours-theme .project-badge{ display:inline-flex; align-items:center; gap:8px; padding:4px 10px; border-radius:999px; border:1px solid var(--color-border); background:linear-gradient(90deg, rgba(30,207,136,.15), rgba(18,198,144,.12)); color:var(--color-text); font-weight:800 }
+.cactus-hours-theme .hint-card{ display:flex; align-items:center; gap:10px; background:linear-gradient(180deg, rgba(17,63,40,.45), rgba(17,63,40,.32)); border:1px dashed rgba(25,93,59,.55); color:var(--color-text-secondary) }
+
+/* Time highlight for early start like 7h00 */
+.cactus-hours-theme .time-early,
+.cactus-hours-theme div.time-early {
+	color: #fff !important;
+	font-weight: 800;
+	text-shadow: none !important;
+	opacity: 1 !important;
+	filter: none !important;
+	mix-blend-mode: normal !important;
+}
+
+/* Modal */
+.cactus-hours-theme .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:50}
+.cactus-hours-theme .modal-card{width:min(560px, 92vw);background:linear-gradient(180deg, rgba(17,63,40,.9), rgba(17,63,40,.72));border:1px solid rgba(25,93,59,.7);border-radius:18px;padding:16px 18px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
+.cactus-hours-theme .modal-title{margin:0 0 10px 0;font-size:18px;color:var(--color-text)}
+.cactus-hours-theme .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+
+/* Textarea elevated look for modal */
+.cactus-hours-theme .textarea--elevated{ background:rgba(17,63,40,.75); border:1px solid rgba(25,93,59,.7); box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 1px 0 rgba(0,0,0,.25); border-radius:12px; color:var(--color-text) }
+
+/* Stronger primary button for modal submit */
+.cactus-hours-theme .button.button--primary-strong{ background:linear-gradient(180deg, #25d08a, #18b679); color:#052215; border:none; box-shadow: 0 6px 18px rgba(30,207,136,.25) }
+
+/* === UI cleanup & polish === */
+/* Make body background subtle and consistent */
+body, html {
+	background: linear-gradient(180deg, #071710 0%, #072617 40%, #0b261a 100%) !important;
+}
+
+/* Center the page shell and ensure it uses available height */
+.cactus-hours-theme .page-shell{
+	max-width: 100%;
+	margin: 0 auto;
+	padding: 32px;
+	min-height: calc(100vh - 48px);
+	box-sizing: border-box;
+}
+
+/* Table container: subtle border, less padding, full width of shell */
+.cactus-hours-theme .table-container{
+	padding: 0;
+	background: var(--table-bg);
+	border-radius: 18px;
+}
+
+/* Keep table layout tidy and avoid overflow */
+.cactus-hours-theme .table-scroll{ overflow-x:auto; padding:0; width:100%; max-width:100%; }
+.cactus-hours-theme table{ table-layout: auto; width:100% !important; border-spacing:0 10px; }
+
+/* Th: remove extreme gradient, use subtle color and inner shadow */
+.cactus-hours-theme th{
+	background: rgba(16,70,45,0.85);
+	color: #eafbf0;
+	box-shadow: inset 0 -2px 0 rgba(0,0,0,0.08);
+}
+
+/* Compact table cells */
+.cactus-hours-theme th, .cactus-hours-theme td{
+	padding:14px 16px;
+	font-size: 1rem;
+}
+
+/* Actions: make buttons compact and inline */
+
+
+
+/* Ensure actions column content is centered and doesn't force width */
+
+
+/* Date chip subtle */
+.cactus-hours-theme .date-chip{ background: rgba(30,207,136,0.10); color: #bfffd6; padding:4px 8px; font-size:0.9rem }
+
+/* Inputs slightly smaller for compactness */
+.cactus-hours-theme .input, .cactus-hours-theme .input--time{ padding:8px 10px; font-size:0.95rem; border-radius:10px }
+.cactus-hours-theme .input--time{ width:92px }
+
+/* Reduce visual noise for total highlight */
+.cactus-hours-theme .total-highlight{ font-size:1.9rem; color:#24d07f; margin-top:6px }
+
+/* Make operation column more flexible so content wraps cleanly */
+.cactus-hours-theme .operation-cell{ min-width:140px; max-width:360px }
+
+/* Increase spacing inside the time-grid */
+.cactus-hours-theme .time-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+
+/* Small responsive tweak: stack toolbar controls on narrow screens */
+@media (max-width: 880px){
+	.cactus-hours-theme .page-header{ flex-direction:column; align-items:flex-start; gap:12px }
+	.cactus-hours-theme .toolbar{ width:100%; display:flex; justify-content:space-between }
+	.cactus-hours-theme .table-container{ padding:0 }
+}
+
+/* Correction de la visibilité et de l'alignement des premières colonnes (Jour) */
+.cactus-hours-theme th,
+.cactus-hours-theme td {
+  width: auto;
+  min-width: 140px;
+  max-width: 1fr;
+  text-align: center;
+  padding: 16px 8px;
+  font-size: 1.08em;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cactus-hours-theme th:first-child,
+.cactus-hours-theme td:first-child {
+  min-width: 180px;
+  max-width: 220px;
+  text-align: left;
+  padding-left: 18px;
+  background: var(--table-bg);
+  color: #fff;
+  border-top-left-radius: 16px;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg);
+  color: #fff;
+}
+.cactus-hours-theme td {
+  background: var(--table-bg);
+  color: #f5fdf8;
+}
+
+/* Correction de l'affichage des lignes et suppression des contraintes qui masquent les entrées */
+.cactus-hours-theme th,
+.cactus-hours-theme td {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+.cactus-hours-theme tr {
+  height: auto !important;
+  min-height: 48px;
+}
+
+.cactus-hours-theme tbody {
+  display: table-row-group;
+}
+
+/* === Nouvelle base moderne pour le tableau checklist === */
+:root {
+  --checklist-radius: 14px;
+  --checklist-header-bg: #1d6a43;
+  --checklist-header-text: #fff;
+  --checklist-row-bg: #174c2a;
+  --checklist-row-hover: #1ecf8822;
+  --checklist-border: #1ecf88;
+  --checklist-action-bg: linear-gradient(90deg, #1ecf88 60%, #1d6a43 100%);
+  --checklist-action-text: #052215;
+}
+
+.cactus-hours-theme .table-container {
+  background: var(--table-bg);
+  border-radius: var(--checklist-radius);
+  box-shadow: 0 4px 24px 0 rgba(30, 207, 136, 0.10);
+  padding: 0;
+  margin-top: 32px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.cactus-hours-theme .table-scroll {
+  border-radius: var(--checklist-radius);
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.cactus-hours-theme table {
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--table-bg);
+  box-shadow: 0 2px 12px 0 rgba(30, 207, 136, 0.10);
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.cactus-hours-theme th, .cactus-hours-theme td {
+  background: var(--table-bg);
+  color: #f5fdf8;
+  border-bottom: 1px solid rgba(30, 207, 136, 0.15);
+  border-right: 1px solid rgba(30, 207, 136, 0.12);
+  font-size: 1.08em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 16px 10px;
+  word-break: break-word;
+  transition: background 0.18s;
+  text-align: center;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg);
+  color: #fff;
+  font-size: 1.13em;
+  font-weight: 800;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom: 2px solid #1ecf88;
+  border-right: 1px solid rgba(30, 207, 136, 0.12);
+}
+.cactus-hours-theme th:last-child, .cactus-hours-theme td:last-child {
+  border-right: none;
+}
+.cactus-hours-theme tr {
+  background: var(--table-bg);
+  border-radius: 0;
+}
+.cactus-hours-theme tbody tr:hover {
+  background: var(--table-bg);
+}
+
+/* --- */
+.cactus-hours-theme{--color-bg:#0b261a;--color-bg-2:#0e2f21;--color-surface:#0b261a;--color-surface-2:#0b261a;--color-border:#12402a;--table-bg:#0b261a;--table-bg-alt:#103021;--table-bg-hover:#133727;--color-text:#f5fdf8;--color-text-secondary:#c7e6d6;--color-accent:#1ecf88;--accent-2:#12c690;--brand-glow:#1ecf88;--radius:12px;--gap:16px;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.cactus-hours-theme .page-shell{padding:24px 24px;display:flex;flex-direction:column;gap:var(--gap);background:radial-gradient(1200px 600px at -10% -20%, rgba(30,173,121,.25), transparent 60%),linear-gradient(180deg, var(--color-bg), var(--color-bg-2));min-height:100%;border-radius:16px}
+.cactus-hours-theme .page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.cactus-hours-theme .page-title{margin:0;font-size:36px;letter-spacing:.2px;color:var(--color-text)}
+.cactus-hours-theme .section-subtitle{font-size:12.5px;color:var(--color-text-secondary)}
+.cactus-hours-theme .status-line{display:flex;gap:10px;align-items:center;color:var(--color-text-secondary)}
+.cactus-hours-theme .toolbar{display:flex;gap:10px;align-items:center}
+.cactus-hours-theme .input,.cactus-hours-theme .select,.cactus-hours-theme .textarea{background:rgba(17,63,40,.65);backdrop-filter:blur(3px);color:var(--color-text);border:1px solid var(--color-border);border-radius:12px;padding:12px 14px}
+.cactus-hours-theme .input--time{width:110px}
+.cactus-hours-theme .button{background:var(--color-accent);color:#052215;border:none;border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}
+.cactus-hours-theme .button--ghost{background:transparent;border:1px solid var(--color-border);color:var(--color-text)}
+.cactus-hours-theme .button--secondary{background:#0b8a63}
+.cactus-hours-theme .button--danger{background:#e35363}
+.cactus-hours-theme .alert{background:rgba(227,83,99,.12);border:1px solid #e35363;color:#fff;border-radius:12px;padding:14px}
+.cactus-hours-theme .card{background:linear-gradient(180deg, rgba(17,63,40,.6), rgba(17,63,40,.45));border:1px solid var(--color-border);border-radius:16px;padding:18px}
+.cactus-hours-theme .table-container{
+	background:var(--table-bg);
+	border:1px solid var(--color-border);
+	border-radius:18px;
+			width:100%;
+			max-width:100%;
+			margin-left:auto;
+			margin-right:auto;
+			padding:0;
+			box-sizing:border-box;
+			overflow-x:auto;
+}
+.cactus-hours-theme .table-scroll{
+	overflow:auto;
+	border-radius:18px;
+			width:100%;
+			height:100%;
+			max-width:100%;
+			padding:0;
+			box-sizing:border-box;
+			overflow-x:auto;
+}
+.cactus-hours-theme table{
+			width:100% !important;
+			min-width:0 !important;
+			max-width:100% !important;
+			margin:0;
+			border-collapse:collapse;
+			table-layout:fixed;
+}
+.cactus-hours-theme th,.cactus-hours-theme td{
+	padding-left:0 !important;
+	padding-right:0 !important;
+}
+.cactus-hours-theme th,.cactus-hours-theme td{border-bottom:1px solid var(--color-border);padding:10px;text-align:left;color:var(--color-text)}
+.cactus-hours-theme th{position:sticky;top:0;background:linear-gradient(180deg, rgba(17,69,43,.95), rgba(17,69,43,.8));z-index:1}
+.cactus-hours-theme .time-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cactus-hours-theme .operation-cell{min-width:200px}
+
+.cactus-hours-theme .badge{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;color:#052215;font-weight:700;background:#0ea5a0;box-shadow:0 0 0 1px rgba(0,0,0,.1) inset}
+.cactus-hours-theme .badge--small{font-size:12px;padding:2px 8px;text-transform:uppercase;letter-spacing:.4px}
+.cactus-hours-theme .total-highlight{font-weight:800;font-size:28px;letter-spacing:.3px;color:var(--color-accent)}
+
+/* Brand title/subtitle styles */
+.cactus-hours-theme .brand-title{font-weight:800;font-size:24px;letter-spacing:0.8px;text-transform:uppercase;background:linear-gradient(90deg, var(--brand-glow), var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.cactus-hours-theme .brand-subtitle{font-size:12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.8px}
+
+/* Utility */
+.cactus-hours-theme .accent-text{color:var(--color-accent);font-weight:800}
+
+/* Archives styles */
+.cactus-hours-theme .archive-wrap{border:1px solid var(--color-border);border-radius:20px;padding:18px;background:linear-gradient(180deg, rgba(17,63,40,.6), rgba(17,63,40,.45))}
+.cactus-hours-theme .archive-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+.cactus-hours-theme .archive-day{border:1px solid var(--color-border);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.cactus-hours-theme .archive-entry{border:1px dashed rgba(25,93,59,.5);border-radius:18px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cactus-hours-theme .archive-entry-col{display:flex;flex-direction:column;gap:4px}
+.cactus-hours-theme .archive-time{ color:#fff }
+.cactus-hours-theme .icon-badge{width:22px;height:22px;border-radius:999px;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--color-border);color:var(--color-text-secondary);font-weight:800}
+/* Dispute confirmation line */
+.cactus-hours-theme .dispute-line{ color:#ffd166; font-weight:600; margin-top:6px }
+
+/* Date chip under the day input */
+.cactus-hours-theme .date-chip{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;background:linear-gradient(90deg, rgba(30,207,136,.16), rgba(18,198,144,.14));color:var(--color-accent);font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.cactus-hours-theme .date-chip--muted{opacity:.9}
+
+/* Top tabs */
+.cactus-hours-theme .top-tabs{display:flex;gap:8px}
+.cactus-hours-theme .top-tab{padding:6px 12px;border-radius:999px;border:1px solid var(--color-border);background:transparent;color:var(--color-text-secondary);font-weight:600;cursor:pointer}
+.cactus-hours-theme .top-tab--active{background:var(--color-accent);color:#052215;border-color:transparent}
+
+/* Enhanced text styles */
+.cactus-hours-theme .date-label{ text-transform:uppercase; letter-spacing:.6px; color:var(--color-text-secondary); font-weight:800 }
+.cactus-hours-theme .project-badge{ display:inline-flex; align-items:center; gap:8px; padding:4px 10px; border-radius:999px; border:1px solid var(--color-border); background:linear-gradient(90deg, rgba(30,207,136,.15), rgba(18,198,144,.12)); color:var(--color-text); font-weight:800 }
+.cactus-hours-theme .hint-card{ display:flex; align-items:center; gap:10px; background:linear-gradient(180deg, rgba(17,63,40,.45), rgba(17,63,40,.32)); border:1px dashed rgba(25,93,59,.55); color:var(--color-text-secondary) }
+
+/* Time highlight for early start like 7h00 */
+.cactus-hours-theme .time-early,
+.cactus-hours-theme div.time-early {
+	color: #fff !important;
+	font-weight: 800;
+	text-shadow: none !important;
+	opacity: 1 !important;
+	filter: none !important;
+	mix-blend-mode: normal !important;
+}
+
+/* Modal */
+.cactus-hours-theme .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:50}
+.cactus-hours-theme .modal-card{width:min(560px, 92vw);background:linear-gradient(180deg, rgba(17,63,40,.9), rgba(17,63,40,.72));border:1px solid rgba(25,93,59,.7);border-radius:18px;padding:16px 18px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
+.cactus-hours-theme .modal-title{margin:0 0 10px 0;font-size:18px;color:var(--color-text)}
+.cactus-hours-theme .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+
+/* Textarea elevated look for modal */
+.cactus-hours-theme .textarea--elevated{ background:rgba(17,63,40,.75); border:1px solid rgba(25,93,59,.7); box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 1px 0 rgba(0,0,0,.25); border-radius:12px; color:var(--color-text) }
+
+/* Stronger primary button for modal submit */
+.cactus-hours-theme .button.button--primary-strong{ background:linear-gradient(180deg, #25d08a, #18b679); color:#052215; border:none; box-shadow: 0 6px 18px rgba(30,207,136,.25) }
+
+/* === UI cleanup & polish === */
+/* Make body background subtle and consistent */
+body, html {
+	background: linear-gradient(180deg, #071710 0%, #072617 40%, #0b261a 100%) !important;
+}
+
+/* Center the page shell and ensure it uses available height */
+.cactus-hours-theme .page-shell{
+	max-width: 100%;
+	margin: 0 auto;
+	padding: 32px;
+	min-height: calc(100vh - 48px);
+	box-sizing: border-box;
+}
+
+/* Table container: subtle border, less padding, full width of shell */
+.cactus-hours-theme .table-container{
+	padding: 0;
+	background: var(--table-bg);
+	border-radius: 18px;
+}
+
+/* Keep table layout tidy and avoid overflow */
+.cactus-hours-theme .table-scroll{ overflow-x:auto; padding:0; width:100%; max-width:100%; }
+.cactus-hours-theme table{ table-layout: auto; width:100% !important; border-spacing:0 10px; }
+
+/* Th: remove extreme gradient, use subtle color and inner shadow */
+.cactus-hours-theme th{
+	background: rgba(16,70,45,0.85);
+	color: #eafbf0;
+	box-shadow: inset 0 -2px 0 rgba(0,0,0,0.08);
+}
+
+/* Compact table cells */
+.cactus-hours-theme th, .cactus-hours-theme td{
+	padding:14px 16px;
+	font-size: 1rem;
+}
+
+/* Actions: make buttons compact and inline */
+
+
+
+/* Ensure actions column content is centered and doesn't force width */
+
+
+/* Date chip subtle */
+.cactus-hours-theme .date-chip{ background: rgba(30,207,136,0.10); color: #bfffd6; padding:4px 8px; font-size:0.9rem }
+
+/* Inputs slightly smaller for compactness */
+.cactus-hours-theme .input, .cactus-hours-theme .input--time{ padding:8px 10px; font-size:0.95rem; border-radius:10px }
+.cactus-hours-theme .input--time{ width:92px }
+
+/* Reduce visual noise for total highlight */
+.cactus-hours-theme .total-highlight{ font-size:1.9rem; color:#24d07f; margin-top:6px }
+
+/* Make operation column more flexible so content wraps cleanly */
+.cactus-hours-theme .operation-cell{ min-width:140px; max-width:360px }
+
+/* Increase spacing inside the time-grid */
+.cactus-hours-theme .time-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+
+/* Small responsive tweak: stack toolbar controls on narrow screens */
+@media (max-width: 880px){
+	.cactus-hours-theme .page-header{ flex-direction:column; align-items:flex-start; gap:12px }
+	.cactus-hours-theme .toolbar{ width:100%; display:flex; justify-content:space-between }
+	.cactus-hours-theme .table-container{ padding:0 }
+}
+
+/* Correction de la visibilité et de l'alignement des premières colonnes (Jour) */
+.cactus-hours-theme th,
+.cactus-hours-theme td {
+  width: auto;
+  min-width: 140px;
+  max-width: 1fr;
+  text-align: center;
+  padding: 16px 8px;
+  font-size: 1.08em;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cactus-hours-theme th:first-child,
+.cactus-hours-theme td:first-child {
+  min-width: 180px;
+  max-width: 220px;
+  text-align: left;
+  padding-left: 18px;
+  background: var(--table-bg);
+  color: #fff;
+  border-top-left-radius: 16px;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg);
+  color: #fff;
+}
+.cactus-hours-theme td {
+  background: var(--table-bg);
+  color: #f5fdf8;
+}
+
+/* Correction de l'affichage des lignes et suppression des contraintes qui masquent les entrées */
+.cactus-hours-theme th,
+.cactus-hours-theme td {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+.cactus-hours-theme tr {
+  height: auto !important;
+  min-height: 48px;
+}
+
+.cactus-hours-theme tbody {
+  display: table-row-group;
+}
+
+/* === Nouvelle base moderne pour le tableau checklist === */
+:root {
+  --checklist-radius: 14px;
+  --checklist-header-bg: #1d6a43;
+  --checklist-header-text: #fff;
+  --checklist-row-bg: #174c2a;
+  --checklist-row-hover: #1ecf8822;
+  --checklist-border: #1ecf88;
+  --checklist-action-bg: linear-gradient(90deg, #1ecf88 60%, #1d6a43 100%);
+  --checklist-action-text: #052215;
+}
+
+.cactus-hours-theme .table-container {
+  background: var(--table-bg);
+  border-radius: var(--checklist-radius);
+  box-shadow: 0 4px 24px 0 rgba(30, 207, 136, 0.10);
+  padding: 0;
+  margin-top: 32px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.cactus-hours-theme .table-scroll {
+  border-radius: var(--checklist-radius);
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.cactus-hours-theme table {
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--table-bg);
+  box-shadow: 0 2px 12px 0 rgba(30, 207, 136, 0.10);
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.cactus-hours-theme th, .cactus-hours-theme td {
+  background: var(--table-bg);
+  color: #f5fdf8;
+  border-bottom: 1px solid rgba(30, 207, 136, 0.15);
+  border-right: 1px solid rgba(30, 207, 136, 0.12);
+  font-size: 1.08em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 16px 10px;
+  word-break: break-word;
+  transition: background 0.18s;
+  text-align: center;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg);
+  color: #fff;
+  font-size: 1.13em;
+  font-weight: 800;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  border-bottom: 2px solid #1ecf88;
+  border-right: 1px solid rgba(30, 207, 136, 0.12);
+}
+.cactus-hours-theme th:last-child, .cactus-hours-theme td:last-child {
+  border-right: none;
+}
+.cactus-hours-theme tr {
+  background: var(--table-bg);
+  border-radius: 0;
+}
+.cactus-hours-theme tbody tr:hover {
+  background: var(--table-bg);
+}
+
+/* Correction : la colonne Actions ressemble à une seule case contenant deux boutons alignés */
+
+
+
+/* Assure que les boutons ne forcent la largeur du tableau */
+
+
+/* Ajustements finaux pour compacité */
+
+
+/* Slight visual lift for the actions cell to read as one block */
+
+/* --- */
+.cactus-hours-theme{--color-bg:#0b261a;--color-bg-2:#0e2f21;--color-surface:#0b261a;--color-surface-2:#0b261a;--color-border:#12402a;--table-bg:#0b261a;--table-bg-alt:#103021;--table-bg-hover:#133727;--color-text:#f5fdf8;--color-text-secondary:#c7e6d6;--color-accent:#1ecf88;--accent-2:#12c690;--brand-glow:#1ecf88;--radius:12px;--gap:16px;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.cactus-hours-theme .page-shell{padding:24px 24px;display:flex;flex-direction:column;gap:var(--gap);background:radial-gradient(1200px 600px at -10% -20%, rgba(30,173,121,.25), transparent 60%),linear-gradient(180deg, var(--color-bg), var(--color-bg-2));min-height:100%;border-radius:16px}
+.cactus-hours-theme .page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.cactus-hours-theme .page-title{margin:0;font-size:36px;letter-spacing:.2px;color:var(--color-text)}
+.cactus-hours-theme .section-subtitle{font-size:12.5px;color:var(--color-text-secondary)}
+.cactus-hours-theme .status-line{display:flex;gap:10px;align-items:center;color:var(--color-text-secondary)}
+.cactus-hours-theme .toolbar{display:flex;gap:10px;align-items:center}
+.cactus-hours-theme .input,.cactus-hours-theme .select,.cactus-hours-theme .textarea{background:rgba(17,63,40,.65);backdrop-filter:blur(3px);color:var(--color-text);border:1px solid var(--color-border);border-radius:12px;padding:12px 14px}
+.cactus-hours-theme .input--time{width:110px}
+.cactus-hours-theme .button{background:var(--color-accent);color:#052215;border:none;border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:700}
+.cactus-hours-theme .button--ghost{background:transparent;border:1px solid var(--color-border);color:var(--color-text)}
+.cactus-hours-theme .button--secondary{background:#0b8a63}
+.cactus-hours-theme .button--danger{background:#e35363}
+.cactus-hours-theme .alert{background:rgba(227,83,99,.12);border:1px solid #e35363;color:#fff;border-radius:12px;padding:14px}
+.cactus-hours-theme .card{background:linear-gradient(180deg, rgba(17,63,40,.6), rgba(17,63,40,.45));border:1px solid var(--color-border);border-radius:16px;padding:18px}
+.cactus-hours-theme .table-container{
+	background:var(--table-bg);
+	border:1px solid var(--color-border);
+	border-radius:18px;
+			width:100%;
+			max-width:100%;
+			margin-left:auto;
+			margin-right:auto;
+			padding:0;
+			box-sizing:border-box;
+			overflow-x:auto;
+}
+.cactus-hours-theme .table-scroll{
+	overflow:auto;
+	border-radius:18px;
+			width:100%;
+			height:100%;
+			max-width:100%;
+			padding:0;
+			box-sizing:border-box;
+			overflow-x:auto;
+}
+.cactus-hours-theme table{
+			width:100% !important;
+			min-width:0 !important;
+			max-width:100% !important;
+			margin:0;
+			border-collapse:collapse;
+			table-layout:fixed;
+}
+.cactus-hours-theme th,.cactus-hours-theme td{
+	padding-left:0 !important;
+	padding-right:0 !important;
+}
+.cactus-hours-theme th,.cactus-hours-theme td{border-bottom:1px solid var(--color-border);padding:10px;text-align:left;color:var(--color-text)}
+.cactus-hours-theme th{position:sticky;top:0;background:linear-gradient(180deg, rgba(17,69,43,.95), rgba(17,69,43,.8));z-index:1}
+.cactus-hours-theme .time-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cactus-hours-theme .operation-cell{min-width:200px}
+
+.cactus-hours-theme .badge{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;color:#052215;font-weight:700;background:#0ea5a0;box-shadow:0 0 0 1px rgba(0,0,0,.1) inset}
+.cactus-hours-theme .badge--small{font-size:12px;padding:2px 8px;text-transform:uppercase;letter-spacing:.4px}
+.cactus-hours-theme .total-highlight{font-weight:800;font-size:28px;letter-spacing:.3px;color:var(--color-accent)}
+
+/* Brand title/subtitle styles */
+.cactus-hours-theme .brand-title{font-weight:800;font-size:24px;letter-spacing:0.8px;text-transform:uppercase;background:linear-gradient(90deg, var(--brand-glow), var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.cactus-hours-theme .brand-subtitle{font-size:12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.8px}
+
+/* Utility */
+.cactus-hours-theme .accent-text{color:var(--color-accent);font-weight:800}
+
+/* Archives styles */
+.cactus-hours-theme .archive-wrap{border:1px solid var(--color-border);border-radius:20px;padding:18px;background:linear-gradient(180deg, rgba(17,63,40,.6), rgba(17,63,40,.45))}
+.cactus-hours-theme .archive-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+.cactus-hours-theme .archive-day{border:1px solid var(--color-border);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.cactus-hours-theme .archive-entry{border:1px dashed rgba(25,93,59,.5);border-radius:18px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cactus-hours-theme .archive-entry-col{display:flex;flex-direction:column;gap:4px}
+.cactus-hours-theme .archive-time{ color:#fff }
+.cactus-hours-theme .icon-badge{width:22px;height:22px;border-radius:999px;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--color-border);color:var(--color-text-secondary);font-weight:800}
+/* Dispute confirmation line */
+.cactus-hours-theme .dispute-line{ color:#ffd166; font-weight:600; margin-top:6px }
+
+/* Date chip under the day input */
+.cactus-hours-theme .date-chip{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:999px;background:linear-gradient(90deg, rgba(30,207,136,.16), rgba(18,198,144,.14));color:var(--color-accent);font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.cactus-hours-theme .date-chip--muted{opacity:.9}
+
+/* Top tabs */
+.cactus-hours-theme .top-tabs{display:flex;gap:8px}
+.cactus-hours-theme .top-tab{padding:6px 12px;border-radius:999px;border:1px solid var(--color-border);background:transparent;color:var(--color-text-secondary);font-weight:600;cursor:pointer}
+.cactus-hours-theme .top-tab--active{background:var(--color-accent);color:#052215;border-color:transparent}
+
+/* Enhanced text styles */
+.cactus-hours-theme .date-label{ text-transform:uppercase; letter-spacing:.6px; color:var(--color-text-secondary); font-weight:800 }
+.cactus-hours-theme .project-badge{ display:inline-flex; align-items:center; gap:8px; padding:4px 10px; border-radius:999px; border:1px solid var(--color-border); background:linear-gradient(90deg, rgba(30,207,136,.15), rgba(18,198,144,.12)); color:var(--color-text); font-weight:800 }
+.cactus-hours-theme .hint-card{ display:flex; align-items:center; gap:10px; background:linear-gradient(180deg, rgba(17,63,40,.45), rgba(17,63,40,.32)); border:1px dashed rgba(25,93,59,.55); color:var(--color-text-secondary) }
+
+/* Time highlight for early start like 7h00 */
+.cactus-hours-theme .time-early,
+.cactus-hours-theme div.time-early {
+	color: #fff !important;
+	font-weight: 800;
+	text-shadow: none !important;
+	opacity: 1 !important;
+	filter: none !important;
+	mix-blend-mode: normal !important;
+}
+
+/* Modal */
+.cactus-hours-theme .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:50}
+.cactus-hours-theme .modal-card{width:min(560px, 92vw);background:linear-gradient(180deg, rgba(17,63,40,.9), rgba(17,63,40,.72));border:1px solid rgba(25,93,59,.7);border-radius:18px;padding:16px 18px;box-shadow:0 10px 34px rgba(0,0,0,.45)}
+.cactus-hours-theme .modal-title{margin:0 0 10px 0;font-size:18px;color:var(--color-text)}
+.cactus-hours-theme .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+
+/* Textarea elevated look for modal */
+.cactus-hours-theme .textarea--elevated{ background:rgba(17,63,40,.75); border:1px solid rgba(25,93,59,.7); box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 1px 0 rgba(0,0,0,.25); border-radius:12px; color:var(--color-text) }
+
+/* Stronger primary button for modal submit */
+.cactus-hours-theme .button.button--primary-strong{ background:linear-gradient(180deg, #25d08a, #18b679); color:#052215; border:none; box-shadow: 0 6px 18px rgba(30,207,136,.25) }
+
+/* === UI cleanup & polish === */
+/* Make body background subtle and consistent */
+body, html {
+	background: linear-gradient(180deg, #071710 0%, #072617 40%, #0b261a 100%) !important;
+}
+
+/* Center the page shell and ensure it uses available height */
+.cactus-hours-theme .page-shell{
+	max-width: 100%;
+	margin: 0 auto;
+	padding: 32px;
+	min-height: calc(100vh - 48px);
+	box-sizing: border-box;
+}
+
+/* Table container: subtle border, less padding, full width of shell */
+.cactus-hours-theme .table-container{
+	padding: 0;
+	background: var(--table-bg);
+	border-radius: 18px;
+}
+
+/* Keep table layout tidy and avoid overflow */
+.cactus-hours-theme .table-scroll{ overflow-x:auto; padding:0; width:100%; max-width:100%; }
+.cactus-hours-theme table{ table-layout: auto; width:100% !important; border-spacing:0 10px; }
+
+/* Th: remove extreme gradient, use subtle color and inner shadow */
+.cactus-hours-theme th{
+	background: rgba(16,70,45,0.85);
+	color: #eafbf0;
+	box-shadow: inset 0 -2px 0 rgba(0,0,0,0.08);
+}
+
+/* Compact table cells */
+.cactus-hours-theme th, .cactus-hours-theme td{
+	padding:14px 16px;
+	font-size: 1rem;
+}
+
+/* Actions: make buttons compact and inline */
+
+
+
+/* Ensure actions column content is centered and doesn't force width */
+
+
+/* Date chip subtle */
+.cactus-hours-theme .date-chip{ background: rgba(30,207,136,0.10); color: #bfffd6; padding:4px 8px; font-size:0.9rem }
+
+/* Inputs slightly smaller for compactness */
+.cactus-hours-theme .input, .cactus-hours-theme .input--time{ padding:8px 10px; font-size:0.95rem; border-radius:10px }
+.cactus-hours-theme .input--time{ width:92px }
+
+/* Reduce visual noise for total highlight */
+.cactus-hours-theme .total-highlight{ font-size:1.9rem; color:#24d07f; margin-top:6px }
+
+/* Make operation column more flexible so content wraps cleanly */
+.cactus-hours-theme .operation-cell{ min-width:140px; max-width:360px }
+
+/* Increase spacing inside the time-grid */
+.cactus-hours-theme .time-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+
+/* Small responsive tweak: stack toolbar controls on narrow screens */
+@media (max-width: 880px){
+	.cactus-hours-theme .page-header{ flex-direction:column; align-items:flex-start; gap:12px }
+	.cactus-hours-theme .toolbar{ width:100%; display:flex; justify-content:space-between }
+	.cactus-hours-theme .table-container{ padding:0 }
+}
+
+/* Correction de la visibilité et de l'alignement des premières colonnes (Jour) */
+.cactus-hours-theme th,
+.cactus-hours-theme td {
+  width: auto;
+  min-width: 140px;
+  max-width: 1fr;
+  text-align: center;
+  padding: 16px 8px;
+  font-size: 1.08em;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cactus-hours-theme th:first-child,
+.cactus-hours-theme td:first-child {
+  min-width: 180px;
+  max-width: 220px;
+  text-align: left;
+  padding-left: 18px;
+  background: var(--table-bg);
+  color: #fff;
+  border-top-left-radius: 16px;
+}
+.cactus-hours-theme th {
+  background: var(--table-bg);
+  color: #fff;
+}
+.cactus-hours-theme td {
+  background: var(--table-bg);
+  color: #f5fdf8;
+}
+
+/* Correction de l'affichage des lignes et suppression des contraintes qui masquent les entrées */
+.cactus-hours-theme th,
+.cactus-hours-theme td {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+.cactus-hours-theme tr {
+  height: auto !important;
+  min-height: 48px;
+}
+
+.cactus-hours-theme tbody {
+  display: table-row-group;
+}
+

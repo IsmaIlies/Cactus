@@ -1,0 +1,6 @@
+/* Largeur étendue pour le select des superviseurs */
+.select--supervisor {
+  min-width: 140px !important;
+  width: 180px !important;
+  max-width: 100%;
+}
