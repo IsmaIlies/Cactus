@@ -21,6 +21,28 @@ html { overflow: hidden; height: 100vh; }
 
 #root { height: 100vh; overflow: hidden; }
 
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  box-shadow: 0 0 0px 1000px rgba(17, 24, 39, 0.85) inset;
+  -webkit-text-fill-color: #f8fafc;
+  transition: background-color 30000s ease-in-out 0s;
+  caret-color: #f8fafc;
+}
+
+input:-moz-ui-filled,
+textarea:-moz-ui-filled,
+select:-moz-ui-filled {
+  box-shadow: 0 0 0px 1000px rgba(17, 24, 39, 0.85) inset;
+  color: #f8fafc;
+}
+
 @layer components {
   .btn-primary {
     @apply bg-cactus-600 text-white rounded-md px-4 py-2 font-medium transition-colors 

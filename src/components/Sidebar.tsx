@@ -11,7 +11,6 @@ import {
   Gift,
   HelpCircle,
   CalendarRange,
-  BarChart3,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import React from "react";
@@ -216,19 +215,6 @@ const Sidebar = () => {
               <span>Archives</span>
             </NavLink>
 
-        <NavLink
-          to={`${base}/my-sales`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <BarChart3 className="w-5 h-5 mr-3" />
-          Mes ventes
-        </NavLink>
 
         <NavLink
           to={`${base}/ai`}
