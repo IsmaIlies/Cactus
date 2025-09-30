@@ -18,12 +18,14 @@ import ChecklistReminderPopup from "./components/ChecklistReminderPopup";
 import GameNotification from "./components/GameNotification";
 import ELearningPage from "./pages/ELearningPage";
 import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
+import AdminLoginPage from "./pages/AdminLoginPage";
 import LeadsLayout from "./leads/LeadsLayout";
 import LeadsDashboardPage from "./leads/pages/LeadsDashboardPage";
 import SalesEntry from "./leads/pages/SalesEntry";
 import Checklist from "./pages/ChecklistPage";
 import LeadsChecklistPage from "./leads/pages/LeadsChecklistPage";
 import ChecklistArchivePage from "./pages/ChecklistArchivePage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
 
 function App() {
   return (
@@ -72,6 +74,8 @@ function App() {
   <Route path="/assistant-live" element={<AssistantTestPage />} />
   <Route path="/checklist-archive" element={<ChecklistArchivePage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route
           path="/leads/*"
           element={
