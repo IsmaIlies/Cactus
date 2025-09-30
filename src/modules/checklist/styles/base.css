@@ -31,37 +31,39 @@ body, html {
   border-radius: 18px;
   overflow: hidden;
   background: var(--table-bg);
-  box-shadow: 0 2px 12px 0 rgba(30, 207, 136, 0.10);
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
-  table-layout: fixed;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+  width: 100%;
+  max-width: 100%;
+  table-layout: auto; /* let columns size naturally for better spacing */
   border-collapse: separate;
   border-spacing: 0;
 }
 
 .cactus-hours-theme th, .cactus-hours-theme td {
   background: var(--table-bg);
-  color: #f5fdf8;
-  border-bottom: 1px solid rgba(30, 207, 136, 0.15);
-  border-right: 1px solid rgba(30, 207, 136, 0.12);
-  font-size: 1.08em;
-  font-weight: 500;
+  color: var(--color-text);
+  border-bottom: 1px solid rgba(30, 207, 136, 0.08);
+  border-right: 1px solid rgba(30, 207, 136, 0.06);
+  font-size: 0.98rem;
+  font-weight: 600;
   letter-spacing: 0.01em;
-  padding: 16px 10px;
+  padding: 14px 16px; /* more breathing room */
   word-break: break-word;
   transition: background 0.18s;
   text-align: center;
+  vertical-align: middle;
 }
 .cactus-hours-theme th {
-  background: var(--table-bg-alt);
+  background: linear-gradient(180deg, var(--table-bg-alt), rgba(16,48,33,0.85));
   color: #fff;
-  font-size: 1.13em;
+  font-size: 1rem;
   font-weight: 800;
   border-top-left-radius: 14px;
   border-top-right-radius: 14px;
-  border-bottom: 2px solid #1ecf88;
-  border-right: 1px solid rgba(30, 207, 136, 0.12);
+  border-bottom: 2px solid rgba(30,207,136,0.28);
+  border-right: 1px solid rgba(30, 207, 136, 0.06);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .cactus-hours-theme th:last-child, .cactus-hours-theme td:last-child {
   border-right: none;
@@ -99,13 +101,13 @@ body, html {
 .cactus-hours-theme .day-field__inputWrap {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 18px;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
   background: rgba(16, 48, 33, 0.55);
-  border: 1px solid rgba(30, 207, 136, 0.26);
-  box-shadow: inset 0 0 0 1px rgba(30, 207, 136, 0.08);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(30, 207, 136, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(30, 207, 136, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
 }
 
 .cactus-hours-theme .day-field__inputWrap:focus-within {
@@ -140,8 +142,8 @@ body, html {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  font-size: 0.78rem;
-  color: #f5fdf8;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
 }
 
 .cactus-hours-theme .day-field__weekday {
@@ -226,18 +228,22 @@ body, html {
 .cactus-hours-theme .session-times {
   display: flex;
   flex-direction: row;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
+  align-items: center;
 }
 
 .cactus-hours-theme .session-times .input--time {
   flex: 1 1 0;
   min-width: 0;
   width: 100%;
-  background: rgba(16, 48, 33, 0.55);
+  background: rgba(255,255,255,0.04);
   border: 1px solid rgba(30, 207, 136, 0.12);
   border-radius: 10px;
+  padding: 8px 10px;
   text-align: center;
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .cactus-hours-theme .session-times .input--time {
@@ -292,18 +298,18 @@ body, html {
 }
 
 .cactus-hours-theme .table-actions__primary {
-  background: #0b261a !important;
-  color: #e3fef1 !important;
-  border-radius: 12px;
-  border: 1px solid rgba(30, 207, 136, 0.28);
-  padding: 8px 16px;
+  background: linear-gradient(180deg,#166444,#0b3b29) !important;
+  color: #eafaf0 !important;
+  border-radius: 10px;
+  border: 1px solid rgba(30, 207, 136, 0.18);
+  padding: 8px 14px;
   font-weight: 700;
-  min-width: 110px;
-  height: 38px;
+  min-width: 96px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 18px rgba(5, 26, 18, 0.6);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
 }
 
 .cactus-hours-theme .table-actions__primary:hover {
@@ -312,13 +318,13 @@ body, html {
 }
 
 .cactus-hours-theme .table-actions__secondary {
-  background: #0b261a !important;
-  color: #b5f0d6 !important;
-  border: 1px solid rgba(30, 207, 136, 0.18);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.02) !important;
+  color: var(--color-text-secondary) !important;
+  border: 1px solid rgba(30, 207, 136, 0.12);
+  border-radius: 10px;
   padding: 6px 12px;
-  min-width: 92px;
-  height: 36px;
+  min-width: 82px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -331,13 +337,13 @@ body, html {
 }
 
 .cactus-hours-theme .table-actions__danger {
-  background: #2d1411 !important;
-  color: #fddad3 !important;
-  border: 1px solid rgba(239, 83, 80, 0.4);
-  border-radius: 12px;
+  background: linear-gradient(180deg,#6b1412,#3b1813) !important;
+  color: #ffecec !important;
+  border: 1px solid rgba(239, 83, 80, 0.28);
+  border-radius: 10px;
   padding: 6px 12px;
-  min-width: 98px;
-  height: 36px;
+  min-width: 86px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -361,10 +367,10 @@ body, html {
 
 /* Amélioration générale du tableau */
 .cactus-hours-theme th, .cactus-hours-theme td {
-  border-bottom: 1px solid #1d6a43;
+  border-bottom: 1px solid rgba(30,207,136,0.06);
   background: var(--table-bg);
-  color: #f5fdf8;
-  padding: 0 8px;
+  color: var(--color-text);
+  padding: 10px 12px;
   text-align: center;
 }
 .cactus-hours-theme th {
@@ -378,9 +384,9 @@ body, html {
 }
 .cactus-hours-theme th:first-child, .cactus-hours-theme td:first-child {
   text-align: left;
-  min-width: 200px;
-  max-width: 240px;
-  padding-left: 18px;
+  min-width: 240px;
+  max-width: 320px;
+  padding-left: 20px;
 }
 .cactus-hours-theme th:last-child, .cactus-hours-theme td:last-child {
   border-right: none;
@@ -395,9 +401,92 @@ body, html {
 /* --- */
 .cactus-hours-theme{--color-bg:#0b261a;--color-bg-2:#0e2f21;--color-surface:#0b261a;--color-surface-2:#0b261a;--color-border:#12402a;--table-bg:#0b261a;--table-bg-alt:#103021;--table-bg-hover:#133727;--color-text:#f5fdf8;--color-text-secondary:#c7e6d6;--color-accent:#1ecf88;--accent-2:#12c690;--brand-glow:#1ecf88;--radius:12px;--gap:16px;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
 .cactus-hours-theme .page-shell{padding:24px 24px;display:flex;flex-direction:column;gap:var(--gap);background:radial-gradient(1200px 600px at -10% -20%, rgba(30,173,121,.25), transparent 60%),linear-gradient(180deg, var(--color-bg), var(--color-bg-2));min-height:100%;border-radius:16px}
-.cactus-hours-theme .page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;}
-.cactus-hours-theme .page-title{margin:0;font-size:36px;letter-spacing:.2px;color:var(--color-text)}
+.cactus-hours-theme .page-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 0}
+.cactus-hours-theme .page-title{margin:0;font-size:32px;letter-spacing:.2px;color:var(--color-text)}
 .cactus-hours-theme .section-subtitle{font-size:12.5px;color:var(--color-text-secondary)}
+
+/* Cards and summary */
+.cactus-hours-theme .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:12px;border:1px solid rgba(30,207,136,0.04);box-shadow:0 6px 20px rgba(0,0,0,0.18);}
+.cactus-hours-theme .hint-card{color:var(--color-text-secondary);font-size:0.98rem}
+.cactus-hours-theme .total-highlight{font-size:1.6rem;font-weight:800;color:var(--color-accent)}
+
+/* Responsive tweaks */
+@media (max-width: 1100px) {
+  .cactus-hours-theme th:first-child, .cactus-hours-theme td:first-child { min-width: 200px; }
+  .cactus-hours-theme .table-actions { justify-content: flex-end; gap:8px }
+  .cactus-hours-theme .page-title { font-size: 28px }
+}
+
+@media (max-width: 760px) {
+  .cactus-hours-theme table { font-size: 0.95rem }
+  .cactus-hours-theme th, .cactus-hours-theme td { padding: 10px 8px }
+  .cactus-hours-theme .session-times { gap:8px }
+  .cactus-hours-theme .day-field__inputWrap { padding: 8px 10px }
+  .cactus-hours-theme th[colspan] { display: none }
+}
+
+/* --- UI POLISH v2: more breathing room, row separation and pill toggles --- */
+.cactus-hours-theme .checklist-table {
+  border-collapse: separate;
+  border-spacing: 0 10px; /* vertical gap between rows */
+}
+
+.cactus-hours-theme .checklist-table tbody tr {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  box-shadow: 0 6px 18px rgba(3,10,6,0.28);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 12px;
+}
+.cactus-hours-theme .checklist-table tbody tr:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(3,10,6,0.32);
+}
+
+/* Make cells visually softer inside spaced rows */
+.cactus-hours-theme .checklist-table tbody td,
+.cactus-hours-theme .checklist-table tbody th {
+  background: transparent; /* row provides background */
+  border: none;
+  padding: 18px 16px;
+}
+
+.cactus-hours-theme .checklist-table thead th {
+  background: linear-gradient(180deg, rgba(16,48,33,0.95), rgba(16,48,33,0.85));
+  position: sticky; top: 0; z-index: 5;
+}
+
+/* Pill-style session toggle and clearer checkbox */
+.cactus-hours-theme .session-toggle {
+  background: rgba(255,255,255,0.02);
+  padding: 6px 10px;
+  border-radius: 999px;
+  align-items: center;
+  gap: 8px;
+}
+.cactus-hours-theme .session-toggle input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--color-accent);
+}
+.cactus-hours-theme .session-toggle span { font-weight: 700; color: var(--color-text-secondary); font-size: 0.92rem }
+
+/* Actions layout: allow wrapping and tighter min widths */
+.cactus-hours-theme .table-actions { gap: 12px; flex-wrap: wrap; }
+.cactus-hours-theme .table-actions button { min-width: 86px; }
+
+/* Slightly larger weekday + clearer meta */
+.cactus-hours-theme .day-field__weekday { font-size: 0.98rem; color: var(--color-text); }
+.cactus-hours-theme .day-field__meta { gap: 6px }
+
+/* Improve select visuals */
+.cactus-hours-theme .select { background: rgba(255,255,255,0.02); border-radius: 8px; padding: 8px 10px; color: var(--color-text); border: 1px solid rgba(30,207,136,0.06); font-weight:600 }
+
+/* Reduce visual noise for total column */
+.cactus-hours-theme .total-col--value { font-size: 1.15rem; color: var(--color-text); font-weight:700 }
+
+/* Keep controls comfortably spaced on small screens */
+@media (max-width: 620px) {
+  .cactus-hours-theme .checklist-table { border-spacing: 0 8px }
+  .cactus-hours-theme .table-actions button { min-width: 72px; padding: 6px 8px }
+}
 .cactus-hours-theme .status-line{display:flex;gap:10px;align-items:center;color:var(--color-text-secondary)}
 .cactus-hours-theme .toolbar{display:flex;gap:10px;align-items:center}
 .cactus-hours-theme .input,.cactus-hours-theme .select,.cactus-hours-theme .textarea{background:rgba(17,63,40,.65);backdrop-filter:blur(3px);color:var(--color-text);border:1px solid var(--color-border);border-radius:12px;padding:12px 14px}

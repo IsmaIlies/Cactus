@@ -16,6 +16,31 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import React from "react";
 
+// Utility: normalize various shapes of `user.assigned` into a safe array of strings
+function getAssignedArray(user: any): string[] {
+  if (!user) return [];
+  const a = (user as any).assigned;
+  if (!a) return [];
+  if (Array.isArray(a)) return a.filter(Boolean).map(String);
+  if (typeof a === 'string') return a ? [a] : [];
+  if (typeof a === 'object') {
+    // if it's an object with numeric keys or nested arrays, try to flatten
+    try {
+      // Common case: { 'id1': true, 'id2': true } or { items: [...] }
+      if (Array.isArray((a as any).items)) return (a as any).items.map(String);
+      return Object.keys(a).filter(k => !!a[k]).map(String);
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function isCanalSupervisor(user: any): boolean {
+  const assigned = getAssignedArray(user);
+  return assigned.some((s) => typeof s === 'string' && s.toLowerCase().includes('canal'));
+}
+
 const Sidebar = () => {
   const { user, logout } = useAuth();
   const [showNewNouveautes, setShowNewNouveautes] = React.useState<boolean>(false);
@@ -42,15 +67,29 @@ const Sidebar = () => {
   const region = (params.region as 'fr' | 'civ') || (localStorage.getItem('activeRegion')?.toLowerCase() as 'fr' | 'civ') || 'fr';
   const base = `/dashboard/${region}`;
 
-    const [openChecklist, setOpenChecklist] = React.useState(false);
+    // remove unused state openChecklist
+    // const [openChecklist, setOpenChecklist] = React.useState(false);
 
-  return (
-  <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-y-auto">
-      <div className="p-6 border-b border-cactus-700">
-        <h1 className="text-3xl font-bold">Cactus</h1>
-      </div>
+  // Debug: log suspicious user shape that could trigger runtime errors elsewhere
+  React.useEffect(() => {
+    try {
+      if (user && (user as any).assigned) {
+        // eslint-disable-next-line no-console
+        console.debug('[Sidebar] user.assigned shape', (user as any).assigned);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [user]);
 
-      <nav className="flex-1 py-6 space-y-1">
+  try {
+    return (
+    <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-y-auto">
+        <div className="p-6 border-b border-cactus-700">
+          <h1 className="text-3xl font-bold">Cactus</h1>
+        </div>
+
+        <nav className="flex-1 py-6 space-y-1">
         <NavLink
           to={base}
           end
@@ -267,7 +306,7 @@ const Sidebar = () => {
         </Link>
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="flex items-center w-full px-4 py-2 text-sm font-medium text-cactus-100 rounded-md hover:bg-cactus-700 hover:text-white transition-colors"
         >
           <LogOut className="w-5 h-5 mr-3" />
@@ -275,7 +314,27 @@ const Sidebar = () => {
         </button>
       </div>
     </div>
-  );
+    );
+  } catch (err) {
+    // Defensive fallback to avoid unmounting the whole app on Sidebar render error
+    // Log the original error for debugging in the browser console
+    // eslint-disable-next-line no-console
+    console.error('[Sidebar] render error', err);
+    return (
+      <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-y-auto p-4">
+        <div className="p-4 border-b border-cactus-700">
+          <h1 className="text-2xl font-bold">Cactus</h1>
+        </div>
+        <nav className="flex-1 py-4">
+          <ul className="space-y-2">
+            <li><a href="/dashboard/fr" className="text-cactus-100">Dashboard</a></li>
+            <li><a href="/checklist" className="text-cactus-100">Faire ma checklist</a></li>
+            <li><a href="/checklist-archive" className="text-cactus-100">Archives</a></li>
+          </ul>
+        </nav>
+      </div>
+    );
+  }
 };
 
 export default Sidebar;
