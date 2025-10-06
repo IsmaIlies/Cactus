@@ -1,0 +1,247 @@
+/* Modern dark-green theme for Checklist UI */
+
+.cactus-hours-theme.checklist-modern {
+  /* Deep dark gradient background, subtle texture */
+  background: radial-gradient(1200px 800px at 10% 0%, rgba(12, 88, 76, 0.18), transparent 60%),
+              radial-gradient(900px 700px at 90% 100%, rgba(16, 79, 129, 0.12), transparent 55%),
+              linear-gradient(180deg, #042119 0%, #071a16 50%, #07130f 100%);
+}
+
+.cactus-hours-theme.checklist-modern .page-shell {
+  padding-bottom: 24px;
+}
+
+/* Cards and header */
+.cactus-hours-theme.checklist-modern .page-header {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.cactus-hours-theme.checklist-modern .page-title {
+  color: #e7f5ef;
+}
+.cactus-hours-theme.checklist-modern .status-line span { color: #b9e1d5; }
+
+/* Inputs baseline */
+.cactus-hours-theme.checklist-modern .input,
+.cactus-hours-theme.checklist-modern .select {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #e8fff7;
+}
+.cactus-hours-theme.checklist-modern .input:focus,
+.cactus-hours-theme.checklist-modern .select:focus {
+  outline: none;
+  border-color: rgba(34,197,94,0.6);
+  box-shadow: 0 0 0 2px rgba(34,197,94,0.25);
+}
+
+/* Table wrapper */
+.cactus-hours-theme.checklist-modern .table-container {
+  margin-top: 12px;
+}
+.cactus-hours-theme.checklist-modern .table-scroll {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(2, 8, 7, 0.35);
+  box-shadow: 0 18px 60px -30px rgba(0,0,0,0.5);
+}
+
+/* Table */
+.cactus-hours-theme.checklist-modern .checklist-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.cactus-hours-theme.checklist-modern .checklist-table thead th {
+  position: sticky; top: 0;
+  background: linear-gradient(180deg, rgba(6, 25, 21, 0.9), rgba(6, 25, 21, 0.75));
+  backdrop-filter: blur(6px);
+  color: #d6f5eb;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  z-index: 1;
+}
+.cactus-hours-theme.checklist-modern .checklist-table th,
+.cactus-hours-theme.checklist-modern .checklist-table td {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Rows */
+.cactus-hours-theme.checklist-modern .checklist-row--today {
+  background: linear-gradient(90deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02));
+}
+.cactus-hours-theme.checklist-modern .checklist-table tbody tr:hover {
+  background-color: rgba(255,255,255,0.04);
+}
+
+/* Day cell */
+.cactus-hours-theme.checklist-modern .day-col { width: 260px; }
+.cactus-hours-theme.checklist-modern .day-field__weekday { color: #a9e2d2; }
+.cactus-hours-theme.checklist-modern .day-field__status--today {
+  color: #8ef0c7;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16,185,129,0.25);
+  padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+}
+
+/* Time inputs (keep green background for readability theme) */
+.cactus-hours-theme.checklist-modern .input--time {
+  text-align: center;
+  border-radius: 10px;
+  background: rgba(16,185,129,0.18); /* soft emerald */
+  color: #ffffff; /* white text for readability */
+  border: 1px solid rgba(16,185,129,0.35);
+}
+.cactus-hours-theme.checklist-modern .input--time:focus {
+  border-color: #16a34a; /* emerald-600 */
+  box-shadow: 0 0 0 2px rgba(22,163,74,0.25);
+}
+.cactus-hours-theme.checklist-modern .input--time:disabled {
+  background: rgba(16,185,129,0.18);
+  color: #ffffff;
+  border-color: rgba(16,185,129,0.25);
+}
+.cactus-hours-theme.checklist-modern .session-empty { color: rgba(255,255,255,0.5); }
+
+/* Toggle switch styling for "Activer" */
+.cactus-hours-theme.checklist-modern .session-toggle {
+  display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: #d7fff3;
+}
+.cactus-hours-theme.checklist-modern .session-toggle input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; width: 40px; height: 22px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.2); position: relative; background: rgba(255,255,255,0.12);
+  outline: none; cursor: pointer; transition: all .25s ease;
+}
+.cactus-hours-theme.checklist-modern .session-toggle input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform .25s ease;
+}
+.cactus-hours-theme.checklist-modern .session-toggle input[type="checkbox"]:checked {
+  background: linear-gradient(180deg, #10b981, #059669);
+  border-color: rgba(16,185,129,0.7);
+}
+.cactus-hours-theme.checklist-modern .session-toggle input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+}
+.cactus-hours-theme.checklist-modern .session-times { gap: 10px; }
+
+/* Selects */
+.cactus-hours-theme.checklist-modern .select--operation,
+.cactus-hours-theme.checklist-modern .select--supervisor {
+  border-radius: 10px;
+}
+
+/* Supervisor column: green background + dark text for readability */
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor {
+  /* glassy green select */
+  -webkit-appearance: none; appearance: none;
+  background: linear-gradient(180deg, rgba(16,185,129,0.22), rgba(16,185,129,0.14));
+  color: #ffffff;
+  border: 1px solid rgba(16,185,129,0.45);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.25);
+  padding: 8px 36px 8px 12px;
+  height: 36px;
+  border-radius: 10px;
+  min-width: 240px; /* enlarge so full names are visible */
+  width: 100%;
+  max-width: 100%;
+  transition: border-color .2s ease, box-shadow .2s ease, filter .2s ease;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
+}
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor:focus {
+  border-color: #16a34a; /* emerald-600 */
+  box-shadow: 0 0 0 2px rgba(22,163,74,0.35);
+}
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor:hover { filter: brightness(1.04); }
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor option { color: #ffffff; }
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor:disabled {
+  background: rgba(16,185,129,0.18);
+  color: #ffffff;
+  border-color: rgba(16,185,129,0.25);
+}
+.cactus-hours-theme.checklist-modern .supervisor-col span {
+  color: #ffffff;
+  background: rgba(16,185,129,0.28);
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(16,185,129,0.35);
+}
+
+/* Make supervisor column itself a bit wider */
+.cactus-hours-theme.checklist-modern .col-supervisor { width: 260px; }
+
+/* Operation column: keep green background + dark text */
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation {
+  -webkit-appearance: none; appearance: none;
+  background: linear-gradient(180deg, rgba(16,185,129,0.22), rgba(16,185,129,0.14));
+  color: #ffffff;
+  border: 1px solid rgba(16,185,129,0.45);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.25);
+  padding: 8px 36px 8px 12px;
+  height: 36px;
+  border-radius: 10px;
+  min-width: 160px;
+  width: 100%;
+  transition: border-color .2s ease, box-shadow .2s ease, filter .2s ease;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
+}
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22,163,74,0.35);
+}
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation:hover { filter: brightness(1.04); }
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation option { color: #ffffff; }
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation:disabled {
+  background: rgba(16,185,129,0.18);
+  color: #ffffff;
+  border-color: rgba(16,185,129,0.25);
+}
+
+/* Best-effort styling for native dropdown list */
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation option,
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor option {
+  background-color: #0b3328; /* darker backdrop for white text */
+  color: #ffffff;
+}
+.cactus-hours-theme.checklist-modern .operation-cell .select--operation option:checked,
+.cactus-hours-theme.checklist-modern .supervisor-col .select--supervisor option:checked {
+  background-color: #115e49;
+  color: #ffffff;
+}
+
+/* Hide default arrow for some legacy browsers */
+.cactus-hours-theme.checklist-modern .select--operation::-ms-expand,
+.cactus-hours-theme.checklist-modern .select--supervisor::-ms-expand { display: none; }
+
+/* Total column */
+.cactus-hours-theme.checklist-modern .total-col--value {
+  font-weight: 700;
+  color: #8df7c5;
+}
+
+/* Buttons */
+.cactus-hours-theme.checklist-modern .button { border-radius: 12px; }
+.cactus-hours-theme.checklist-modern .table-actions__primary { background: #0ea5e9; border-color: rgba(14,165,233,0.4); }
+.cactus-hours-theme.checklist-modern .table-actions__secondary { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
+.cactus-hours-theme.checklist-modern .table-actions__danger { background: #ef4444; border-color: rgba(239,68,68,0.5); }
+.cactus-hours-theme.checklist-modern .table-actions__primary:hover { filter: brightness(1.05); }
+.cactus-hours-theme.checklist-modern .table-actions__danger:hover { filter: brightness(1.05); }
+
+/* Hide the 'Ajouter' button in Actions (UI-only change) */
+.cactus-hours-theme.checklist-modern .table-actions .table-actions__secondary {
+  display: none !important;
+}
+/* Tighter actions spacing after removing the middle button */
+.cactus-hours-theme.checklist-modern .table-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+/* Footer cards */
+.cactus-hours-theme.checklist-modern .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); }
+.cactus-hours-theme.checklist-modern .hint-card { color: #c6ffe7; }
+.cactus-hours-theme.checklist-modern .total-highlight { color: #7ef2bd; }

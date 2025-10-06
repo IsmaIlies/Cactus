@@ -13,6 +13,7 @@ import { addDaysToIso, computeWorkedMinutes, formatDayLabel, formatHours, format
 
 import '../modules/checklist/styles/base.css';
 import '../modules/checklist/styles/select-operation-fix.css';
+import '../modules/checklist/styles/modern-theme.css';
 import ChecklistTopHeader from '../modules/checklist/components/ChecklistTopHeader';
 
 import { subscribeEntriesByUser, upsertAgentEntry, submitAgentHours, deleteEntry as deleteRemoteEntry, getEntryDocIdFor } from '../services/hoursService';
@@ -437,7 +438,7 @@ export default function ChecklistPage() {
 
   return (
 
-    <div className="cactus-hours-theme" style={{ minHeight: '100vh', background: '#f7fafc' }}>
+    <div className="cactus-hours-theme checklist-modern" style={{ minHeight: '100vh' }}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
         <Sidebar />
         <div className="page-shell" style={{ flex: 1, minWidth: 0 }}>
