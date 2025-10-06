@@ -4,6 +4,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { Users, UserCheck2 } from "lucide-react";
 import { collection, onSnapshot, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
+import { subscribeEntriesByPeriod, type HoursEntryDoc } from "../services/hoursService";
+import { computeWorkedMinutes } from "../modules/checklist/lib/time";
+import { formatDayLabel, formatHours } from "../modules/checklist/lib/time";
 
 type NavItem = {
   id: string;
@@ -15,6 +18,7 @@ const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard" },
   { id: "users", label: "Utilisateurs" },
   { id: "reports", label: "Rapports" },
+  { id: "heures", label: "Heures" },
   { id: "operations", label: "Opérations" },
   { id: "settings", label: "Paramètres" },
 ];
@@ -103,6 +107,11 @@ const AdminDashboardPage: React.FC = () => {
   const [userStats, setUserStats] = React.useState({ totalUsers: 0, activeUsers: 0 });
   const [statsLoading, setStatsLoading] = React.useState<boolean>(true);
   const [statsError, setStatsError] = React.useState<string | null>(null);
+  // Admin Heures state
+  const [hoursPeriod, setHoursPeriod] = React.useState<string>(() => new Date().toISOString().slice(0,7));
+  const [hoursEntries, setHoursEntries] = React.useState<HoursEntryDoc[]>([]);
+  const [hoursLoading, setHoursLoading] = React.useState<boolean>(false);
+  const [hoursError, setHoursError] = React.useState<string | null>(null);
 
   const { isAuthenticated } = useAuth();
 
@@ -160,6 +169,33 @@ const AdminDashboardPage: React.FC = () => {
       unsubscribe();
     };
   }, [isAuthenticated]);
+
+  // Subscribe to hoursEntries for selected period (Admin view)
+  React.useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    setHoursError(null);
+    setHoursLoading(true);
+
+    if (!isAuthenticated) {
+      setHoursLoading(false);
+      setHoursError("Authentification requise pour afficher les heures.");
+      return;
+    }
+
+    try {
+      unsubscribe = subscribeEntriesByPeriod(hoursPeriod, (list) => {
+        setHoursEntries(list);
+        setHoursLoading(false);
+      });
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to subscribe to hours entries", e);
+      setHoursError("Impossible de récupérer les checklists d'heures pour la période sélectionnée.");
+      setHoursLoading(false);
+    }
+
+    return () => { try { unsubscribe && unsubscribe(); } catch { /* noop */ } };
+  }, [hoursPeriod, isAuthenticated]);
 
   const handleLogout = () => {
     localStorage.removeItem("adminAuth");
@@ -272,6 +308,67 @@ const AdminDashboardPage: React.FC = () => {
                     statsLoading ? "Détection de l'activité..." : "Utilisateurs considérés actifs sur les 30 derniers jours."
                   }
                 />
+              </div>
+            </div>
+          ) : activeSection === "heures" ? (
+            <div className="space-y-6 pt-16 md:pt-20">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-semibold text-white">Heures soumises</h1>
+                  <p className="text-sm text-blue-100/70">Vue admin des checklists par période.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="hours-period" className="text-xs text-blue-100/70">Période</label>
+                  <input id="hours-period" className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm" type="month" value={hoursPeriod} onChange={(e) => setHoursPeriod(e.target.value)} />
+                </div>
+              </div>
+
+              {hoursError && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">{hoursError}</div>
+              )}
+
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white/5 text-blue-100/80">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">Jour</th>
+                        <th className="px-4 py-3 text-left font-semibold">Agent</th>
+                        <th className="px-4 py-3 text-left font-semibold">Email</th>
+                        <th className="px-4 py-3 text-left font-semibold">Projet</th>
+                        <th className="px-4 py-3 text-left font-semibold">Superviseur</th>
+                        <th className="px-4 py-3 text-right font-semibold">Total</th>
+                        <th className="px-4 py-3 text-left font-semibold">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {hoursLoading ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-6 text-center text-blue-100/60">Chargement…</td>
+                        </tr>
+                      ) : hoursEntries.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-6 text-center text-blue-100/60">Aucune checklist trouvée pour {hoursPeriod}.</td>
+                        </tr>
+                      ) : (
+                        hoursEntries.map((e) => {
+                          const total = computeWorkedMinutes(e as any);
+                          return (
+                            <tr key={e._docId} className="hover:bg-white/5">
+                              <td className="px-4 py-3 whitespace-nowrap">{formatDayLabel(e.day)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{(e as any).userDisplayName || '—'}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{(e as any).userEmail || '—'}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{e.project}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{(e as any).supervisor || '—'}</td>
+                              <td className="px-4 py-3 text-right font-semibold">{formatHours(total)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap capitalize">{(''+(e as any).reviewStatus).toLowerCase()}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           ) : (

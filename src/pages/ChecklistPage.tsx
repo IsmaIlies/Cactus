@@ -1,4 +1,4 @@
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ReviewBadge } from '../modules/checklist/components/ReviewBadge';
 
@@ -6,10 +6,10 @@ import StatusBadge from '../modules/checklist/components/StatusBadge';
 
 import { EntryReviewStatus, PROJECT_OPTIONS, ProjectOption, Status, STATUS_LABELS } from '../modules/checklist/lib/constants';
 
-import { DayEntry, StoredAgentState, ensureEntryForDay, hydrateEntry, loadAgentFromStorage, persistAgentState } from '../modules/checklist/lib/storage';
+import { DayEntry, StoredAgentState, hydrateEntry, loadAgentFromStorage, persistAgentState } from '../modules/checklist/lib/storage';
 import Sidebar from '../components/Sidebar';
 
-import { addDaysToIso, computeWorkedMinutes, formatDayLabel, formatHours, formatMonthLabel, sortIsoDatesAscending } from '../modules/checklist/lib/time';
+import { computeWorkedMinutes, formatDayLabel, formatHours, formatMonthLabel, sortIsoDatesAscending } from '../modules/checklist/lib/time';
 
 import '../modules/checklist/styles/base.css';
 import '../modules/checklist/styles/select-operation-fix.css';
@@ -37,6 +37,15 @@ export default function ChecklistPage() {
   const remoteIds = useMemo(() => new Set(remoteEntries.map((e) => e.id)), [remoteEntries]);
 
   const todayIsoStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // Memorization keys for faster data entry
+  const LAST_PROJECT_KEY = 'checklist:lastProject';
+  const LAST_SUPERVISOR_KEY = 'checklist:lastSupervisor';
+
+  // Delete confirmation + undo state
+  const [pendingDelete, setPendingDelete] = useState<DayEntry | null>(null);
+  const [undoInfo, setUndoInfo] = useState<{ entry: DayEntry; timeoutId: number } | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
 
   const updateState = useCallback((mutator: (draft: StoredAgentState) => StoredAgentState) => {
 
@@ -147,6 +156,30 @@ export default function ChecklistPage() {
 
   }, [agentState.period, user?.id]);
 
+  // Background sync: when authenticated, mirror any local entries missing remotely
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!agentState?.entries?.length) return;
+    const unsynced = agentState.entries.filter((e) => !remoteIds.has(e.id));
+    if (unsynced.length === 0) return;
+    (async () => {
+      for (const e of unsynced) {
+        try {
+          await upsertAgentEntry(
+            user.id,
+            agentState.period,
+            e,
+            { userDisplayName: (user as any).displayName ?? null, userEmail: (user as any).email ?? null }
+          );
+        } catch (err) {
+          if (localStorage.getItem('hoursDebug') === '1') {
+            console.warn('[hours] background upsert failed', { id: e.id, day: e.day }, err);
+          }
+        }
+      }
+    })();
+  }, [agentState.entries, agentState.period, remoteIds, user?.id]);
+
   const changeEntryField = useCallback(<K extends keyof DayEntry>(id: string, field: K, value: DayEntry[K]) => {
 
     updateState((draft) => {
@@ -159,6 +192,15 @@ export default function ChecklistPage() {
 
     });
 
+    // Remember last chosen values for future entries
+    try {
+      if (field === 'project') {
+        localStorage.setItem(LAST_PROJECT_KEY, String(value));
+      } else if (field === 'supervisor') {
+        localStorage.setItem(LAST_SUPERVISOR_KEY, String(value ?? ''));
+      }
+    } catch {}
+
   }, [updateState]);
 
   const toggleSession = useCallback((id: string, session: 'includeMorning' | 'includeAfternoon', enabled: boolean) => {
@@ -169,41 +211,7 @@ export default function ChecklistPage() {
 
 
 
-  const deleteDraftEntry = useCallback(async (entry: DayEntry) => {
-
-    if (entry.status !== 'draft') return;
-
-    const confirmed = window.confirm('Souhaitez-vous supprimer cette journee ?');
-
-    if (!confirmed) return;
-
-    updateState((draft) => ({
-
-      ...draft,
-
-      entries: draft.entries.filter((it) => it.id !== entry.id),
-
-    }));
-
-    setRemoteEntries((current) => current.filter((it) => it.id !== entry.id));
-
-    if (user?.id) {
-
-      try {
-
-        const docId = getEntryDocIdFor(user.id, entry.id);
-
-        await deleteRemoteEntry(docId);
-
-      } catch (err) {
-
-        console.warn('Failed to delete draft entry remotely', err);
-
-      }
-
-    }
-
-  }, [setRemoteEntries, updateState, user?.id]);
+  // legacy deletion replaced by requestDeleteEntry + confirmDeleteEntry + undoDelete
 
   const submitEntry = useCallback(async (entry: DayEntry) => {
 
@@ -223,12 +231,15 @@ export default function ChecklistPage() {
       };
     });
 
-    // Mirror to Firestore for admin supervision if authenticated
+    // Mirror to Firestore for admin supervision only if authenticated
+    if (!user?.id) {
+      if (localStorage.getItem('hoursDebug') === '1') {
+        console.info('[hours] submit skipped: not authenticated, kept local-only');
+      }
+      return;
+    }
 
     try {
-
-      // Write exactly per Admin contract
-
       await submitAgentHours({
         entryId: entry.id,
         day: entry.day,
@@ -243,11 +254,10 @@ export default function ChecklistPage() {
         hasDispute: !!entry.hasDispute,
         supervisor: entry.supervisor || '',
       });
-
-    } catch (e) {
-
-      console.warn('Sync to Firestore failed, will remain local only', e);
-
+    } catch (_e) {
+      if (localStorage.getItem('hoursDebug') === '1') {
+        console.warn('[hours] remote submit failed, kept local-only', _e);
+      }
     }
 
   }, [agentState.period, updateState, user?.id]);
@@ -258,55 +268,7 @@ export default function ChecklistPage() {
 
   // Duplique la checklist complète (sessions, horaires, projet, notes, etc.) pour le même jour, avec un nouvel id unique
 
-  const duplicateEntryOperation = useCallback((entry: DayEntry) => {
-
-    updateState((draft) => {
-
-      const uniqueId = entry.day + '_' + Date.now();
-
-      // Remplir tous les champs vides avec les valeurs de l'entrée d'origine
-
-      const dup = hydrateEntry({
-
-        ...entry,
-
-        id: uniqueId,
-
-  status: Status.Draft,
-
-        reviewStatus: EntryReviewStatus.Pending,
-
-        includeMorning: entry.includeMorning ?? true,
-
-        includeAfternoon: entry.includeAfternoon ?? true,
-
-        morningStart: entry.morningStart || '10:00',
-
-        morningEnd: entry.morningEnd || '13:00',
-
-        afternoonStart: entry.afternoonStart || '15:00',
-
-        afternoonEnd: entry.afternoonEnd || '19:00',
-
-        project: entry.project || 'CANAL 211',
-
-        notes: entry.notes || '',
-
-      });
-
-      // Ajoute la nouvelle entrée juste après l'originale dans le tableau
-
-      const idx = draft.entries.findIndex(e => e.id === entry.id);
-
-      const newEntries = [...draft.entries];
-
-      newEntries.splice(idx + 1, 0, dup);
-
-      return { ...draft, entries: newEntries };
-
-    });
-
-  }, [updateState]);
+  // duplicateEntryOperation removed (button 'Ajouter' disabled in UI)
 
   const addDay = useCallback(async () => {
 
@@ -327,6 +289,13 @@ export default function ChecklistPage() {
       // Générer un id unique même si la date existe déj�
 
       const uniqueId = baseDay + '_' + Date.now();
+
+      // Try to reuse last chosen project/supervisor if available
+      const lastProjectRaw = (() => { try { return localStorage.getItem(LAST_PROJECT_KEY); } catch { return null; } })();
+      const lastSupervisor = (() => { try { return localStorage.getItem(LAST_SUPERVISOR_KEY) || ''; } catch { return ''; } })();
+      const lastProject = (lastProjectRaw && (PROJECT_OPTIONS as ReadonlyArray<string>).includes(lastProjectRaw))
+        ? (lastProjectRaw as ProjectOption)
+        : 'CANAL 211';
 
       const newEntry = hydrateEntry({
 
@@ -350,7 +319,8 @@ export default function ChecklistPage() {
 
         afternoonEnd: '19:00',
 
-        project: 'CANAL 211',
+        project: lastProject,
+        supervisor: lastSupervisor || '',
 
         notes: '',
 
@@ -415,6 +385,54 @@ export default function ChecklistPage() {
     }
   }, [agentState.entries, updateState, user?.id]);
 
+  // New delete flow: modal confirm + 5s undo (optimistic)
+  const requestDeleteEntry = useCallback((entry: DayEntry) => {
+    if (entry.status !== 'draft') return;
+    setPendingDelete(entry);
+  }, []);
+
+  const confirmDeleteEntry = useCallback((entry: DayEntry) => {
+    setPendingDelete(null);
+
+    // Optimistic: remove locally
+    updateState((draft) => ({ ...draft, entries: draft.entries.filter((it) => it.id !== entry.id) }));
+    setRemoteEntries((current) => current.filter((it) => it.id !== entry.id));
+
+    // Schedule remote deletion after 5s window for undo
+    const timeoutId = window.setTimeout(async () => {
+      if (!user?.id) return;
+      try {
+        const docId = getEntryDocIdFor(user.id, entry.id);
+        await deleteRemoteEntry(docId);
+      } catch (err) {
+        console.warn('Deferred remote delete failed', err);
+      } finally {
+        setUndoInfo((u) => (u && u.entry.id === entry.id ? null : u));
+        undoTimerRef.current = null;
+      }
+    }, 5000);
+
+    undoTimerRef.current = timeoutId as unknown as number;
+    setUndoInfo({ entry, timeoutId });
+  }, [setRemoteEntries, updateState, user?.id]);
+
+  const cancelDeleteModal = useCallback(() => setPendingDelete(null), []);
+
+  const undoDelete = useCallback(() => {
+    if (!undoInfo) return;
+    try { window.clearTimeout(undoInfo.timeoutId); } catch {}
+    const e = undoInfo.entry;
+    updateState((draft) => ({ ...draft, entries: [...draft.entries, e] }));
+    setUndoInfo(null);
+    undoTimerRef.current = null;
+  }, [undoInfo, updateState]);
+
+  useEffect(() => () => {
+    if (undoTimerRef.current) {
+      try { window.clearTimeout(undoTimerRef.current); } catch {}
+    }
+  }, []);
+
   const undoSubmission = useCallback(() => {
 
     updateState((draft) => ({
@@ -434,6 +452,153 @@ export default function ChecklistPage() {
   const totalLabel = formatHours(totalMinutesPeriod);
 
   const selectedMonthLabel = formatMonthLabel(agentState.period);
+
+  // Helpers: ISO week for grouping
+  function getIsoWeekParts(dateStr: string): { year: number; week: number } {
+    const [y, m, d] = dateStr.split('-').map((n) => parseInt(n, 10));
+    const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+    const dayNum = date.getUTCDay() || 7; // 1..7, Mon=1
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return { year: date.getUTCFullYear(), week };
+  }
+
+  const weeklyGroups = useMemo(() => {
+    const orderKeys: string[] = [];
+  const map: Record<string, { key: string; label: string; totalMinutes: number; entries: DayEntry[] }> = {};
+    for (const e of visibleEntries) {
+      const { year, week } = getIsoWeekParts(e.day);
+      const key = `${year}-W${String(week).padStart(2, '0')}`;
+      if (!map[key]) {
+        map[key] = { key, label: `Total Semaine ${week}`, totalMinutes: 0, entries: [] };
+        orderKeys.push(key);
+      }
+      map[key].entries.push(e);
+      map[key].totalMinutes += computeWorkedMinutes(e);
+    }
+    return orderKeys.map((k) => map[k]);
+  }, [visibleEntries]);
+
+  // Row renderer for a single entry (keeps JSX concise)
+  const renderEntryRow = useCallback((entry: DayEntry) => {
+    const total = computeWorkedMinutes(entry);
+    const isDraft = entry.status === 'draft';
+    const isDuplicated = /_\d{13,}/.test(entry.id);
+    const isSynced = remoteIds.has(entry.id);
+    const isToday = entry.day === todayIsoStr;
+    const rowClass = [
+      isDuplicated ? 'checklist-row--compact' : '',
+      isSynced ? 'checklist-row--synced' : 'checklist-row--local',
+      isToday ? 'checklist-row--today' : '',
+    ].filter(Boolean).join(' ');
+
+    const tooltip = `Enverra au superviseur ${entry.supervisor ? entry.supervisor : '—'}`;
+
+    return (
+      <tr key={entry.id} className={rowClass}>
+        <td className="day-col">
+          <label htmlFor={`day-${entry.id}`} className="sr-only">Jour</label>
+          <div className="day-field">
+            <div className="day-field__inputWrap">
+              <input
+                id={`day-${entry.id}`}
+                className="input day-field__inputControl"
+                type="date"
+                value={entry.day}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'day', e.target.value)}
+                disabled={!isDraft}
+              />
+            </div>
+            <div className="day-field__meta">
+              <span className="day-field__weekday">{formatDayLabel(entry.day)}</span>
+              {isToday && <span className="day-field__status day-field__status--today">Aujourd'hui</span>}
+            </div>
+          </div>
+        </td>
+
+        <td className="session-col">
+          <fieldset className="session-fieldset">
+            <label className="session-toggle">
+              <input type="checkbox" checked={entry.includeMorning} onChange={(e: ChangeEvent<HTMLInputElement>) => toggleSession(entry.id, 'includeMorning', e.target.checked)} disabled={!isDraft} />
+              <span>Activer</span>
+            </label>
+            {entry.includeMorning ? (
+              <div className="time-grid session-times">
+                <input className="input input--time" type="time" value={entry.morningStart} onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'morningStart', e.target.value)} disabled={!isDraft} />
+                <input className="input input--time" type="time" value={entry.morningEnd} onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'morningEnd', e.target.value)} disabled={!isDraft} />
+              </div>
+            ) : (
+              <span className="session-empty">N/A</span>
+            )}
+          </fieldset>
+        </td>
+
+        <td className="session-col">
+          <fieldset className="session-fieldset">
+            <label className="session-toggle">
+              <input type="checkbox" checked={entry.includeAfternoon} onChange={(e: ChangeEvent<HTMLInputElement>) => toggleSession(entry.id, 'includeAfternoon', e.target.checked)} disabled={!isDraft} />
+              <span>Activer</span>
+            </label>
+            {entry.includeAfternoon ? (
+              <div className="time-grid session-times">
+                <input className="input input--time" type="time" value={entry.afternoonStart} onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'afternoonStart', e.target.value)} disabled={!isDraft} />
+                <input className="input input--time" type="time" value={entry.afternoonEnd} onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'afternoonEnd', e.target.value)} disabled={!isDraft} />
+              </div>
+            ) : (
+              <span className="session-empty">N/A</span>
+            )}
+          </fieldset>
+        </td>
+
+        <td className="operation-cell project-col">
+          <select className="select select--operation" value={entry.project} onChange={(e: ChangeEvent<HTMLSelectElement>) => changeEntryField(entry.id, 'project', e.target.value as ProjectOption)} disabled={!isDraft}>
+            {PROJECT_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </td>
+
+        <td className="supervisor-col">
+          {isDraft ? (
+            <select className="select select--supervisor" value={entry.supervisor || ''} onChange={e => changeEntryField(entry.id, 'supervisor', e.target.value)}>
+              <option value="">--</option>
+              <option value="Sabrina">Sabrina</option>
+              <option value="Arthur">Arthur</option>
+              <option value="Ismael">Ismael</option>
+              <option value="Laetitia">Laetitia</option>
+              <option value="Maurice">Maurice</option>
+              <option value="Samia">Samia</option>
+            </select>
+          ) : (
+            <span>{entry.supervisor || '--'}</span>
+          )}
+        </td>
+
+        <td className="total-col total-col--value">{formatHours(total)}</td>
+
+        <td className="actions-col">
+          {isDraft ? (
+            <div className="table-actions">
+              <button type="button" className="button table-actions__danger" onClick={() => requestDeleteEntry(entry)}>Supprimer</button>
+              <button
+                type="button"
+                className="button table-actions__primary has-tooltip"
+                data-tooltip={tooltip}
+                title={tooltip}
+                aria-label={tooltip}
+                onClick={() => submitEntry(entry)}
+              >
+                Soumettre
+              </button>
+            </div>
+          ) : (
+            <ReviewBadge status={entry.reviewStatus}>Soumise</ReviewBadge>
+          )}
+        </td>
+      </tr>
+    );
+  }, [changeEntryField, remoteIds, submitEntry, toggleSession, todayIsoStr]);
 
 
   return (
@@ -473,26 +638,17 @@ export default function ChecklistPage() {
           <div className="table-scroll">
 
             <table className="checklist-table">
-
               <colgroup>
-
                 <col className="col-day" />
-
                 <col className="col-session" />
-
                 <col className="col-session" />
-
                 <col className="col-project" />
                 <col className="col-supervisor" />
                 <col className="col-total" />
                 <col className="col-actions" />
-
               </colgroup>
-
               <thead>
-
                 <tr>
-
                   <th className="col-day-th">Jour</th>
                   <th>Matin</th>
                   <th>Après-midi</th>
@@ -500,361 +656,23 @@ export default function ChecklistPage() {
                   <th className="col-supervisor">Superviseur</th>
                   <th className="total-col">Total</th>
                   <th className="actions-col">Actions</th>
-
                 </tr>
-
               </thead>
-
               <tbody>
-
-                {visibleEntries.map((entry) => {
-
-                  const total = computeWorkedMinutes(entry);
-
-                  const isDraft = entry.status === 'draft';
-
-                  const isDuplicated = /_\d{13,}/.test(entry.id);
-
-                  const isSynced = remoteIds.has(entry.id);
-
-                  const isToday = entry.day === todayIsoStr;
-
-                  const isSubmitted = entry.status === 'submitted';
-
-                  const rowClass = [
-
-                    isDuplicated ? 'checklist-row--compact' : '',
-
-                    isSynced ? 'checklist-row--synced' : 'checklist-row--local',
-
-                    isToday ? 'checklist-row--today' : '',
-
-                  ].filter(Boolean).join(' ');
-
-                  const statusTone = isSubmitted ? 'day-field__status--synced' : (isSynced ? 'day-field__status--synced' : 'day-field__status--local');
-
-                  const statusClassName = `day-field__status ${statusTone}`;
-
-                  const statusLabel = isSubmitted ? 'Soumise' : (isSynced ? 'Synchronisee' : 'Brouillon');
-
-
-                  return (
-
-
-
-                    <tr key={entry.id} className={rowClass}>
-
-
-
-                      <td className="day-col">
-
-
-
-                        <label htmlFor={`day-${entry.id}`} className="sr-only">Jour</label>
-
-
-
-                        <div className="day-field">
-
-
-
-                          <div className="day-field__inputWrap">
-
-
-
-                            <input
-
-
-
-                              id={`day-${entry.id}`}
-
-
-
-                              className="input day-field__inputControl"
-
-
-
-                              type="date"
-
-
-
-                              value={entry.day}
-
-
-
-                              onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'day', e.target.value)}
-
-
-
-                              disabled={!isDraft}
-
-
-
-                            />
-
-
-
-                          </div>
-
-
-
-                          <div className="day-field__meta">
-
-
-
-                            <span className="day-field__weekday">{formatDayLabel(entry.day)}</span>
-
-
-
-                            {/* <span className={statusClassName}>{statusLabel}</span> */}
-
-
-
-                            {isToday && <span className="day-field__status day-field__status--today">Aujourd'hui</span>}
-
-                          </div>
-
-
-
+                {weeklyGroups.map((group) => (
+                  <Fragment key={group.key}>
+                    <tr className="week-sticky">
+                      <td colSpan={7}>
+                        <div className="week-bar">
+                          <span className="week-bar__title">{group.label}</span>
+                          <span className="week-bar__total">{formatHours(group.totalMinutes)}</span>
                         </div>
-
-
-
                       </td>
-
-
-
-                      <td className="session-col">
-
-                        <fieldset className="session-fieldset">
-
-                          <label className="session-toggle">
-
-                            <input
-
-                              type="checkbox"
-
-                              checked={entry.includeMorning}
-
-                              onChange={(e: ChangeEvent<HTMLInputElement>) => toggleSession(entry.id, 'includeMorning', e.target.checked)}
-
-                              disabled={!isDraft}
-
-                            />
-
-                            <span>Activer</span>
-
-                          </label>
-
-                          {entry.includeMorning ? (
-
-                            <div className="time-grid session-times">
-
-                              <input
-
-                                className="input input--time"
-
-                                type="time"
-
-                                value={entry.morningStart}
-
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'morningStart', e.target.value)}
-
-                                disabled={!isDraft}
-
-                              />
-
-                              <input
-
-                                className="input input--time"
-
-                                type="time"
-
-                                value={entry.morningEnd}
-
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'morningEnd', e.target.value)}
-
-                                disabled={!isDraft}
-
-                              />
-
-                            </div>
-
-                          ) : (
-
-                            <span className="session-empty">N/A</span>
-
-                          )}
-
-                        </fieldset>
-
-                      </td>
-
-                      <td className="session-col">
-
-                        <fieldset className="session-fieldset">
-
-                          <label className="session-toggle">
-
-                            <input
-
-                              type="checkbox"
-
-                              checked={entry.includeAfternoon}
-
-                              onChange={(e: ChangeEvent<HTMLInputElement>) => toggleSession(entry.id, 'includeAfternoon', e.target.checked)}
-
-                              disabled={!isDraft}
-
-                            />
-
-                            <span>Activer</span>
-
-                          </label>
-
-                          {entry.includeAfternoon ? (
-
-                            <div className="time-grid session-times">
-
-                              <input
-
-                                className="input input--time"
-
-                                type="time"
-
-                                value={entry.afternoonStart}
-
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'afternoonStart', e.target.value)}
-
-                                disabled={!isDraft}
-
-                              />
-
-                              <input
-
-                                className="input input--time"
-
-                                type="time"
-
-                                value={entry.afternoonEnd}
-
-                                onChange={(e: ChangeEvent<HTMLInputElement>) => changeEntryField(entry.id, 'afternoonEnd', e.target.value)}
-
-                                disabled={!isDraft}
-
-                              />
-
-                            </div>
-
-                          ) : (
-
-                            <span className="session-empty">N/A</span>
-
-                          )}
-
-                        </fieldset>
-
-                      </td>
-
-                      <td className="operation-cell project-col">
-                        <select
-                          className="select select--operation"
-                          value={entry.project}
-                          onChange={(e: ChangeEvent<HTMLSelectElement>) => changeEntryField(entry.id, 'project', e.target.value as ProjectOption)}
-                          disabled={!isDraft}
-                        >
-                          {PROJECT_OPTIONS.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="supervisor-col">
-                        {isDraft ? (
-                          <select
-                            className="select select--supervisor"
-                            value={entry.supervisor || ''}
-                            onChange={e => changeEntryField(entry.id, 'supervisor', e.target.value)}
-                          >
-                            <option value="">--</option>
-                            <option value="Sabrina">Sabrina</option>
-                            <option value="Arthur">Arthur</option>
-                            <option value="Ismael">Ismael</option>
-                            <option value="Laetitia">Laetitia</option>
-                            <option value="Maurice">Maurice</option>
-                            <option value="Samia">Samia</option>
-                          </select>
-                        ) : (
-                          <span>{entry.supervisor || '--'}</span>
-                        )}
-                      </td>
-                      <td className="total-col total-col--value">{formatHours(total)}</td>
-
-                      <td className="actions-col">
-
-                        {isDraft ? (
-
-                          <div className="table-actions">
-
-                            <button
-
-                              type="button"
-
-                              className="button table-actions__danger"
-
-                              onClick={() => deleteDraftEntry(entry)}
-
-                            >
-
-                              Supprimer
-
-                            </button>
-
-                            <button
-
-                              type="button"
-
-                              className="button table-actions__secondary"
-
-                              onClick={() => duplicateEntryOperation(entry)}
-
-                            >
-
-                              Ajouter
-
-                            </button>
-
-                            <button
-
-                              type="button"
-
-                              className="button table-actions__primary"
-
-                              onClick={() => submitEntry(entry)}
-
-                            >
-
-                              Soumettre
-
-                            </button>
-
-                          </div>
-
-                        ) : (
-
-                          <ReviewBadge status={entry.reviewStatus}>Soumise</ReviewBadge>
-
-                        )}
-
-                      </td>
-
                     </tr>
-
-                  );
-
-                })}
-
+                    {group.entries.map((entry) => renderEntryRow(entry))}
+                  </Fragment>
+                ))}
               </tbody>
-
             </table>
 
           </div>
@@ -873,6 +691,28 @@ export default function ChecklistPage() {
           <StatusBadge status={agentState.status}>{`Statut : ${STATUS_LABELS[agentState.status] ?? agentState.status}`}</StatusBadge>
         </div>
       </div>
+
+      {/* Delete confirm modal */}
+      {pendingDelete && (
+        <div role="dialog" aria-modal="true" className="modal-overlay">
+          <div className="modal-card">
+            <h3 className="modal-title">Supprimer cette journée ?</h3>
+            <p className="modal-text">Cette action peut être annulée pendant 5 secondes après confirmation.</p>
+            <div className="modal-actions">
+              <button className="button button--ghost" type="button" onClick={cancelDeleteModal}>Annuler</button>
+              <button className="button table-actions__danger" type="button" onClick={() => confirmDeleteEntry(pendingDelete)}>Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo snackbar */}
+      {undoInfo && (
+        <div className="snackbar">
+          <span>Entrée supprimée.</span>
+          <button className="button snackbar__action" type="button" onClick={undoDelete}>Annuler</button>
+        </div>
+      )}
     </div>
   </div>
   );
