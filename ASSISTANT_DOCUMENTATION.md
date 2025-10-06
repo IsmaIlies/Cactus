@@ -198,6 +198,27 @@ const AUDIO_CONFIG = {
 
 ### Métriques suivies
 - **Taux de completion du script** (%)
+
+## 🔐 Déconnexion automatique après 30 minutes d'inactivité
+
+L’application déconnecte automatiquement tout utilisateur après 30 minutes d’inactivité. Le mécanisme est implémenté dans `src/contexts/AuthContext.tsx` et fonctionne même si plusieurs onglets sont ouverts.
+
+Fonctionnement:
+- Chaque interaction utilisateur (mousemove, keydown, click, scroll, touchstart), le retour de focus et le changement de visibilité mettent à jour un timestamp partagé en `localStorage` (`auth:lastActivityAt`).
+- Tous les onglets écoutent cet événement et réarment un timer local basé sur le temps restant avant la limite de 30 minutes.
+- Si aucun onglet ne détecte d’activité pendant 30 minutes, `logout('inactivity')` est appelé et l’utilisateur est déconnecté.
+
+Points importants:
+- Multi‑onglets: une action dans un onglet prolonge la session dans tous les onglets (synchronisation via `storage`).
+- Robustesse: le timer se base sur le “temps écoulé” depuis la dernière activité partagée, pas uniquement sur un `setTimeout` fixe — donc il reste cohérent après une mise en veille prolongée/retour.
+
+Tester rapidement:
+1. Connecte‑toi, puis n’interagis plus pendant 30 minutes: tu dois être automatiquement déconnecté.
+2. Ouvre deux onglets: bouge la souris dans l’onglet A de temps en temps; l’onglet B ne doit pas expirer tant que tu restes actif dans A.
+3. Laisse tous les onglets inactifs: tous doivent se déconnecter après 30 minutes.
+
+Configuration:
+- Le délai est défini par `INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000` dans `AuthContext.tsx`.
 - **Temps par étape** (secondes)
 - **Nombre d'objections** par appel
 - **Taux de suggestions utilisées** (%)

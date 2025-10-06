@@ -152,22 +152,70 @@ const TeamChatPage: React.FC = () => {
   const channelKeyRef = useRef<string>('');
   const messagesEndRef = useRef<HTMLDivElement|null>(null);
 
-  useEffect(()=>{
-    const unsubAuth = auth.onAuthStateChanged(u=>{ if(u) setCurrentUser({id:u.uid, name: u.displayName || u.email || 'Utilisateur'}); else setCurrentUser(null); });
-  const unsubUsers = onSnapshot(collection(db,'users'), snap => {
-      const mapped = snap.docs.map(d=>{
-        const data:any = d.data();
-    const compositeName = data.name || [data.firstName, data.lastName].filter(Boolean).join(' ').trim();
-    const lastActiveMs = data.lastActive?.toMillis ? data.lastActive.toMillis() : (typeof data.lastActive === 'number'? data.lastActive : 0);
-    return { id:d.id, name: compositeName || 'Utilisateur', lastActive:lastActiveMs, status:data.status || 'online' } as User;
-      });
-      setUsers(mapped);
-      // If currentUser name is fallback and we find better info update it
-      setCurrentUser(prev=>{ if(!prev) return prev; if(prev.name==='Utilisateur'){ const match=mapped.find(m=>m.id===prev.id); if(match) return {...prev, name: match.name}; } return prev; });
+  useEffect(() => {
+    // Subscribe to auth state and only attach the users listener when we have an authenticated user.
+    let unsubUsers: (() => void) | null = null;
+    const unsubAuth = auth.onAuthStateChanged((u) => {
+      if (u) {
+        setCurrentUser({ id: u.uid, name: u.displayName || u.email || "Utilisateur" });
+
+        // Attach the users listener once authenticated
+        if (!unsubUsers) {
+          unsubUsers = onSnapshot(
+            collection(db, "users"),
+            (snap) => {
+              const mapped = snap.docs.map((d) => {
+                const data: any = d.data();
+                const compositeName = data.name || [data.firstName, data.lastName].filter(Boolean).join(" ").trim();
+                const lastActiveMs = data.lastActive?.toMillis ? data.lastActive.toMillis() : (typeof data.lastActive === "number" ? data.lastActive : 0);
+                return { id: d.id, name: compositeName || "Utilisateur", lastActive: lastActiveMs, status: data.status || "online" } as User;
+              });
+              setUsers(mapped);
+              // If currentUser name is fallback and we find better info update it
+              setCurrentUser((prev) => {
+                if (!prev) return prev;
+                if (prev.name === "Utilisateur") {
+                  const match = mapped.find((m) => m.id === prev.id);
+                  if (match) return { ...prev, name: match.name };
+                }
+                return prev;
+              });
+            },
+            (err) => {
+              // Log permission errors for diagnostics and clear users list on error
+              console.error("Users listener error", err);
+              setUsers([]);
+            }
+          );
+        }
+      } else {
+        // Not authenticated: clear current user and users list
+        setCurrentUser(null);
+        setUsers([]);
+        // If there was a users subscription, remove it
+        if (unsubUsers) {
+          try {
+            unsubUsers();
+          } catch (e) {
+            // ignore
+          }
+          unsubUsers = null;
+        }
+      }
     });
 
-    return ()=>{unsubAuth();unsubUsers();};
-  },[]);
+    return () => {
+      unsubAuth();
+      if (unsubUsers) {
+        try {
+          unsubUsers();
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Mise à jour présence (lastActive) – hook au niveau racine
   useEffect(()=>{

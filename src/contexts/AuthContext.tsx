@@ -23,8 +23,9 @@ import { doc, setDoc, getFirestore } from "firebase/firestore";
 
 import { getIdTokenResult } from "firebase/auth";
 
-const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const ACTIVITY_EVENTS = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
+const LAST_ACTIVITY_KEY = 'auth:lastActivityAt';
 
 interface User {
   id: string;
@@ -474,12 +475,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const resetInactivityTimer = React.useCallback(() => {
     if (!user || typeof window === 'undefined') return;
+    // Read last activity time shared across tabs; default to now if missing
+    const now = Date.now();
+    const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || now;
+    const elapsed = Math.max(0, now - last);
+    const remaining = INACTIVITY_TIMEOUT_MS - elapsed;
+    // Clear any previous timeout and schedule a new one for the remaining time
     if (inactivityTimeoutRef.current) {
       window.clearTimeout(inactivityTimeoutRef.current);
+      inactivityTimeoutRef.current = null;
+    }
+    if (remaining <= 0) {
+      logout('inactivity');
+      return;
     }
     inactivityTimeoutRef.current = window.setTimeout(() => {
       logout('inactivity');
-    }, INACTIVITY_TIMEOUT_MS);
+    }, remaining);
   }, [user, logout]);
 
   useEffect(() => {
@@ -493,21 +505,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return;
     }
 
-    const handleActivity = () => resetInactivityTimer();
+    // On any user activity, update shared last activity and reset timers
+    const handleActivity = () => {
+      try { localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now())); } catch {}
+      resetInactivityTimer();
+    };
+
+    // When any other tab updates last activity, reset our timer
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LAST_ACTIVITY_KEY) {
+        resetInactivityTimer();
+      }
+    };
+
     ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, handleActivity));
     window.addEventListener('focus', handleActivity);
+    window.addEventListener('storage', onStorage);
     const visibilityHandler = () => {
       if (!document.hidden) {
-        resetInactivityTimer();
+        handleActivity();
       }
     };
     document.addEventListener('visibilitychange', visibilityHandler);
 
+    // Initialize last activity at mount and start timer based on it
+    try { localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now())); } catch {}
     resetInactivityTimer();
 
     return () => {
       ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, handleActivity));
       window.removeEventListener('focus', handleActivity);
+      window.removeEventListener('storage', onStorage);
       document.removeEventListener('visibilitychange', visibilityHandler);
       if (inactivityTimeoutRef.current) {
         window.clearTimeout(inactivityTimeoutRef.current);

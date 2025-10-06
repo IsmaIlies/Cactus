@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, UserCheck2 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { Users, UserCheck2 } from "lucide-react";
 import { collection, onSnapshot, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -11,14 +12,89 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "dashboard", label: "Dashboard" },
   { id: "users", label: "Utilisateurs" },
   { id: "reports", label: "Rapports" },
   { id: "operations", label: "Opérations" },
   { id: "settings", label: "Paramètres" },
 ];
 
-const ACTIVITY_WINDOW_MS = 1000 * 60 * 60 * 24 * 30; // 30 jours pour considérer un utilisateur actif
+const ACTIVITY_WINDOW_MS = 1000 * 60 * 60 * 24 * 30; // 30 jours
+
+const toMillis = (input: unknown): number | undefined => {
+  if (!input) return undefined;
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  if (input instanceof Date) return input.getTime();
+  if (typeof input === "object") {
+    const maybeTs = input as { toDate?: () => Date; seconds?: number; milliseconds?: number };
+    if (typeof maybeTs.toDate === "function") return maybeTs.toDate()!.getTime();
+    if (typeof maybeTs.milliseconds === "number") return maybeTs.milliseconds;
+    if (typeof maybeTs.seconds === "number") return maybeTs.seconds * 1000;
+  }
+  return undefined;
+};
+
+const readStringField = (data: Record<string, any>, keys: string[]) => {
+  for (const k of keys) {
+    const v = data[k];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  return null;
+};
+
+const dataHasTruthyBoolean = (data: Record<string, any>, keys: string[]) =>
+  keys.some((key) => data[key] === true);
+
+const readTimestampMs = (data: Record<string, any>, keys: string[]) => {
+  for (const k of keys) {
+    const parsed = toMillis(data[k]);
+    if (typeof parsed === "number") return parsed;
+  }
+  return undefined;
+};
+
+const isUserConsideredActive = (data: Record<string, any> | undefined | null) => {
+  if (!data || typeof data !== "object") return false;
+  if (dataHasTruthyBoolean(data, ["isActive", "active", "isOnline", "enabled"])) return true;
+
+  const status = readStringField(data, ["status", "state", "activity", "activityStatus"]);
+  if (status) {
+    const normalized = status.toLowerCase();
+    if (["active", "actif", "online", "en ligne"].includes(normalized)) return true;
+  }
+
+  const lastActivityMs = readTimestampMs(data, ["lastActive", "lastActivity", "lastLogin", "lastSeenAt", "updatedAt"]);
+  if (typeof lastActivityMs === "number") {
+    return Date.now() - lastActivityMs <= ACTIVITY_WINDOW_MS;
+  }
+
+  return false;
+};
+
+const StatCard: React.FC<{
+  icon?: React.ComponentType<{ className?: string }>;
+  title: string;
+  value: React.ReactNode;
+  helperText?: string | React.ReactNode;
+}> = ({ icon: Icon, title, value, helperText }) => {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-b from-[#06111b] to-[#04101a] p-6">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(6,182,212,0.12),transparent_55%),radial-gradient(circle_at_85%_80%,rgba(59,130,246,0.06),transparent_60)]" />
+      <div className="relative flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl border border-cyan-400/40 bg-cyan-400/8 p-3">
+            {Icon ? <Icon className="h-5 w-5 text-cyan-300" aria-hidden="true" /> : null}
+          </div>
+          <p className="text-xs uppercase tracking-[0.35em] text-blue-100/70">{title}</p>
+        </div>
+        <p className="text-4xl font-semibold text-white">{value}</p>
+        {helperText ? <p className="text-xs text-blue-100/60">{helperText}</p> : null}
+      </div>
+    </div>
+  );
+};
+
+const formatStatValue = (v: number, loading?: boolean) => (loading ? "..." : v.toLocaleString());
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -28,41 +104,53 @@ const AdminDashboardPage: React.FC = () => {
   const [statsLoading, setStatsLoading] = React.useState<boolean>(true);
   const [statsError, setStatsError] = React.useState<string | null>(null);
 
+  const { isAuthenticated } = useAuth();
+
   React.useEffect(() => {
-    if (localStorage.getItem("adminAuth") !== "1") {
+    if (!isAuthenticated && localStorage.getItem("adminAuth") !== "1") {
       navigate("/admin/login", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, isAuthenticated]);
 
   React.useEffect(() => {
     let isMounted = true;
     setStatsLoading(true);
     setStatsError(null);
 
+    // Only subscribe if the user is actually authenticated. Do not bypass rules with a local flag.
+    if (!isAuthenticated) {
+      if (localStorage.getItem("adminAuth") === "1") {
+        setStatsError(
+          "Mode admin local activé — mais les abonnements Firestore exigent une authentification. Connectez-vous pour afficher ces statistiques."
+        );
+      } else {
+        setStatsError("Accès refusé : authentification requise pour afficher ces statistiques.");
+      }
+      setStatsLoading(false);
+      return;
+    }
+
     const unsubscribe = onSnapshot(
       collection(db, "users"),
       (snapshot: QuerySnapshot<DocumentData>) => {
-        if (!isMounted) {
-          return;
-        }
-
+        if (!isMounted) return;
         let active = 0;
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (isUserConsideredActive(data)) {
-            active += 1;
-          }
+          if (isUserConsideredActive(data)) active += 1;
         });
-
         setUserStats({ totalUsers: snapshot.size, activeUsers: active });
         setStatsLoading(false);
       },
       (error) => {
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
+        // eslint-disable-next-line no-console
         console.error("Failed to subscribe to admin user stats", error);
-        setStatsError("Impossible de récupérer les statistiques utilisateurs.");
+        if (error && (error.code === "permission-denied" || error.code === "unauthenticated")) {
+          setStatsError("Accès refusé par les règles Firestore (permission-denied). Vérifiez vos rôles/claims ou connectez-vous avec un compte admin.");
+        } else {
+          setStatsError("Impossible de récupérer les statistiques utilisateurs.");
+        }
         setStatsLoading(false);
       }
     );
@@ -71,7 +159,7 @@ const AdminDashboardPage: React.FC = () => {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const handleLogout = () => {
     localStorage.removeItem("adminAuth");
@@ -141,7 +229,7 @@ const AdminDashboardPage: React.FC = () => {
               onClick={handleLogout}
               className="group relative inline-flex h-11 w-full items-center justify-center overflow-hidden rounded-xl border border-cyan-400/20 bg-gradient-to-r from-[#071225] via-[#040b16] to-[#02060c] text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:border-cyan-300/40"
             >
-              <span className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.25),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(255,255,255,0.2),transparent_60%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+              <span className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.25),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(255,255,255,0.2),transparent_60)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               <span className="absolute -inset-20 translate-x-[-100%] rotate-12 bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-0 transition-all duration-500 group-hover:translate-x-[120%] group-hover:opacity-100" />
               <span className="relative z-10">Déconnexion</span>
             </button>
@@ -181,129 +269,18 @@ const AdminDashboardPage: React.FC = () => {
                   title="Utilisateurs actifs"
                   value={formatStatValue(userStats.activeUsers, statsLoading)}
                   helperText={
-                    statsLoading
-                      ? "Détection de l'activité..."
-                      : "Utilisateurs considérés actifs sur les 30 derniers jours."
+                    statsLoading ? "Détection de l'activité..." : "Utilisateurs considérés actifs sur les 30 derniers jours."
                   }
                 />
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center text-sm text-blue-100/70 backdrop-blur-xl">
-              <p className="text-lg font-semibold text-white">Section en préparation</p>
-              <p className="mt-2">
-                Les modules "{activeSection}" sont en cours de construction. Contacte l'équipe admin pour connaître la feuille de route.
-              </p>
-            </div>
+            <div className="pt-16">Section: {activeSection}</div>
           )}
         </main>
       </div>
     </div>
   );
-};
-
-type StatCardProps = {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  value: string;
-  helperText: string;
-};
-
-const StatCard: React.FC<StatCardProps> = ({ icon: Icon, title, value, helperText }) => (
-  <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-black via-[#050d1a] to-black p-6 shadow-[0_25px_60px_-45px_rgba(6,182,212,0.6)]">
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(6,182,212,0.35),transparent_55%),radial-gradient(circle_at_85%_80%,rgba(59,130,246,0.25),transparent_60%)]" />
-    <div className="relative flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <div className="rounded-2xl border border-cyan-400/40 bg-cyan-400/10 p-3">
-          <Icon className="h-5 w-5 text-cyan-300" aria-hidden="true" />
-        </div>
-        <p className="text-xs uppercase tracking-[0.35em] text-blue-100/70">{title}</p>
-      </div>
-      <p className="text-4xl font-semibold text-white">{value}</p>
-      <p className="text-xs text-blue-100/60">{helperText}</p>
-    </div>
-  </div>
-);
-
-const formatStatValue = (value: number, loading: boolean) => {
-  if (loading) {
-    return "--";
-  }
-  return value.toLocaleString("fr-FR");
-};
-
-const isUserConsideredActive = (data: Record<string, any>) => {
-  if (!data || typeof data !== "object") {
-    return false;
-  }
-
-  if (dataHasTruthyBoolean(data, ["isActive", "active", "isOnline", "enabled"])) {
-    return true;
-  }
-
-  const status = readStringField(data, ["status", "state", "activity", "activityStatus"]);
-  if (status) {
-    const normalized = status.toLowerCase();
-    if (["active", "actif", "online", "en ligne"].includes(normalized)) {
-      return true;
-    }
-  }
-
-  const lastActivityMs = readTimestampMs(data, ["lastActive", "lastActivity", "lastLogin", "lastSeenAt", "updatedAt"]);
-  if (typeof lastActivityMs === "number") {
-    return Date.now() - lastActivityMs <= ACTIVITY_WINDOW_MS;
-  }
-
-  return false;
-};
-
-const dataHasTruthyBoolean = (data: Record<string, any>, keys: string[]) =>
-  keys.some((key) => data[key] === true);
-
-const readStringField = (data: Record<string, any>, keys: string[]) => {
-  for (const key of keys) {
-    const value = data[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return null;
-};
-
-const readTimestampMs = (data: Record<string, any>, keys: string[]) => {
-  for (const key of keys) {
-    const rawValue = data[key];
-    const parsed = toMillis(rawValue);
-    if (typeof parsed === "number") {
-      return parsed;
-    }
-  }
-  return undefined;
-};
-
-const toMillis = (input: unknown): number | undefined => {
-  if (!input) {
-    return undefined;
-  }
-  if (typeof input === "number" && Number.isFinite(input)) {
-    return input;
-  }
-  if (input instanceof Date) {
-    return input.getTime();
-  }
-  if (typeof input === "object") {
-    const maybeTimestamp = input as { toDate?: () => Date; seconds?: number; milliseconds?: number };
-    if (typeof maybeTimestamp.toDate === "function") {
-      return maybeTimestamp.toDate().getTime();
-    }
-    if (typeof maybeTimestamp.milliseconds === "number") {
-      return maybeTimestamp.milliseconds;
-    }
-    if (typeof maybeTimestamp.seconds === "number") {
-      return maybeTimestamp.seconds * 1000;
-    }
-  }
-  return undefined;
 };
 
 export default AdminDashboardPage;
