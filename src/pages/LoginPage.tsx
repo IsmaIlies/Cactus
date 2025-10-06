@@ -439,14 +439,6 @@ const LoginPage = () => {
               Se connecter avec Microsoft
             </button>
 
-            <Link
-              to="/admin/login"
-              className="group relative mt-4 w-full inline-flex items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-gradient-to-r from-black via-gray-900 to-black px-4 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-[0_10px_30px_-15px_rgba(0,0,0,0.8)] transition-all duration-300 hover:scale-[1.02] hover:border-white/20 hover:from-gray-200 hover:via-gray-100 hover:to-gray-300 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-white/30"
-            >
-              <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),rgba(255,255,255,0)_55%),radial-gradient(circle_at_70%_80%,rgba(255,255,255,0.25),rgba(255,255,255,0)_60%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-              <span className="absolute -inset-20 translate-x-[-100%] rotate-12 bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 transition-all duration-500 group-hover:translate-x-[120%] group-hover:opacity-100" />
-              <span className="relative z-10">ADMIN</span>
-            </Link>
           </div>
 
           <div className="mt-6 text-center pb-2">
