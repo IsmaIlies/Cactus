@@ -83,12 +83,12 @@ const Sidebar = () => {
 
   try {
     return (
-    <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-y-auto">
+  <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-hidden">
         <div className="p-6 border-b border-cactus-700">
           <h1 className="text-3xl font-bold">Cactus</h1>
         </div>
 
-        <nav className="flex-1 py-6 space-y-1">
+  <nav className="flex-1 overflow-y-auto py-6 space-y-1">
         <NavLink
           to={base}
           end
@@ -272,7 +272,7 @@ const Sidebar = () => {
         FAQ & Suggestions
       </NavLink>
       </nav>
-      <div className="p-4 border-t border-cactus-700 space-y-4">
+  <div className="p-4 border-t border-cactus-700 space-y-4 mt-auto sticky bottom-0 bg-cactus-800/95 backdrop-blur supports-[backdrop-filter]:bg-cactus-800/80">
         <Link
           to={`${base}/settings`}
           className="flex items-center p-3 rounded-lg bg-cactus-700 hover:bg-cactus-600 transition-colors"

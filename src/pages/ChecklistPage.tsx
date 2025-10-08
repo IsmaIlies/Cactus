@@ -26,13 +26,25 @@ function cloneState(state: StoredAgentState): StoredAgentState {
 
 }
 
-export default function ChecklistPage() {
+type ChecklistProps = {
+  themeClass?: string; // e.g. 'checklist-modern' (default) or 'leads-modern'
+  tableOnly?: boolean; // when true, hides header, toolbar, footer, and sidebar, keeping only the table
+};
+
+export default function ChecklistPage({ themeClass = 'checklist-modern', tableOnly = false }: ChecklistProps) {
 
   const { user } = useAuth();
 
   const [agentState, setAgentState] = useState(loadAgentFromStorage);
 
   const [remoteEntries, setRemoteEntries] = useState<DayEntry[]>([]);
+  // Lightweight toast for quick feedback on actions (submit, errors, etc.)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   const remoteIds = useMemo(() => new Set(remoteEntries.map((e) => e.id)), [remoteEntries]);
 
@@ -231,14 +243,7 @@ export default function ChecklistPage() {
       };
     });
 
-    // Mirror to Firestore for admin supervision only if authenticated
-    if (!user?.id) {
-      if (localStorage.getItem('hoursDebug') === '1') {
-        console.info('[hours] submit skipped: not authenticated, kept local-only');
-      }
-      return;
-    }
-
+    // Mirror to Firestore for admin supervision (let submitAgentHours handle auth check)
     try {
       await submitAgentHours({
         entryId: entry.id,
@@ -254,10 +259,12 @@ export default function ChecklistPage() {
         hasDispute: !!entry.hasDispute,
         supervisor: entry.supervisor || '',
       });
+      setToast({ type: 'success', message: 'Checklist envoyée à la supervision.' });
     } catch (_e) {
       if (localStorage.getItem('hoursDebug') === '1') {
         console.warn('[hours] remote submit failed, kept local-only', _e);
       }
+      setToast({ type: 'error', message: "Échec de l'envoi. Conservée en local, réessayez plus tard." });
     }
 
   }, [agentState.period, updateState, user?.id]);
@@ -602,42 +609,40 @@ export default function ChecklistPage() {
 
 
   return (
-
-    <div className="cactus-hours-theme checklist-modern" style={{ minHeight: '100vh' }}>
+    <div className={`cactus-hours-theme ${themeClass}`} style={{ minHeight: '100vh' }}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
-        <Sidebar />
+        {!tableOnly && <Sidebar />}
         <div className="page-shell" style={{ flex: 1, minWidth: 0 }}>
-          <ChecklistTopHeader active="agent" />
-          <div className="page-header">
-            <div>
-              <h2 className="page-title">Mes heures</h2>
-              <div className="status-line">
-                <StatusBadge status={agentState.status} />
-                <span>{selectedMonthLabel}</span>
+          {!tableOnly && (
+            <>
+              <ChecklistTopHeader active="agent" />
+              <div className="page-header">
+                <div>
+                  <h2 className="page-title">Mes heures</h2>
+                  <div className="status-line">
+                    <StatusBadge status={agentState.status} />
+                    <span>{selectedMonthLabel}</span>
+                  </div>
+                </div>
+                <div className="toolbar">
+                  <label htmlFor="period-select" className="sr-only">Période</label>
+                  <input id="period-select" className="input" type="month" value={agentState.period} onChange={onPeriodChange} />
+                  <button className="button" type="button" onClick={addDay}>Ajouter un jour</button>
+                  <button className="button button--ghost" type="button" onClick={resetEntries}>Réinitialiser</button>
+                  {hasSubmittedEntries && (
+                    <button className="button button--danger" type="button" onClick={undoSubmission}>Annuler la soumission</button>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="toolbar">
-              <label htmlFor="period-select" className="sr-only">Période</label>
-              <input id="period-select" className="input" type="month" value={agentState.period} onChange={onPeriodChange} />
-              <button className="button" type="button" onClick={addDay}>Ajouter un jour</button>
-              <button className="button button--ghost" type="button" onClick={resetEntries}>Réinitialiser</button>
-              {hasSubmittedEntries && (
-                <button className="button button--danger" type="button" onClick={undoSubmission}>Annuler la soumission</button>
+              {agentState.status === Status.Rejected && agentState.rejectionNote && (
+                <div className="alert"><strong>Soumission rejetée :</strong> {agentState.rejectionNote}</div>
               )}
-            </div>
-          </div>
+            </>
+          )}
 
-        {agentState.status === Status.Rejected && agentState.rejectionNote && (
-
-          <div className="alert"><strong>Soumission rejetée :</strong> {agentState.rejectionNote}</div>
-
-        )}
-
-        <div className="table-container">
-
-          <div className="table-scroll">
-
-            <table className="checklist-table">
+          <div className="table-container">
+            <div className="table-scroll">
+              <table className="checklist-table">
               <colgroup>
                 <col className="col-day" />
                 <col className="col-session" />
@@ -673,22 +678,22 @@ export default function ChecklistPage() {
                   </Fragment>
                 ))}
               </tbody>
-            </table>
-
+              </table>
+            </div>
           </div>
 
-        </div>
-
-
-        {visibleEntries.length === 0 && (
-          <div className="card hint-card">Toutes vos déclarations validées sont visibles dans les archives.</div>
-        )}
-        <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px' }}>
-          <div>
-            <span className="section-subtitle">Total période</span>
-            <div className="total-highlight">{totalLabel}</div>
-          </div>
-          <StatusBadge status={agentState.status}>{`Statut : ${STATUS_LABELS[agentState.status] ?? agentState.status}`}</StatusBadge>
+          {!tableOnly && visibleEntries.length === 0 && (
+            <div className="card hint-card">Toutes vos déclarations validées sont visibles dans les archives.</div>
+          )}
+          {!tableOnly && (
+            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px' }}>
+              <div>
+                <span className="section-subtitle">Total période</span>
+                <div className="total-highlight">{totalLabel}</div>
+              </div>
+              <StatusBadge status={agentState.status}>{`Statut : ${STATUS_LABELS[agentState.status] ?? agentState.status}`}</StatusBadge>
+            </div>
+          )}
         </div>
       </div>
 
@@ -713,8 +718,18 @@ export default function ChecklistPage() {
           <button className="button snackbar__action" type="button" onClick={undoDelete}>Annuler</button>
         </div>
       )}
+
+      {/* Quick toast (top-right) */}
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-[1000] px-4 py-3 rounded shadow-md ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}
+          role="status"
+          aria-live="polite"
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
-  </div>
   );
 }
 

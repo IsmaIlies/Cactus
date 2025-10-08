@@ -18,6 +18,10 @@ const LoginPage = () => {
   const [advRunning, setAdvRunning] = useState(false);
   const [advResults, setAdvResults] = useState<any | null>(null);
   const [showDiag, setShowDiag] = useState(false);
+  // Option B: whitelist temporary supervisor access based on email typed on login screen
+  const SUPERVISOR_WHITELIST = ["i.brai@mars-marketing.fr"]; // temporary
+  type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
+  const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);
 
   useEffect(() => {
     const handlerOnline = () => setIsOnline(true);
@@ -127,6 +131,12 @@ const LoginPage = () => {
   });
   const navigate = useNavigate();
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const isSupervisorAllowed = SUPERVISOR_WHITELIST.includes(normalizedEmail);
+  const supervisorTargetPath = supervisorChoice
+    ? `/dashboard/superviseur/${supervisorChoice}`
+    : null;
+
   const handleMissionSelect = (value: 'CANAL_PLUS' | 'ORANGE_LEADS') => {
     setMission(value);
     try {
@@ -145,7 +155,12 @@ const LoginPage = () => {
         localStorage.setItem('activeRegion', selectedRegion);
         localStorage.setItem('activeMission', mission);
         setRegion(selectedRegion);
-        if (mission === 'ORANGE_LEADS') {
+        // If supervisor choice is selected and allowed, prioritize supervisor dashboards
+        if (isSupervisorAllowed && supervisorTargetPath) {
+          try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
+          navigate(supervisorTargetPath);
+          try { sessionStorage.removeItem('supervisorTarget'); } catch {}
+        } else if (mission === 'ORANGE_LEADS') {
           navigate('/leads/dashboard');
         } else {
           navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
@@ -170,7 +185,11 @@ const LoginPage = () => {
         localStorage.setItem('activeRegion', selectedRegion);
         localStorage.setItem('activeMission', mission);
         setRegion(selectedRegion);
-        if (mission === 'ORANGE_LEADS') {
+        if (isSupervisorAllowed && supervisorTargetPath) {
+          try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
+          navigate(supervisorTargetPath);
+          try { sessionStorage.removeItem('supervisorTarget'); } catch {}
+        } else if (mission === 'ORANGE_LEADS') {
           navigate('/leads/dashboard');
         } else {
           navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
@@ -293,6 +312,49 @@ const LoginPage = () => {
                     <span>Côte d'Ivoire (CIV)</span>
                   </label>
                 </div>
+              </div>
+              {/* Supervisor quick access (Option B - temporary whitelist) */}
+              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-blue-900">Espace Superviseur</p>
+                  <span className="text-[10px] text-blue-700">Accès temporaire</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {([
+                    { key: 'fr', label: 'CANAL+ FR' },
+                    { key: 'civ', label: 'CANAL+ CIV' },
+                    { key: 'leads', label: 'LEADS' },
+                  ] as Array<{key: Exclude<SupervisorChoice, null>, label: string}>).map(btn => {
+                    const active = supervisorChoice === btn.key;
+                    const disabled = !isSupervisorAllowed;
+                    return (
+                      <button
+                        key={btn.key}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setSupervisorChoice(btn.key)}
+                        title={disabled ? 'Réservé — saisir un email autorisé' : 'Choisir ce tableau superviseur'}
+                        className={
+                          `w-full rounded-lg border px-3 py-2 text-center text-sm font-semibold transition ${
+                            active
+                              ? 'bg-blue-600 text-white border-blue-600 shadow'
+                              : 'bg-white text-blue-900 border-blue-300 hover:bg-blue-100'
+                          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`
+                        }
+                      >
+                        {btn.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!isSupervisorAllowed && (
+                  <p className="mt-2 text-[11px] text-blue-900/80">
+                    Indiquez un email autorisé pour activer l'accès superviseur. Accès accordé à: i.brai@mars-marketing.fr
+                  </p>
+                )}
+                {isSupervisorAllowed && supervisorChoice && (
+                  <p className="mt-2 text-[11px] text-blue-900/80">Cible choisie: {supervisorChoice.toUpperCase()}</p>
+                )}
               </div>
               <button
                 type="button"

@@ -88,7 +88,7 @@ const StepC: React.FC<StepCProps> = ({ form, errors, touched, onChange, onBlur, 
             value={form.telephone}
             onChange={(e) => onChange("telephone", e.target.value)}
             onBlur={() => onBlur("telephone")}
-            placeholder="Ex : +2250123456789"
+            placeholder="Ex : +33621345678"
             className={`${inputClass} mt-1`}
           />
           {touched.telephone && errors.telephone && (

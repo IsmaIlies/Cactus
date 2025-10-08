@@ -11,15 +11,25 @@
 @tailwind utilities;
 
 body {
-  @apply font-sans text-gray-800 bg-sand-50;
-  /* Bloque le scroll global, le scroll reste géré par les conteneurs internes (.scroll-beauty) */
-  overflow: hidden;
-  height: 100vh;
+  @apply font-sans;
+  background: #050a1b;
+  color: #e5e7eb;
+  /* Scroll global activé pour toute la page */
+  min-height: 100vh;
+  overflow-y: auto;
 }
 
-html { overflow: hidden; height: 100vh; }
+html { min-height: 100%; overflow-y: auto; }
 
-#root { height: 100vh; overflow: hidden; }
+#root { min-height: 100vh; }
+
+/* Scrollbar globale (corps de page) - Dark */
+body::-webkit-scrollbar { width: 10px; height: 10px; }
+body::-webkit-scrollbar-track { background: linear-gradient(180deg,transparent,rgba(255,255,255,0.04),transparent); }
+body::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#068060,#046048); border-radius: 24px; border: 2px solid rgba(255,255,255,0.15); transition: all .2s ease; }
+body::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg,#079d77,#068060); }
+/* Firefox */
+body { scrollbar-width: thin; scrollbar-color: #068060 transparent; }
 
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
@@ -87,18 +97,28 @@ select:-moz-ui-filled {
   /* Utilitaire pour désactiver le scroll de la page quand nécessaire (ex : certaines vues plein écran) */
   .no-page-scroll { overflow: hidden; height: 100vh; }
 
-  /* Scrollbar élégante réutilisable */
-  .scroll-beauty { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-  .scroll-beauty::-webkit-scrollbar { width: 10px; }
-  .scroll-beauty::-webkit-scrollbar-track { background: transparent; }
-  .scroll-beauty::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#068060,#046048); border-radius: 24px; border: 2px solid #ffffff; }
+  /* Scrollbar élégante réutilisable (V/H) */
+  .scroll-beauty { overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .scroll-beauty::-webkit-scrollbar { width: 10px; height: 10px; }
+  .scroll-beauty::-webkit-scrollbar-track { background: linear-gradient(180deg,transparent,rgba(255,255,255,0.04),transparent); }
+  .scroll-beauty::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#068060,#046048); border-radius: 24px; border: 2px solid #ffffff; transition: all .2s ease; }
+  .scroll-beauty:hover::-webkit-scrollbar-thumb { border-width: 1px; }
   .scroll-beauty::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg,#079d77,#068060); }
   .dark .scroll-beauty::-webkit-scrollbar-thumb { border-color: #111827; }
   /* Firefox */
   .scroll-beauty { scrollbar-width: thin; scrollbar-color: #068060 transparent; }
 
+  /* Variante claire adaptée au thème beige/sable */
+  .scroll-beauty-light { overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .scroll-beauty-light::-webkit-scrollbar { width: 10px; height: 10px; }
+  .scroll-beauty-light::-webkit-scrollbar-track { background: linear-gradient(180deg,transparent,rgba(0,0,0,0.04),transparent); }
+  .scroll-beauty-light::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#3c964c,#2c7a3c); border-radius: 24px; border: 2px solid #e5e7eb; transition: all .2s ease; }
+  .scroll-beauty-light:hover::-webkit-scrollbar-thumb { border-width: 1px; }
+  .scroll-beauty-light::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg,#4cae62,#3c964c); }
+  .scroll-beauty-light { scrollbar-width: thin; scrollbar-color: #3c964c transparent; }
+
   /* Effet fondu haut/bas (ajouter position:relative au parent) */
-  .scroll-fade { mask-image: linear-gradient(to bottom, rgba(0,0,0,0), #000 16px, #000 calc(100% - 16px), rgba(0,0,0,0)); -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0), #000 16px, #000 calc(100% - 16px), rgba(0,0,0,0)); }
+  .scroll-fade { mask-image: linear-gradient(to bottom, rgba(0,0,0,0), #000 12px, #000 calc(100% - 12px), rgba(0,0,0,0)); -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0), #000 12px, #000 calc(100% - 12px), rgba(0,0,0,0)); }
   /* Poker specific */
   .card-3d { perspective: 800px; }
   .card-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.6s ease; }

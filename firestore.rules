@@ -20,14 +20,19 @@ service cloud.firestore {
 
     match /leads_sales/{saleId} {
       allow read: if request.auth != null;
+      // Autoriser la création si utilisateur authentifié, mission/origine valides,
+      // champs requis présents, et identité correspondante (userId racine ou createdBy.userId)
       allow create: if request.auth != null
         && request.resource.data.mission == "ORANGE_LEADS"
         && request.resource.data.origineLead in ["hipto", "dolead", "mm"]
-        && request.resource.data.mobileCount is number
-        && request.resource.data.boxCount is number
         && request.resource.data.numeroId is string
         && request.resource.data.typeOffre is string
-        && request.resource.data.telephone is string;
+        && request.resource.data.telephone is string
+        && (
+          (request.resource.data.userId is string && request.resource.data.userId == request.auth.uid) ||
+          (request.resource.data.createdBy.userId is string && request.resource.data.createdBy.userId == request.auth.uid)
+        );
+      // Les compteurs sont calculés côté client; si absents, laisser le back les dériver plus tard
       allow update, delete: if false;
     }
 
@@ -148,6 +153,48 @@ service cloud.firestore {
     match /users/{userId}/todos/{todoId} {
       allow read, create: if request.auth != null && request.auth.uid == userId;
       allow update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // --- Heures (checklists) ---
+    function isHoursSupervisor() {
+      // Temporary supervisor gate by email OR admin custom claim
+      return hasAdminRole() || (
+        request.auth != null && (
+          request.auth.token.email == 'i.brai@mars-marketing.fr'
+        )
+      );
+    }
+
+    // hoursEntries: agents create/update their own docs; supervisors/admins can update for review
+    match /hoursEntries/{entryId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.userId is string
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.day is string
+        && request.resource.data.period is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+      allow update: if request.auth != null
+        && (
+          // Owner can update their own entry (e.g., fix notes/times)
+          request.auth.uid == resource.data.userId ||
+          // Supervisor or admin can approve/reject or fix fields
+          isHoursSupervisor()
+        )
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+
+    // Optional aggregation per user/period
+    match /hoursPeriods/{docId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.resource.data.userId is string
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.period is string
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
     }
 
     match /{document=**} {

@@ -26,6 +26,12 @@ import Checklist from "./pages/ChecklistPage";
 import LeadsChecklistPage from "./leads/pages/LeadsChecklistPage";
 import ChecklistArchivePage from "./pages/ChecklistArchivePage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import SupervisorLayout from "./supervisor/SupervisorLayout";
+import SupervisorDashboard from "./supervisor/SupervisorDashboard";
+import SupervisorSales from "./supervisor/SupervisorSales";
+import SupervisorChecklist from "./supervisor/SupervisorChecklist";
+import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
+import SupervisorArchives from "./supervisor/SupervisorArchives";
 
 function App() {
   return (
@@ -76,6 +82,14 @@ function App() {
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        {/* Supervisor dashboards (temporary access via login whitelist) */}
+        <Route path="/dashboard/superviseur/:area/*" element={<ProtectedRoute><SupervisorLayout /></ProtectedRoute>}>
+          <Route index element={<SupervisorDashboard />} />
+          <Route path="presence" element={<SupervisorPresencePage />} />
+          <Route path="ventes" element={<SupervisorSales />} />
+          <Route path="checklist" element={<SupervisorChecklist />} />
+          <Route path="archives" element={<SupervisorArchives />} />
+        </Route>
         <Route
           path="/leads/*"
           element={

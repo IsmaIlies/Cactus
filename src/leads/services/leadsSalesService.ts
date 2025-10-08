@@ -66,8 +66,9 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
   const internetSoshCount = baseCategory.internetSosh;
 
   const docRef = collection(db, COLLECTION_PATH);
-  await addDoc(docRef, {
+  const fullDoc = {
     ...payload,
+    userId: payload.createdBy?.userId || null,
     additionalOffers: payload.additionalOffers,
     dateTechnicien: payload.dateTechnicien ?? null,
     telephone: payload.telephone,
@@ -78,7 +79,29 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
     internetSoshCount,
     createdAt: serverTimestamp(),
     createdBy: payload.createdBy || null,
-  });
+  } as const;
+
+  try {
+    await addDoc(docRef, fullDoc as any);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      // eslint-disable-next-line no-console
+      console.warn('[leads] fullDoc denied by rules, retrying with minimal doc');
+      const minimalDoc = {
+        numeroId: payload.numeroId,
+        typeOffre: payload.typeOffre,
+        telephone: payload.telephone,
+        origineLead: payload.origineLead,
+        mission: missionFilter,
+        mobileCount,
+        boxCount,
+        createdAt: serverTimestamp(),
+      } as const;
+      await addDoc(docRef, minimalDoc as any);
+    } else {
+      throw err;
+    }
+  }
 };
 
 export type LeadKpiSnapshot = {
@@ -90,31 +113,47 @@ export type LeadKpiSnapshot = {
 export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) => {
   const todayStart = startOfDay(new Date());
   const q = query(collection(db, COLLECTION_PATH), where("mission", "==", missionFilter));
-  return onSnapshot(q, (snapshot) => {
-    const aggregated: LeadKpiSnapshot = {
-      hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-      dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-      mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-    };
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const aggregated: LeadKpiSnapshot = {
+        hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+      };
 
-    snapshot.forEach((doc) => {
-      const data = doc.data() as any;
-      const createdAt: Timestamp | null = data?.createdAt ?? null;
-      if (!createdAt) return;
-      const createdDate = createdAt.toDate();
-      if (createdDate < todayStart) return;
-      const origin = (data?.origineLead || "").toLowerCase();
-      if (origin === "hipto" || origin === "dolead" || origin === "mm") {
-        const cat = categorize(data?.typeOffre);
-        aggregated[origin].mobiles += cat.mobile + cat.mobileSosh;
-        aggregated[origin].box += cat.internet + cat.internetSosh;
-        aggregated[origin].mobileSosh += cat.mobileSosh;
-        aggregated[origin].internetSosh += cat.internetSosh;
+      snapshot.forEach((doc) => {
+        const data = doc.data() as any;
+        const createdAt: Timestamp | null = data?.createdAt ?? null;
+        if (!createdAt) return;
+        const createdDate = createdAt.toDate();
+        if (createdDate < todayStart) return;
+        const originRaw = (data?.origineLead || "").toLowerCase();
+        if (originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm") {
+          const origin = originRaw as keyof LeadKpiSnapshot;
+          const cat = categorize(data?.typeOffre);
+          aggregated[origin].mobiles += cat.mobile + cat.mobileSosh;
+          aggregated[origin].box += cat.internet + cat.internetSosh;
+          aggregated[origin].mobileSosh += cat.mobileSosh;
+          aggregated[origin].internetSosh += cat.internetSosh;
+        }
+      });
+
+      callback(aggregated);
+    },
+    (error) => {
+      if ((error as any)?.code === "permission-denied") {
+        console.warn("subscribeToLeadKpis: accès refusé (auth/règles)", error);
+      } else {
+        console.error("subscribeToLeadKpis: erreur snapshot", error);
       }
-    });
-
-    callback(aggregated);
-  });
+      callback({
+        hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+      });
+    }
+  );
 };
 
 export type LeadDailySeriesEntry = {
@@ -136,26 +175,37 @@ export const subscribeToLeadMonthlySeries = (
     orderBy("createdAt", "asc")
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const map = new Map<string, { mobiles: number; box: number }>();
-    snapshot.forEach((doc) => {
-      const data = doc.data() as any;
-      const createdAt: Timestamp | null = data?.createdAt ?? null;
-      if (!createdAt) return;
-      const key = formatDateKey(createdAt.toDate());
-      const bucket = map.get(key) || { mobiles: 0, box: 0 };
-      const cat = categorize(data?.typeOffre);
-      bucket.mobiles += cat.mobile + cat.mobileSosh;
-      bucket.box += cat.internet + cat.internetSosh;
-      map.set(key, bucket);
-    });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const map = new Map<string, { mobiles: number; box: number }>();
+      snapshot.forEach((doc) => {
+        const data = doc.data() as any;
+        const createdAt: Timestamp | null = data?.createdAt ?? null;
+        if (!createdAt) return;
+        const key = formatDateKey(createdAt.toDate());
+        const bucket = map.get(key) || { mobiles: 0, box: 0 };
+        const cat = categorize(data?.typeOffre);
+        bucket.mobiles += cat.mobile + cat.mobileSosh;
+        bucket.box += cat.internet + cat.internetSosh;
+        map.set(key, bucket);
+      });
 
-    const series = Array.from(map.entries())
-      .sort(([a], [b]) => (a > b ? 1 : -1))
-      .map(([date, value]) => ({ date, ...value }));
+      const series = Array.from(map.entries())
+        .sort(([a], [b]) => (a > b ? 1 : -1))
+        .map(([date, value]) => ({ date, ...value }));
 
-    callback(series);
-  });
+      callback(series);
+    },
+    (error) => {
+      if ((error as any)?.code === "permission-denied") {
+        console.warn("subscribeToLeadMonthlySeries: accès refusé (auth/règles)", error);
+      } else {
+        console.error("subscribeToLeadMonthlySeries: erreur snapshot", error);
+      }
+      callback([]);
+    }
+  );
 };
 
 export type LeadAgentSummary = {
@@ -172,7 +222,7 @@ export const subscribeToLeadAgentSummary = (
 ) => {
   const monthStart = startOfMonth(month);
   const monthEnd = startOfNextMonth(month);
-  const q = query(
+  const primaryQuery = query(
     collection(db, COLLECTION_PATH),
     where("mission", "==", missionFilter),
     where("createdBy.userId", "==", userId),
@@ -180,26 +230,94 @@ export const subscribeToLeadAgentSummary = (
     where("createdAt", "<", Timestamp.fromDate(monthEnd)),
     orderBy("createdAt", "asc")
   );
+  let unsubscribe: (() => void) | null = null;
 
-  return onSnapshot(q, (snapshot) => {
+  const computeAndCallback = (snapshot: any) => {
     const summary: LeadAgentSummary = {
       mobiles: 0,
       box: 0,
       mobileSosh: 0,
       internetSosh: 0,
     };
-
-    snapshot.forEach((doc) => {
+    snapshot.forEach((doc: any) => {
       const data = doc.data() as any;
+      // When using fallback (no date filter), filter client-side
+      const createdAt: Timestamp | null = data?.createdAt ?? null;
+      if (createdAt) {
+        const d = createdAt.toDate();
+        if (d < monthStart || d >= monthEnd) return;
+      } else {
+        // Skip documents without createdAt
+        return;
+      }
       const cat = categorize(data?.typeOffre);
       summary.mobiles += cat.mobile;
       summary.box += cat.internet;
       summary.mobileSosh += cat.mobileSosh;
       summary.internetSosh += cat.internetSosh;
     });
-
     callback(summary);
-  });
+  };
+
+  const subscribePrimary = () => {
+    unsubscribe = onSnapshot(
+      primaryQuery,
+      (snapshot) => {
+        // Primary already matches the date range, compute directly without extra filtering
+        const summary: LeadAgentSummary = {
+          mobiles: 0,
+          box: 0,
+          mobileSosh: 0,
+          internetSosh: 0,
+        };
+        snapshot.forEach((doc) => {
+          const data = doc.data() as any;
+          const cat = categorize(data?.typeOffre);
+          summary.mobiles += cat.mobile;
+          summary.box += cat.internet;
+          summary.mobileSosh += cat.mobileSosh;
+          summary.internetSosh += cat.internetSosh;
+        });
+        callback(summary);
+      },
+      (error) => {
+        const code = (error as any)?.code;
+        if (code === "failed-precondition") {
+          console.warn("subscribeToLeadAgentSummary: index absent/en cours de construction, fallback sans filtre de date");
+          // Fallback without date range/order to avoid composite index requirement
+          try { unsubscribe && unsubscribe(); } catch {}
+          const fbQuery = query(
+            collection(db, COLLECTION_PATH),
+            where("mission", "==", missionFilter),
+            where("createdBy.userId", "==", userId)
+          );
+          unsubscribe = onSnapshot(
+            fbQuery,
+            (snap) => computeAndCallback(snap),
+            (err2) => {
+              if ((err2 as any)?.code === "permission-denied") {
+                console.warn("subscribeToLeadAgentSummary (fallback): accès refusé (auth/règles)", err2);
+              } else {
+                console.error("subscribeToLeadAgentSummary (fallback): erreur snapshot", err2);
+              }
+              callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+            }
+          );
+        } else if (code === "permission-denied") {
+          console.warn("subscribeToLeadAgentSummary: accès refusé (auth/règles)", error);
+          callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+        } else {
+          console.error("subscribeToLeadAgentSummary: erreur snapshot", error);
+          callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+        }
+      }
+    );
+  };
+
+  subscribePrimary();
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
 };
 
 export type LeadAgentSaleEntry = {
@@ -207,6 +325,7 @@ export type LeadAgentSaleEntry = {
   createdAt: Date | null;
   intituleOffre: string;
   additionalOffers: string[];
+  origineLead?: "hipto" | "dolead" | "mm" | "";
 };
 
 export const subscribeToLeadAgentSales = (
@@ -216,7 +335,7 @@ export const subscribeToLeadAgentSales = (
 ) => {
   const monthStart = startOfMonth(month);
   const monthEnd = startOfNextMonth(month);
-  const q = query(
+  const primaryQuery = query(
     collection(db, COLLECTION_PATH),
     where("mission", "==", missionFilter),
     where("createdBy.userId", "==", userId),
@@ -224,22 +343,79 @@ export const subscribeToLeadAgentSales = (
     where("createdAt", "<", Timestamp.fromDate(monthEnd)),
     orderBy("createdAt", "desc")
   );
+  let unsubscribe: (() => void) | null = null;
 
-  return onSnapshot(q, (snapshot) => {
-    const sales: LeadAgentSaleEntry[] = snapshot.docs.map((doc) => {
-      const data = doc.data() as any;
-      const createdAt: Timestamp | null = data?.createdAt ?? null;
-      const additionalOffers = Array.isArray(data?.additionalOffers)
-        ? data.additionalOffers.map((offer: any) => offer?.intituleOffre || "")
-        : [];
-      return {
-        id: doc.id,
-        createdAt: createdAt ? createdAt.toDate() : null,
-        intituleOffre: data?.intituleOffre || "",
-        additionalOffers,
-      };
-    });
+  const mapDoc = (doc: any): LeadAgentSaleEntry => {
+    const data = doc.data() as any;
+    const createdAt: Timestamp | null = data?.createdAt ?? null;
+    const additionalOffers = Array.isArray(data?.additionalOffers)
+      ? data.additionalOffers.map((offer: any) => offer?.intituleOffre || "")
+      : [];
+    const originRaw = (data?.origineLead || "").toString().toLowerCase();
+    const origin: "hipto" | "dolead" | "mm" | "" =
+      originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm" ? (originRaw as any) : "";
+    return {
+      id: doc.id,
+      createdAt: createdAt ? createdAt.toDate() : null,
+      intituleOffre: data?.intituleOffre || "",
+      additionalOffers,
+      origineLead: origin,
+    };
+  };
 
-    callback(sales);
-  });
+  const subscribePrimary = () => {
+    unsubscribe = onSnapshot(
+      primaryQuery,
+      (snapshot) => {
+        const sales: LeadAgentSaleEntry[] = snapshot.docs.map(mapDoc);
+        callback(sales);
+      },
+      (error) => {
+        const code = (error as any)?.code;
+        if (code === "failed-precondition") {
+          console.warn("subscribeToLeadAgentSales: index absent/en cours de construction, fallback sans filtre de date");
+          try { unsubscribe && unsubscribe(); } catch {}
+          const fbQuery = query(
+            collection(db, COLLECTION_PATH),
+            where("mission", "==", missionFilter),
+            where("createdBy.userId", "==", userId)
+          );
+          unsubscribe = onSnapshot(
+            fbQuery,
+            (snap) => {
+              // Filter by month and sort desc client-side
+              const items = snap.docs
+                .map(mapDoc)
+                .filter((d) => d.createdAt && d.createdAt >= monthStart && d.createdAt < monthEnd)
+                .sort((a, b) => {
+                  const ta = a.createdAt ? a.createdAt.getTime() : 0;
+                  const tb = b.createdAt ? b.createdAt.getTime() : 0;
+                  return tb - ta;
+                });
+              callback(items);
+            },
+            (err2) => {
+              if ((err2 as any)?.code === "permission-denied") {
+                console.warn("subscribeToLeadAgentSales (fallback): accès refusé (auth/règles)", err2);
+              } else {
+                console.error("subscribeToLeadAgentSales (fallback): erreur snapshot", err2);
+              }
+              callback([]);
+            }
+          );
+        } else if (code === "permission-denied") {
+          console.warn("subscribeToLeadAgentSales: accès refusé (auth/règles)", error);
+          callback([]);
+        } else {
+          console.error("subscribeToLeadAgentSales: erreur snapshot", error);
+          callback([]);
+        }
+      }
+    );
+  };
+
+  subscribePrimary();
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
 };

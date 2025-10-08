@@ -10,7 +10,6 @@ import {
   orderBy,
   Timestamp,
   arrayUnion,
-  arrayRemove,
   serverTimestamp,
   getDoc,
 } from "firebase/firestore";
@@ -197,7 +196,7 @@ class MrWhiteService {
         // Si plus, oddOne = 2e, le reste = mot commun
         oddOne = shuffled[1];
       }
-      const others = shuffled.filter(p => p.id !== mrWhite.id && p.id !== oddOne.id);
+  // const others = shuffled.filter(p => p.id !== mrWhite.id && p.id !== oddOne.id);
 
       // Mot commun et mot différent
       const secretWord = SECRET_WORDS[Math.floor(Math.random() * SECRET_WORDS.length)];
@@ -417,31 +416,50 @@ class MrWhiteService {
       where("phase", "in", ["lobby", "playing", "voting"])
     );
 
-    return onSnapshot(q, (snapshot) => {
-      let games = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as GameSession[];
-      
-      // Trier côté client par createdAt desc
-      games = games.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-      
-      callback(games);
-    });
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        let games = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as GameSession[];
+        // Trier côté client par createdAt desc
+        games = games.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+        callback(games);
+      },
+      (error) => {
+        if ((error as any)?.code === "permission-denied") {
+          console.warn("MrWhiteService.subscribeToGames: accès refusé (auth requise ou règles).", error);
+        } else {
+          console.error("MrWhiteService.subscribeToGames: erreur snapshot", error);
+        }
+        callback([]);
+      }
+    );
   }
 
   // Écouter une session spécifique
   subscribeToGame(gameId: string, callback: (game: GameSession | null) => void): () => void {
     const gameRef = doc(this.gamesCollection, gameId);
-    
-    return onSnapshot(gameRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const game = { id: snapshot.id, ...snapshot.data() } as GameSession;
-        callback(game);
-      } else {
+    return onSnapshot(
+      gameRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const game = { id: snapshot.id, ...snapshot.data() } as GameSession;
+          callback(game);
+        } else {
+          callback(null);
+        }
+      },
+      (error) => {
+        if ((error as any)?.code === "permission-denied") {
+          console.warn("MrWhiteService.subscribeToGame: accès refusé (auth/règles)", error);
+        } else {
+          console.error("MrWhiteService.subscribeToGame: erreur snapshot", error);
+        }
         callback(null);
       }
-    });
+    );
   }
 
   // Écouter les événements globaux
@@ -451,13 +469,24 @@ class MrWhiteService {
       orderBy("createdAt", "desc")
     );
 
-    return onSnapshot(q, (snapshot) => {
-      const events = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as GameEvent[];
-      callback(events);
-    });
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const events = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as GameEvent[];
+        callback(events);
+      },
+      (error) => {
+        if ((error as any)?.code === "permission-denied") {
+          console.warn("MrWhiteService.subscribeToEvents: accès refusé (auth/règles)", error);
+        } else {
+          console.error("MrWhiteService.subscribeToEvents: erreur snapshot", error);
+        }
+        callback([]);
+      }
+    );
   }
 
   // Créer un événement

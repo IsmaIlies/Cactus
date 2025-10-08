@@ -4,23 +4,11 @@ import StepA from "../components/sales/StepA";
 import StepB from "../components/sales/StepB";
 import StepC from "../components/sales/StepC";
 import SuccessModal from "../components/sales/SuccessModal";
-import {
-  OFFER_OPTIONS,
-  FormState,
-  Errors,
-  defaultState,
-  TouchedState,
-  AdditionalOffer,
-} from "../types/sales";
-import {
-  calcProgress,
-  ratioToColor,
-  isStepValid,
-  getStepFields,
-  stepOrder,
-} from "../utils/progress";
+import { OFFER_OPTIONS, FormState, Errors, defaultState, TouchedState, AdditionalOffer } from "../types/sales";
+import { calcProgress, ratioToColor, isStepValid, getStepFields, stepOrder } from "../utils/progress";
 import { saveLeadSale } from "../services/leadsSalesService";
 import { useAuth } from "../../contexts/AuthContext";
+import { auth } from "../../firebase";
 
 const steps = [
   {
@@ -330,8 +318,8 @@ const SalesEntry: React.FC = () => {
     });
   };
 
-  const resetForm = () => {
-    setForm({ ...defaultState });
+  const resetForm = (overrides?: Partial<FormState>) => {
+    setForm({ ...defaultState, ...(overrides || {}) });
     setErrors({});
     setTouched({ ...emptyTouched });
     setCurrentStep(0);
@@ -438,24 +426,53 @@ const SalesEntry: React.FC = () => {
     try {
       setSubmitting(true);
       setSubmissionError(null);
-      await saveLeadSale({
+      if (!user) {
+        setSubmissionError("Authentification requise pour enregistrer une vente.");
+        return;
+      }
+      // Vérifier contraintes des règles Firestore avant write
+      if (!payload.origineLead || !["hipto", "dolead", "mm"].includes(payload.origineLead)) {
+        setSubmissionError("Origine du lead invalide. Choisis hipto, dolead ou mm.");
+        return;
+      }
+      if (!payload.numeroId || !payload.typeOffre || !payload.telephone) {
+        setSubmissionError("Champs requis manquants (numeroId, typeOffre, téléphone).");
+        return;
+      }
+      // Refresh auth token to avoid stale credential issues
+      try { await auth.currentUser?.getIdToken(true); } catch { /* noop */ }
+      const docToSave = {
         ...payload,
         origineLead: payload.origineLead as "hipto" | "dolead" | "mm",
-        createdBy: user
-          ? {
-              userId: user.id,
-              displayName: user.displayName,
-              email: user.email,
-            }
-          : undefined,
+        createdBy: {
+          userId: user.id,
+          displayName: user.displayName,
+          email: user.email,
+        },
+      };
+      // Debug léger pour vérifier conformité aux règles
+      // eslint-disable-next-line no-console
+      console.debug("[leads] save", {
+        numeroId: docToSave.numeroId,
+        typeOffre: docToSave.typeOffre,
+        origineLead: docToSave.origineLead,
+        telephone: docToSave.telephone,
+        mobileCountPreview: docToSave.typeOffre,
       });
+      await saveLeadSale(docToSave);
       console.log("payload", payload);
       setShowSuccess(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("saveLeadSale failed", error);
-      setSubmissionError(
-        "Impossible d'enregistrer la vente. Vérifie ta connexion et réessaie."
-      );
+      if (error?.code === "permission-denied") {
+        setSubmissionError(
+          "Accès refusé par les règles Firestore. Vérifie que tu es bien connecté et que l'origine du lead est hipto/dolead/mm."
+        );
+      } else {
+        setSubmissionError(
+          "Impossible d'enregistrer la vente. Vérifie ta connexion et réessaie."
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -467,7 +484,8 @@ const SalesEntry: React.FC = () => {
   };
 
   const handleNewSale = () => {
-    resetForm();
+    const lastNumeroId = form.numeroId; // preserve current DID
+    resetForm({ numeroId: lastNumeroId });
     setShowSuccess(false);
   };
 

@@ -66,12 +66,12 @@ const MyLeadSalesPage: React.FC = () => {
 
   const flattenedSales = React.useMemo(() => {
     return sales.flatMap((sale) => {
-      const rows: Array<{ id: string; offer: string; createdAt: Date | null }> = [
-        { id: `${sale.id}-main`, offer: sale.intituleOffre, createdAt: sale.createdAt },
+      const rows: Array<{ id: string; offer: string; createdAt: Date | null; origin: string }> = [
+        { id: `${sale.id}-main`, offer: sale.intituleOffre, createdAt: sale.createdAt, origin: sale.origineLead || "" },
       ];
       sale.additionalOffers.forEach((offer, index) => {
         if (offer) {
-          rows.push({ id: `${sale.id}-extra-${index}`, offer, createdAt: sale.createdAt });
+          rows.push({ id: `${sale.id}-extra-${index}`, offer, createdAt: sale.createdAt, origin: sale.origineLead || "" });
         }
       });
       return rows;
@@ -123,6 +123,7 @@ const MyLeadSalesPage: React.FC = () => {
                 <tr>
                   <th className="px-4 py-2">Date & heure</th>
                   <th className="px-4 py-2">Offre</th>
+                  <th className="px-4 py-2">Lead</th>
                 </tr>
               </thead>
               <tbody>
@@ -140,6 +141,9 @@ const MyLeadSalesPage: React.FC = () => {
                     <tr key={row.id} className="border-t border-white/10">
                       <td className="px-4 py-2 whitespace-nowrap">{formatted}</td>
                       <td className="px-4 py-2">{row.offer || "—"}</td>
+                      <td className="px-4 py-2">
+                        {row.origin === "hipto" || row.origin === "dolead" || row.origin === "mm" ? row.origin : "—"}
+                      </td>
                     </tr>
                   );
                 })}

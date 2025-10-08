@@ -1,0 +1,6 @@
+/* Mount the checklist in a blue theme wrapper only on the leads route */
+@import '../../modules/checklist/styles/base.css';
+@import '../../modules/checklist/styles/select-operation-fix.css';
+@import '../../modules/checklist/styles/leads-theme.css';
+
+/* Styles are applied by adding 'cactus-hours-theme leads-modern' classes in the page wrapper */

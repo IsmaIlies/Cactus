@@ -1,10 +1,12 @@
-const LeadsChecklistPage = () => {
+import React from 'react';
+import ChecklistPage from '../../pages/ChecklistPage';
+import '../styles/leadsChecklist.css';
+
+// Render the full checklist UI with the blue theme, full screen
+const LeadsChecklistPage: React.FC = () => {
   return (
-    <div className="text-white space-y-4">
-      <h1 className="text-3xl font-semibold tracking-wide">Checklist Leads</h1>
-      <p className="text-blue-100/80 text-sm">
-        Liste de contrôle dédiée aux opérations Orange Leads.
-      </p>
+    <div className="cactus-hours-theme leads-modern" style={{ minHeight: '100vh' }}>
+      <ChecklistPage themeClass="leads-modern" />
     </div>
   );
 };

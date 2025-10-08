@@ -58,6 +58,15 @@ export async function upsertAgentEntry(userId: string, period: string, entry: Da
   const _docId = buildEntryDocId(userId, entryId);
   const ref = doc(db, HOURS_ENTRIES, _docId);
   const derivedPeriod = (entry.day && entry.day.length >= 7) ? entry.day.slice(0,7) : period;
+  // Stamp mission/region from local storage to classify entries per area (temporary until custom claims)
+  let mission: string | null = null;
+  let region: string | null = null;
+  try {
+    const m = localStorage.getItem('activeMission');
+    const r = localStorage.getItem('activeRegion');
+    mission = (m ? m : 'CANAL_PLUS').toUpperCase();
+    region = r ? r.toUpperCase() : null; // don't default to FR; keep null when unset for inclusive supervisor filtering
+  } catch {}
   const titleCase = (s: any) => {
     const str = ('' + s).trim();
     if (!str) return 'Pending';
@@ -72,6 +81,8 @@ export async function upsertAgentEntry(userId: string, period: string, entry: Da
     status: ('' + (entry as any).status).toLowerCase(),
     userId,
     period: derivedPeriod,
+    mission,
+    region,
     userDisplayName: extras?.userDisplayName ?? null,
     userEmail: extras?.userEmail ?? null,
     rejectionNote: null,
@@ -121,6 +132,15 @@ export async function submitAgentHoursWithUid(userId: string, entry: AgentHoursE
   const entryId = entry.entryId ?? entry.day;
   const _docId = buildEntryDocId(userId, entryId);
   const ref = doc(db, HOURS_ENTRIES, _docId);
+  // Stamp mission/region from local storage
+  let mission: string | null = null;
+  let region: string | null = null;
+  try {
+    const m = localStorage.getItem('activeMission');
+    const r = localStorage.getItem('activeRegion');
+    mission = (m ? m : 'CANAL_PLUS').toUpperCase();
+    region = r ? r.toUpperCase() : null; // don't default to FR
+  } catch {}
   const payload: DocumentData = {
     id: entryId,
     period,
@@ -136,6 +156,8 @@ export async function submitAgentHoursWithUid(userId: string, entry: AgentHoursE
     reviewStatus: 'Pending', // exact casing as Admin contract
     hasDispute: !!entry.hasDispute,
     userId,
+    mission,
+    region,
     userDisplayName: entry.userDisplayName ?? null,
     userEmail: entry.userEmail ?? null,
     supervisor: entry.supervisor || '',
@@ -181,6 +203,11 @@ export async function approveEntry(docId: string) {
 export async function rejectEntry(docId: string) {
   const ref = doc(db, HOURS_ENTRIES, docId);
   await updateDoc(ref, { reviewStatus: EntryReviewStatus.Rejected, status: 'draft', updatedAt: serverTimestamp() } as DocumentData);
+}
+
+export async function revertToDraft(docId: string) {
+  const ref = doc(db, HOURS_ENTRIES, docId);
+  await updateDoc(ref, { status: 'draft', reviewStatus: EntryReviewStatus.Pending, updatedAt: serverTimestamp() } as DocumentData);
 }
 
 export async function deleteEntry(docId: string) {

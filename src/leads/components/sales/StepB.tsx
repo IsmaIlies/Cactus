@@ -80,8 +80,9 @@ const StepB: React.FC<StepBProps> = ({
             className={`${inputClass} mt-1`}
           >
             <option value="">Sélectionner une offre</option>
-            {OFFER_LABELS.map((label) => (
-              <option key={label} value={label}>
+            {OFFER_LABELS.map((label, idx) => (
+              // Some labels can be duplicates; ensure unique React keys by suffixing with index
+              <option key={`${label}-${idx}`} value={label}>
                 {label}
               </option>
             ))}
