@@ -195,6 +195,60 @@ exports.registerUser = onRequest({ region: "europe-west9" }, (req, res) => {
   });
 });
 
+exports.disableUsers = onRequest({ region: "europe-west9" }, async (req, res) => {
+  res.set("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Vary", "Origin");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).send("");
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Méthode non autorisée" });
+  }
+
+  const { userIds } = req.body || {};
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return res.status(400).json({ error: "Liste d'utilisateurs invalide" });
+  }
+
+  const uniqueIds = Array.from(
+    new Set(
+      userIds.filter((value) => typeof value === "string" && value.trim().length > 0)
+    )
+  );
+
+  if (uniqueIds.length === 0) {
+    return res.status(400).json({ error: "Aucun utilisateur à traiter" });
+  }
+
+  try {
+    const disabled = [];
+    for (const uid of uniqueIds) {
+      await admin.auth().updateUser(uid, { disabled: true });
+      await admin
+        .firestore()
+        .collection("users")
+        .doc(uid)
+        .set(
+          {
+            disabled: true,
+            disabledAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      disabled.push(uid);
+    }
+
+    return res.status(200).json({ success: true, disabled: disabled.length, userIds: disabled });
+  } catch (error) {
+    console.error("[disableUsers] error", error);
+    return res.status(500).json({ error: error.message, rawCode: error.code });
+  }
+});
+
 // Callable équivalent pour correspondre au client (httpsCallable)
 exports.registerUserCallable = onCall({ region: "europe-west9" }, async (req) => {
   const { email, password, firstName, lastName } = req.data || {};
@@ -236,6 +290,182 @@ exports.registerUserCallable = onCall({ region: "europe-west9" }, async (req) =>
     const code = error.code || "internal";
     const message = error.message || "Erreur interne";
     throw new HttpsError("internal", message, { rawCode: code });
+  }
+});
+
+exports.disableUsersCallable = onCall({ region: "europe-west9" }, async (req) => {
+  const { userIds } = req.data || {};
+
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    throw new HttpsError("invalid-argument", "Liste d'utilisateurs invalide");
+  }
+
+  const uniqueIds = Array.from(
+    new Set(
+      userIds.filter((value) => typeof value === "string" && value.trim().length > 0)
+    )
+  );
+
+  if (uniqueIds.length === 0) {
+    throw new HttpsError("invalid-argument", "Aucun utilisateur à traiter");
+  }
+
+  try {
+    const disabled = [];
+    const notFound = [];
+    const failed = [];
+    for (const uid of uniqueIds) {
+      try {
+        await admin.auth().updateUser(uid, { disabled: true });
+      } catch (error) {
+        if (error?.code === "auth/user-not-found") {
+          notFound.push(uid);
+        } else {
+          failed.push({ uid, code: error?.code, message: error?.message });
+          continue;
+        }
+      }
+      await admin
+        .firestore()
+        .collection("users")
+        .doc(uid)
+        .set(
+          {
+            disabled: true,
+            disabledAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      disabled.push(uid);
+    }
+
+    return { success: true, disabled: disabled.length, userIds: disabled, notFound, failed };
+  } catch (error) {
+    console.error("[disableUsersCallable] error", error);
+    throw new HttpsError("internal", error?.message || "Erreur serveur", {
+      rawCode: error?.code,
+    });
+  }
+});
+
+const LEADS_MISSION = "ORANGE_LEADS";
+
+const normalizeString = (value, { maxLength } = {}) => {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (maxLength && trimmed.length > maxLength) {
+    return trimmed.slice(0, maxLength);
+  }
+  return trimmed;
+};
+
+const sanitizeAdditionalOffers = (input) => {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((offer) => {
+      const intituleOffre = normalizeString(offer?.intituleOffre, { maxLength: 150 });
+      const referencePanier = normalizeString(offer?.referencePanier, { maxLength: 120 });
+      if (!intituleOffre || !referencePanier) return null;
+      return { intituleOffre, referencePanier };
+    })
+    .filter(Boolean);
+};
+
+const categorizeLeadOffer = (typeOffre) => {
+  const type = normalizeString(typeOffre).toLowerCase();
+  const zero = { mobile: 0, box: 0, mobileSosh: 0, internetSosh: 0 };
+  switch (type) {
+    case "mobile":
+      return { ...zero, mobile: 1 };
+    case "internet":
+      return { ...zero, box: 1 };
+    case "internetsosh":
+      return { ...zero, internetSosh: 1 };
+    case "mobilesosh":
+      return { ...zero, mobileSosh: 1 };
+    case "internet + mobile":
+      return { ...zero, mobile: 1, box: 1 };
+    case "internetsosh + mobilesosh":
+      return { ...zero, internetSosh: 1, mobileSosh: 1 };
+    default:
+      return zero;
+  }
+};
+
+exports.submitLeadSale = onCall({ region: "europe-west9" }, async (req) => {
+  const { auth } = req;
+  const data = req.data || {};
+
+  if (!auth || !auth.uid) {
+    throw new HttpsError("unauthenticated", "Authentification requise pour enregistrer une vente.");
+  }
+
+  const numeroId = normalizeString(data.numeroId, { maxLength: 120 });
+  const typeOffre = normalizeString(data.typeOffre, { maxLength: 120 });
+  const ficheDuJour = normalizeString(data.ficheDuJour, { maxLength: 80 }).toLowerCase();
+  const origineLead = normalizeString(data.origineLead, { maxLength: 30 }).toLowerCase();
+  const telephoneRaw = normalizeString(data.telephone, { maxLength: 40 });
+  const telephone = telephoneRaw.replace(/\s+/g, "");
+  const dateTechnicien = normalizeString(data.dateTechnicien || "", { maxLength: 20 }) || null;
+  const intituleOffre = normalizeString(data.intituleOffre, { maxLength: 200 });
+  const referencePanier = normalizeString(data.referencePanier, { maxLength: 120 });
+  const additionalOffers = sanitizeAdditionalOffers(data.additionalOffers);
+
+  if (!numeroId) {
+    throw new HttpsError("invalid-argument", "Le numéro d'identification est requis.");
+  }
+  if (!typeOffre) {
+    throw new HttpsError("invalid-argument", "Le type d'offre est requis.");
+  }
+  if (!intituleOffre) {
+    throw new HttpsError("invalid-argument", "L'intitulé de l'offre est requis.");
+  }
+  if (!referencePanier) {
+    throw new HttpsError("invalid-argument", "La référence panier est requise.");
+  }
+  if (!ficheDuJour) {
+    throw new HttpsError("invalid-argument", "La fiche du jour est requise.");
+  }
+  if (!origineLead || !["hipto", "dolead", "mm"].includes(origineLead)) {
+    throw new HttpsError("invalid-argument", "Origine du lead invalide.");
+  }
+  if (!telephone) {
+    throw new HttpsError("invalid-argument", "Le numéro de téléphone est requis.");
+  }
+
+  const categorized = categorizeLeadOffer(typeOffre);
+
+  const doc = {
+    numeroId,
+    typeOffre,
+    dateTechnicien,
+    intituleOffre,
+    referencePanier,
+    additionalOffers,
+    ficheDuJour,
+    origineLead,
+    telephone,
+    mission: LEADS_MISSION,
+    mobileCount: categorized.mobile,
+    boxCount: categorized.box,
+    mobileSoshCount: categorized.mobileSosh,
+    internetSoshCount: categorized.internetSosh,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdBy: {
+      userId: auth.uid,
+      displayName: normalizeString(auth.token?.name || auth.token?.displayName || "", { maxLength: 120 }),
+      email: normalizeString(auth.token?.email || "", { maxLength: 160 }),
+    },
+  };
+
+  try {
+    const ref = await admin.firestore().collection("leads_sales").add(doc);
+    return { success: true, id: ref.id };
+  } catch (error) {
+    console.error("[submitLeadSale] failed", error);
+    throw new HttpsError("internal", "Enregistrement impossible pour le moment.", {
+      rawCode: error?.code,
+    });
   }
 });
 

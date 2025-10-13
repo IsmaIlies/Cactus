@@ -150,7 +150,7 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-  const { success, message } = await login(email, password);
+      const { success, message } = await login(email, password);
       if (success) {
         localStorage.setItem('activeRegion', selectedRegion);
         localStorage.setItem('activeMission', mission);
@@ -203,7 +203,6 @@ const LoginPage = () => {
       setLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-cactus-600 to-cactus-800">
       <div className="w-full max-w-md">
@@ -471,48 +470,17 @@ const LoginPage = () => {
             </button>
           </form>
 
-          <div className="mt-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">ou</span>
-              </div>
-            </div>
-
+          <div className="mt-8 pb-2 flex justify-center">
             <button
               type="button"
-              onClick={handleMicrosoftLogin}
-              disabled={loading}
-              className="mt-4 w-full btn-secondary py-3 flex items-center justify-center"
+              onClick={() => navigate("/admin/login")}
+              className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/15 bg-black/85 px-7 py-3 text-sm font-semibold uppercase tracking-[0.35em] text-white shadow-[0_24px_60px_rgba(0,0,0,0.55)] transition-all duration-300 hover:scale-105 hover:border-white/35 hover:bg-black focus:outline-none focus:ring-2 focus:ring-white/40"
             >
-              <svg
-                className="h-5 w-5 mr-2"
-                viewBox="0 0 21 21"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M10 1H1V10H10V1Z" fill="#F25022" />
-                <path d="M20 1H11V10H20V1Z" fill="#7FBA00" />
-                <path d="M10 11H1V20H10V11Z" fill="#00A4EF" />
-                <path d="M20 11H11V20H20V11Z" fill="#FFB900" />
-              </svg>
-              Se connecter avec Microsoft
+              <span className="pointer-events-none absolute inset-0 -translate-y-full bg-gradient-to-br from-white/45 via-white/10 to-transparent opacity-0 transition-all duration-500 ease-out group-hover:translate-y-0 group-hover:opacity-100" />
+              <span>ADMIN</span>
+              <span className="h-px w-8 bg-white/40" aria-hidden="true" />
+              <span className="text-[10px] tracking-[0.2em] text-white/60 normal-case">Accès sécurisé</span>
             </button>
-
-          </div>
-
-          <div className="mt-6 text-center pb-2">
-            <p className="text-sm text-gray-600">
-              Vous n'avez pas de compte ?{" "}
-              <Link
-                to="/register"
-                className="font-medium text-cactus-600 hover:text-cactus-500"
-              >
-                S'inscrire
-              </Link>
-            </p>
           </div>
           </div>{/* fin scroll */}
         </div>

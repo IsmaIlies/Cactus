@@ -1,13 +1,12 @@
 import {
   collection,
-  addDoc,
-  serverTimestamp,
   onSnapshot,
   query,
   where,
   Timestamp,
   orderBy,
 } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "../../firebase";
 import type { AdditionalOffer } from "../types/sales";
 
@@ -59,49 +58,19 @@ export const categorize = (typeOffre: string | undefined | null) => {
 };
 
 export const saveLeadSale = async (payload: LeadSaleInput) => {
-  const baseCategory = categorize(payload.typeOffre);
-  const mobileCount = baseCategory.mobile;
-  const boxCount = baseCategory.internet;
-  const mobileSoshCount = baseCategory.mobileSosh;
-  const internetSoshCount = baseCategory.internetSosh;
-
-  const docRef = collection(db, COLLECTION_PATH);
-  const fullDoc = {
-    ...payload,
-    userId: payload.createdBy?.userId || null,
+  const functions = getFunctions(undefined, "europe-west9");
+  const submitLeadSale = httpsCallable(functions, "submitLeadSale");
+  await submitLeadSale({
+    numeroId: payload.numeroId,
+    typeOffre: payload.typeOffre,
+    dateTechnicien: payload.dateTechnicien,
+    intituleOffre: payload.intituleOffre,
+    referencePanier: payload.referencePanier,
     additionalOffers: payload.additionalOffers,
-    dateTechnicien: payload.dateTechnicien ?? null,
+    ficheDuJour: payload.ficheDuJour,
+    origineLead: payload.origineLead,
     telephone: payload.telephone,
-    mission: missionFilter,
-    mobileCount,
-    boxCount,
-    mobileSoshCount,
-    internetSoshCount,
-    createdAt: serverTimestamp(),
-    createdBy: payload.createdBy || null,
-  } as const;
-
-  try {
-    await addDoc(docRef, fullDoc as any);
-  } catch (err: any) {
-    if (err?.code === 'permission-denied') {
-      // eslint-disable-next-line no-console
-      console.warn('[leads] fullDoc denied by rules, retrying with minimal doc');
-      const minimalDoc = {
-        numeroId: payload.numeroId,
-        typeOffre: payload.typeOffre,
-        telephone: payload.telephone,
-        origineLead: payload.origineLead,
-        mission: missionFilter,
-        mobileCount,
-        boxCount,
-        createdAt: serverTimestamp(),
-      } as const;
-      await addDoc(docRef, minimalDoc as any);
-    } else {
-      throw err;
-    }
-  }
+  });
 };
 
 export type LeadKpiSnapshot = {
