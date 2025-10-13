@@ -22,7 +22,7 @@ const TeamSales: React.FC<TeamSalesProps> = ({ members }) => {
         <div className="space-y-3">
           {activeSellers.map((member, index) => (
             <div key={index} className="flex items-center justify-between">
-              <span className="text-sm font-medium">{member.name}</span>
+              <span className="text-sm font-medium text-gray-900">{member.name}</span>
               <span className="text-sm font-medium text-cactus-600">
                 {member.sales} vente{member.sales > 1 ? "s" : ""}
               </span>

@@ -1,5 +1,6 @@
 // ... toutes les autres importations restent inchangées
 import React, { useState, useEffect } from "react";
+import LeadsSalesTable from "../leads/components/LeadsSalesTable";
 import { db } from "../firebase";
 import { useRegion } from '../contexts/RegionContext';
 import {
@@ -49,6 +50,11 @@ interface SaleFormData {
 }
 
 const SalesPage = () => {
+  // Permet de basculer l'onglet Ventes entre Canal+ (par défaut) et LEADS
+  const [mode, setMode] = useState<'canal' | 'leads'>(() => {
+    try { return (localStorage.getItem('salesMode') as 'canal' | 'leads') || 'canal'; } catch { return 'canal'; }
+  });
+  useEffect(() => { try { localStorage.setItem('salesMode', mode); } catch {} }, [mode]);
   const { region } = useRegion();
   const [formData, setFormData] = useState<SaleFormData>({
     orderNumber: "",
@@ -395,8 +401,35 @@ const filteredSales = normalizedQuery
     return sortDirection === "asc" ? "↑" : "↓";
   };
 
+  if (mode === 'leads') {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Ventes — LEADS</h1>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Mode:</span>
+            <select value={mode} onChange={e => setMode(e.target.value as any)} className="border rounded px-2 py-1 text-sm">
+              <option value="canal">Canal+</option>
+              <option value="leads">Leads</option>
+            </select>
+          </div>
+        </div>
+        <LeadsSalesTable />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Mode:</span>
+          <select value={mode} onChange={e => setMode(e.target.value as any)} className="border rounded px-2 py-1 text-sm">
+            <option value="canal">Canal+</option>
+            <option value="leads">Leads</option>
+          </select>
+        </div>
+      </div>
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">
           Nouvelle Vente

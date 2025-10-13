@@ -18,8 +18,9 @@
     ],
     "rewrites": [
       {
-        "source": "/api/justwatch",
-        "function": "justwatchProxy"
+      "source": "/api/justwatch",
+      "function": "justwatchProxy",
+      "functionRegion": "europe-west9"
       },
       {
         "source": "/auth/action",

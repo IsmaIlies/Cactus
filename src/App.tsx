@@ -32,6 +32,7 @@ import SupervisorSales from "./supervisor/SupervisorSales";
 import SupervisorChecklist from "./supervisor/SupervisorChecklist";
 import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
 import SupervisorArchives from "./supervisor/SupervisorArchives";
+import SupervisorImport from "./supervisor/SupervisorImport";
 
 function App() {
   return (
@@ -87,6 +88,7 @@ function App() {
           <Route index element={<SupervisorDashboard />} />
           <Route path="presence" element={<SupervisorPresencePage />} />
           <Route path="ventes" element={<SupervisorSales />} />
+          <Route path="import" element={<SupervisorImport />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />
         </Route>

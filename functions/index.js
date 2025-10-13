@@ -112,7 +112,9 @@ exports.justwatchProxy = onRequest({ region: 'europe-west9', timeoutSeconds: 15,
     const contentType = (req.headers['content-type'] || '').toLowerCase();
     let bodyText = req.rawBody ? req.rawBody.toString('utf8') : '';
     if (!bodyText) bodyText = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+    console.log('[justwatchProxy] Body reçu:', bodyText.slice(0, 500));
     if (bodyText.length > 200_000) {
+      console.error('[justwatchProxy] Payload trop volumineux:', bodyText.length);
       throw new Error('Payload trop volumineux');
     }
     let parsed;
@@ -121,6 +123,7 @@ exports.justwatchProxy = onRequest({ region: 'europe-west9', timeoutSeconds: 15,
       if (!parsed && typeof req.body === 'object') parsed = req.body;
     }
     if (!parsed || !parsed.query) {
+      console.error('[justwatchProxy] Champ query manquant dans le body:', parsed);
       return res.status(400).set('Access-Control-Allow-Origin', allowOrigin).json({ error: 'Requête GraphQL invalide (champ query manquant)' });
     }
 
@@ -135,6 +138,7 @@ exports.justwatchProxy = onRequest({ region: 'europe-west9', timeoutSeconds: 15,
     });
 
     const text = await upstreamResp.text();
+    console.log('[justwatchProxy] Status JustWatch:', upstreamResp.status, 'Réponse:', text.slice(0, 500));
     res.set({
       'Access-Control-Allow-Origin': allowOrigin,
       'Content-Type': upstreamResp.headers.get('content-type') || 'application/json',
@@ -142,9 +146,9 @@ exports.justwatchProxy = onRequest({ region: 'europe-west9', timeoutSeconds: 15,
     });
     return res.status(upstreamResp.status).send(text);
   } catch (e) {
-    console.error('[justwatchProxy] Error', e);
+    console.error('[justwatchProxy] Error', e && e.stack ? e.stack : e);
     res.set('Access-Control-Allow-Origin', origin || '*');
-    return res.status(500).json({ error: 'Proxy failure', details: e.message });
+    return res.status(500).json({ error: 'Proxy failure', details: e && e.message ? e.message : String(e), stack: e && e.stack ? e.stack : undefined });
   }
 });
 

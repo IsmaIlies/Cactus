@@ -96,9 +96,94 @@ const SupervisorSales: React.FC = () => {
   const [sales, setSales] = React.useState<Sale[]>([]);
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
 
+  // ===== LEADS state & helpers =====
+  type LeadRow = {
+    id: string;
+    createdAt: Date | null;
+    email: string | null;
+    displayName: string | null;
+    numeroId: string | null;
+    typeOffre: string | null;
+    intituleOffre: string | null;
+    referencePanier: string | null;
+    codeAlf: string | null;
+    ficheDuJour: string | null;
+    origineLead: string | null;
+    dateTechnicien: string | null;
+    telephone: string | null;
+  };
+  // En LEADS: tableau visible détaillé (toutes colonnes) et CSV au format demandé
+  const LEADS_CSV_HEADERS = [
+    "Type d'offre",
+    "Intitulé de l'offre (jaune)",
+    'Référence du panier',
+    'CODE ALF',
+    'FICHE DU JOUR',
+    'ORIGINE LEADS',
+    'Date technicien',
+    'Numéro de téléphone'
+  ] as const;
+  const LEADS_TABLE_HEADERS = [
+    'ID', 'Heure de début', 'Heure de fin', 'Adresse de messagerie', 'Nom', 'DID', "Type d'offre",
+    "Intitulé de l'offre (jaune)", 'Référence du panier', 'CODE ALF', 'FICHE DU JOUR', 'ORIGINE LEADS', 'Date technicien', 'Numéro de téléphone de la fiche'
+  ] as const;
+  const toCsv = (rows: LeadRow[]) => {
+    const lines: string[] = [LEADS_CSV_HEADERS.join(';')];
+    for (const r of rows) {
+      const vals = [
+        r.typeOffre || '',
+        r.intituleOffre || '',
+        r.referencePanier || '',
+        r.codeAlf || '',
+        r.ficheDuJour || '',
+        r.origineLead || '',
+        r.dateTechnicien || '',
+        r.telephone || ''
+      ];
+      const esc = vals.map(raw => {
+        const v = String(raw ?? '');
+        return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+      });
+      lines.push(esc.join(';'));
+    }
+    return '\uFEFF' + lines.join('\r\n');
+  };
+  const [leadsRows, setLeadsRows] = React.useState<LeadRow[]>([]);
+  const [leadsLoading, setLeadsLoading] = React.useState<boolean>(false);
+  const [leadsError, setLeadsError] = React.useState<string | null>(null);
+  const [leadsUsingFallback, setLeadsUsingFallback] = React.useState<boolean>(false);
+  // Filtres LEADS côté client (offre + télévendeur)
+  const [selectedLeadOffers, setSelectedLeadOffers] = React.useState<string[]>([]);
+  const [selectedLeadSellers, setSelectedLeadSellers] = React.useState<string[]>([]);
+  const leadSellerLabel = (r: LeadRow) => (r.displayName || r.email || '—');
+  const availableLeadOffers = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of leadsRows) { const v = (r.typeOffre || '').trim(); if (v) set.add(v); }
+    return Array.from(set).sort((a,b)=>a.localeCompare(b,'fr'));
+  }, [leadsRows]);
+  const availableLeadSellers = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of leadsRows) { const v = leadSellerLabel(r); if (v && v !== '—') set.add(v); }
+    return Array.from(set).sort((a,b)=>a.localeCompare(b,'fr'));
+  }, [leadsRows]);
+  const filteredLeadsRows = React.useMemo(() => {
+    // La période est déjà gérée par la requête Firestore (start/end) et par le fallback.
+    return leadsRows.filter(r => {
+      const offerOk = selectedLeadOffers.length === 0 || (r.typeOffre && selectedLeadOffers.includes(r.typeOffre));
+      if (!offerOk) return false;
+      if (selectedLeadSellers.length > 0) {
+        const lbl = leadSellerLabel(r);
+        if (!selectedLeadSellers.includes(lbl)) return false;
+      }
+      return true;
+    });
+  }, [leadsRows, selectedLeadOffers, selectedLeadSellers]);
+  const leadsCount = filteredLeadsRows.length;
+
+  // Si on est en mode LEADS, on ne branche pas l'abonnement Canal+
   // Abonnement temps réel aux ventes de la région sélectionnée (FR par défaut côté superviseur Canal+)
   React.useEffect(() => {
-    if (!region) return; // LEADS non géré ici
+    if (!region) return; // LEADS: on sort, rendu géré plus bas
     setLoading(true); setError(null); setUsingFallback(false);
     const startDate = start ? startOfDay(new Date(start)) : startOfDay(defaultStart);
     const endDateBase = end ? startOfDay(new Date(end)) : startOfDay(new Date());
@@ -161,6 +246,84 @@ const SupervisorSales: React.FC = () => {
 
     return () => { cancelled = true; if (unsubPrimary) unsubPrimary(); if (unsubFallback) unsubFallback(); };
   }, [region, start, end, sortOrder]);
+
+  // Abonnement LEADS (leads_sales)
+  React.useEffect(() => {
+    if (!isLeads) return;
+    setLeadsLoading(true); setLeadsError(null); setLeadsUsingFallback(false);
+    const startDate = start ? startOfDay(new Date(start)) : startOfDay(defaultStart);
+    const endDateBase = end ? startOfDay(new Date(end)) : startOfDay(new Date());
+    const endExclusive = addDays(endDateBase, 1);
+
+    let cancelled = false;
+    let unsubPrimary: (() => void) | null = null;
+    let unsubFallback: (() => void) | null = null;
+
+    const mapDoc = (d: any): LeadRow => {
+      const data = d.data() as any;
+      const ts: Timestamp | null = data?.createdAt ?? null;
+      const createdAt = ts ? ts.toDate() : null;
+      return {
+        id: d.id,
+        createdAt,
+        email: data?.createdBy?.email ?? null,
+        displayName: data?.createdBy?.displayName ?? null,
+        numeroId: data?.numeroId ?? null,
+        typeOffre: data?.typeOffre ?? null,
+        intituleOffre: data?.intituleOffre ?? null,
+        referencePanier: data?.referencePanier ?? null,
+        codeAlf: data?.codeAlf ?? null,
+        ficheDuJour: data?.ficheDuJour ?? null,
+        origineLead: data?.origineLead ?? null,
+        dateTechnicien: data?.dateTechnicien ?? null,
+        telephone: data?.telephone ?? null,
+      };
+    };
+
+    const startFallback = () => {
+      setLeadsUsingFallback(true);
+      const fb = fsQuery(collection(db, 'leads_sales'), where('mission','==','ORANGE_LEADS'));
+      unsubFallback = onSnapshot(fb, {
+        next: (snap) => {
+          if (cancelled) return;
+          const list = snap.docs.map(mapDoc)
+            .filter(r => {
+              if (!r.createdAt) return false;
+              return r.createdAt >= startDate && r.createdAt < endExclusive;
+            })
+            .sort((a,b) => (b.createdAt?.getTime()||0) - (a.createdAt?.getTime()||0));
+          setLeadsRows(list);
+          setLeadsLoading(false);
+        },
+        error: (e) => { if (cancelled) return; setLeadsError(e?.message || 'Erreur chargement LEADS'); setLeadsLoading(false); }
+      });
+    };
+
+    const qPrimary = fsQuery(
+      collection(db, 'leads_sales'),
+      where('mission','==','ORANGE_LEADS'),
+      where('createdAt','>=', Timestamp.fromDate(startDate)),
+      where('createdAt','<', Timestamp.fromDate(endExclusive)),
+      orderBy('createdAt','desc')
+    );
+    unsubPrimary = onSnapshot(qPrimary, {
+      next: (snap) => {
+        if (cancelled) return;
+        const list = snap.docs.map(mapDoc);
+        setLeadsRows(list);
+        setLeadsLoading(false);
+      },
+      error: (e) => {
+        if (cancelled) return;
+        const msg = String(e?.message || '');
+        const isIndexErr = msg.toLowerCase().includes('requires an index') || msg.toLowerCase().includes('index');
+        if (isIndexErr) { try { unsubPrimary && unsubPrimary(); } catch {} startFallback(); }
+        else { setLeadsError(e?.message || 'Erreur chargement LEADS'); setLeadsLoading(false); }
+      }
+    });
+
+    return () => { cancelled = true; if (unsubPrimary) unsubPrimary(); if (unsubFallback) unsubFallback(); };
+  }, [isLeads, start, end]);
 
   // Dériver les vendeurs disponibles
   const availableSellers = React.useMemo(() => {
@@ -276,10 +439,150 @@ const SupervisorSales: React.FC = () => {
   }, [baseAfterOfferSeller]);
 
 
+  // Vue LEADS: pas de filtres Canal+, affiche le tableau LEADS demandé
+  if (isLeads) {
+    return (
+      <div className="relative">
+        <div className="space-y-4 animate-fade-in">
+          <p className="text-slate-300">Ventes Leads (leads_sales) — temps réel</p>
+
+          {/* KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
+              <p className="text-blue-200 text-sm">Ventes LEADS listées</p>
+              <p className="text-3xl font-extrabold text-white">{leadsLoading ? '…' : leadsCount}</p>
+              {leadsUsingFallback && <div className="text-[11px] text-blue-300 mt-1">Affichage optimisé (index en cours)</div>}
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
+              <p className="text-blue-200 text-sm">Période</p>
+              <div className="text-sm text-blue-100">{start || '—'} → {end || new Date().toISOString().slice(0,10)}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Filtres LEADS (période + type d'offre + télévendeurs) */}
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-white">Filtres</h3>
+                <button onClick={() => { setStart(defaultStart.toISOString().slice(0,10)); setEnd(''); setSelectedLeadOffers([]); setSelectedLeadSellers([]); }} className="text-rose-300 text-sm hover:underline">Effacer tout</button>
+              </div>
+              <div>
+                <p className="text-blue-200 text-sm mb-2">Période</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="date" value={start} onChange={e => setStart(e.target.value)} className="bg-slate-800 border border-white/10 text-slate-100 rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-cactus-500" />
+                  <input type="date" value={end} onChange={e => setEnd(e.target.value)} className="bg-slate-800 border border-white/10 text-slate-100 rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-cactus-500" />
+                </div>
+              </div>
+              <div>
+                <p className="text-blue-200 text-sm mb-2">Type d'offre</p>
+                <div className="flex flex-wrap gap-2">
+                  {availableLeadOffers.map(opt => {
+                    const active = selectedLeadOffers.includes(opt);
+                    return (
+                      <button key={opt} onClick={() => setSelectedLeadOffers(prev => active ? prev.filter(x => x!==opt) : [...prev, opt])}
+                        className={`px-3 py-1 rounded-full text-sm border transition ${active ? 'bg-cactus-600 text-white border-cactus-500 shadow-sm' : 'bg-white/5 border-white/10 text-blue-100 hover:bg-white/10'}`}>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                  {availableLeadOffers.length === 0 && <div className="text-blue-300 text-sm">—</div>}
+                </div>
+              </div>
+              <div>
+                <p className="text-blue-200 text-sm mb-2">Télévendeurs</p>
+                <div className="max-h-56 overflow-auto pr-1 scroll-beauty">
+                  {availableLeadSellers.map(name => {
+                    const active = selectedLeadSellers.includes(name);
+                    return (
+                      <label key={name} className="flex items-center gap-2 py-1 text-sm text-slate-100">
+                        <input type="checkbox" checked={active} onChange={() => setSelectedLeadSellers(prev => active ? prev.filter(x => x!==name) : [...prev, name])} className="accent-cactus-600" />
+                        <span className={`${active ? 'text-white' : ''}`}>{name}</span>
+                      </label>
+                    );
+                  })}
+                  {availableLeadSellers.length === 0 && <div className="text-blue-300 text-sm">—</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Liste LEADS */}
+            <div className="lg:col-span-2 rounded-lg border border-white/10 bg-white/5 p-0 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <div className="px-4 pt-4">
+                  <h3 className="font-semibold text-white">Ventes LEADS ({leadsCount})</h3>
+                  <div className="text-xs text-blue-200">{leadsCount} ventes LEADS trouvées</div>
+                </div>
+                <div className="px-4 pt-4">
+                  <button
+                    onClick={() => {
+                      const csv = toCsv(filteredLeadsRows);
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a'); a.href = url;
+                      const now = new Date(); const pad = (n:number)=>n.toString().padStart(2,'0');
+                      a.download = `leads_sales_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.csv`;
+                      a.click(); URL.revokeObjectURL(url);
+                    }}
+                    disabled={leadsRows.length===0}
+                    className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                    title={leadsRows.length===0 ? 'Aucune donnée à exporter' : 'Exporter en CSV'}
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-900/70 backdrop-blur border-b border-white/10">
+                    <tr className="text-blue-200">
+                      {LEADS_TABLE_HEADERS.map((h) => (
+                        <th key={h} className="text-left p-3 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leadsLoading && Array.from({length:8}).map((_,i)=> (
+                      <tr key={i} className="border-t border-white/10">
+                        {LEADS_TABLE_HEADERS.map((_,j)=>(<td key={j} className="p-3 text-blue-300">…</td>))}
+                      </tr>
+                    ))}
+                    {!leadsLoading && filteredLeadsRows.map((r) => (
+                      <tr key={r.id} className="border-t border-white/10 hover:bg-white/5 even:bg-white/[0.03]">
+                        <td className="p-3 text-white whitespace-nowrap">{r.id}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.createdAt ? r.createdAt.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap"></td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.email || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.displayName || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.numeroId || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.typeOffre || '—'}</td>
+                        <td className="p-3 whitespace-nowrap"><span className="bg-yellow-200/30 text-yellow-100 px-2 py-0.5 rounded text-[13px]">{r.intituleOffre || '—'}</span></td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.referencePanier || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.codeAlf || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.ficheDuJour || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.origineLead || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.dateTechnicien || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{r.telephone || '—'}</td>
+                      </tr>
+                    ))}
+                    {!leadsLoading && filteredLeadsRows.length === 0 && (
+                      <tr className="border-t border-white/10"><td className="p-3 text-blue-200" colSpan={LEADS_TABLE_HEADERS.length}>Aucune vente LEADS pour la période.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-xs text-blue-200 mt-2 px-4 pb-4">{leadsCount} ventes LEADS trouvées</div>
+              {leadsError && <div className="text-rose-300 text-xs px-4 pb-3">{leadsError}</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <div className="space-y-4 animate-fade-in">
-        <p className="text-slate-300">{isLeads ? 'Ventes Leads (leads_sales)' : `Ventes Canal+ (${region || ''})`} — temps réel</p>
+        <p className="text-slate-300">{`Ventes Canal+ (${region || ''})`} — temps réel</p>
 
       {/* KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

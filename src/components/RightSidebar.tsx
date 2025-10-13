@@ -1,6 +1,5 @@
 import React from "react";
 import QuickAction from "./QuickAction";
-import AlertsAnnouncements from "./AlertsAnnouncements";
 import { Phone, BarChart2, Users, Clock, ChevronLeft } from "lucide-react";
 
 interface RightSidebarProps {
@@ -9,34 +8,7 @@ interface RightSidebarProps {
 }
 
 const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle }) => {
-  // Mock data for alerts
-  const alertsData: {
-    id: string;
-    type: "error" | "info" | "warning" | "success";
-    message: string;
-    date: string;
-  }[] = [
-    /*{
-      id: "1",
-      type: "info",
-      message: 'Nouvelle campagne "Été 2024" disponible.',
-      date: "2 avril 2024",
-    },
-    {
-      id: "2",
-      type: "warning",
-      message:
-        "Objectif mensuel atteint à 70% seulement. Encore 10 jours pour le compléter.",
-      date: "3 avril 2024",
-    },
-    {
-      id: "3",
-      type: "success",
-      message:
-        "Vous avez dépassé votre objectif d'appels hebdomadaire. Félicitations!",
-      date: "4 avril 2024",
-    },*/
-  ];
+  // (Alertes/annonces désactivées)
 
   return (
     <div
@@ -65,7 +37,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle }) => {
           {/*<div className="border-b border-gray-200 pb-6"><AlertsAnnouncements alerts={alertsData} /></div>*/}
           {/* Actions rapides en dessous */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            <h2 className="text-lg font-semibold text-black mb-4">
               Actions supplémentaires
             </h2>
             <div className="grid grid-cols-2 gap-2">

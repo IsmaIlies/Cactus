@@ -21,7 +21,7 @@ const QuickAction: React.FC<QuickActionProps> = ({
       <div className={`${bgColor} p-3 rounded-lg mb-2`}>
         {icon}
       </div>
-      <span className="text-sm font-medium text-center">{title}</span>
+      <span className="text-sm font-medium text-center text-black">{title}</span>
     </div>
   );
 };
