@@ -33,6 +33,7 @@ import SupervisorChecklist from "./supervisor/SupervisorChecklist";
 import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
 import SupervisorArchives from "./supervisor/SupervisorArchives";
 import SupervisorImport from "./supervisor/SupervisorImport";
+import SupervisorLeadsPage from "./pages/SupervisorLeadsPage";
 
 function App() {
   return (
@@ -91,6 +92,8 @@ function App() {
           <Route path="import" element={<SupervisorImport />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />
+          {/* New nested page: Supervisor LEADS page (dashboard + CSV import) */}
+          <Route path="leads-supervision" element={<SupervisorLeadsPage />} />
         </Route>
         <Route
           path="/leads/*"
@@ -105,6 +108,7 @@ function App() {
           <Route path="sales" element={<SalesEntry />} />
           <Route path="checklist" element={<LeadsChecklistPage />} />
         </Route>
+        {/* Supervisor LEADS page is available inside the supervisor layout (nested route) */}
         <Route
           path="/admin/programme"
           element={

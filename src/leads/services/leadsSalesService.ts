@@ -329,26 +329,8 @@ export const subscribeToLeadAgentSummary = (
       (error) => {
         const code = (error as any)?.code;
         if (code === "failed-precondition") {
-          console.warn("subscribeToLeadAgentSummary: index absent/en cours de construction, fallback sans filtre de date");
-          // Fallback without date range/order to avoid composite index requirement
-          try { unsubscribe && unsubscribe(); } catch {}
-          const fbQuery = query(
-            collection(db, COLLECTION_PATH),
-            where("mission", "==", missionFilter),
-            where("createdBy.userId", "==", userId)
-          );
-          unsubscribe = onSnapshot(
-            fbQuery,
-            (snap) => computeAndCallback(snap),
-            (err2) => {
-              if ((err2 as any)?.code === "permission-denied") {
-                console.warn("subscribeToLeadAgentSummary (fallback): accès refusé (auth/règles)", err2);
-              } else {
-                console.error("subscribeToLeadAgentSummary (fallback): erreur snapshot", err2);
-              }
-              callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
-            }
-          );
+          console.warn("subscribeToLeadAgentSummary: index absent/en cours de construction, on évite un fallback large pour économiser les reads");
+          callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
         } else if (code === "permission-denied") {
           console.warn("subscribeToLeadAgentSummary: accès refusé (auth/règles)", error);
           callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
@@ -421,33 +403,9 @@ export const subscribeToLeadMonthlyTotalsAllSources = (
         const code = (error as any)?.code;
         if (code === "failed-precondition") {
           console.warn(
-            "subscribeToLeadMonthlyTotalsAllSources: index absent/en cours de construction, fallback sans filtre de date"
+            "subscribeToLeadMonthlyTotalsAllSources: index absent/en cours de construction, on évite un fallback large pour économiser les reads"
           );
-          try {
-            unsubscribe && unsubscribe();
-          } catch {}
-          const fbQuery = query(
-            collection(db, COLLECTION_PATH),
-            where("mission", "==", missionFilter)
-          );
-          unsubscribe = onSnapshot(
-            fbQuery,
-            (snap) => computeAndCallback(snap, true),
-            (err2) => {
-              if ((err2 as any)?.code === "permission-denied") {
-                console.warn(
-                  "subscribeToLeadMonthlyTotalsAllSources (fallback): accès refusé (auth/règles)",
-                  err2
-                );
-              } else {
-                console.error(
-                  "subscribeToLeadMonthlyTotalsAllSources (fallback): erreur snapshot",
-                  err2
-                );
-              }
-              callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
-            }
-          );
+          callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
         } else if (code === "permission-denied") {
           console.warn(
             "subscribeToLeadMonthlyTotalsAllSources: accès refusé (auth/règles)",
@@ -516,40 +474,10 @@ export const subscribeToRecentLeadSales = (
       if ((error as any)?.code === "permission-denied") {
         console.warn("subscribeToRecentLeadSales: accès refusé (auth/règles)", error);
       } else if ((error as any)?.code === "failed-precondition") {
-        console.warn("subscribeToRecentLeadSales: index manquant, fallback sans orderBy/limit");
-        const fb = query(collection(db, COLLECTION_PATH), where("mission", "==", missionFilter));
-        return onSnapshot(
-          fb,
-          (snap) => {
-            const items = snap.docs
-              .map((doc: any) => {
-                const data = doc.data() as any;
-                const createdAt: Timestamp | null = data?.createdAt ?? null;
-                const originRaw = (data?.origineLead || "").toString().toLowerCase();
-                const origin: "hipto" | "dolead" | "mm" | "" =
-                  originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm" ? (originRaw as any) : "";
-                return {
-                  id: doc.id,
-                  createdAt: createdAt ? createdAt.toDate() : null,
-                  intituleOffre: data?.intituleOffre || "",
-                  typeOffre: data?.typeOffre || "",
-                  origineLead: origin,
-                  agent: data?.createdBy?.displayName || data?.createdBy?.email || "",
-                } as RecentLeadSale;
-              })
-              .sort((a: RecentLeadSale, b: RecentLeadSale) => {
-                const ta = a.createdAt ? a.createdAt.getTime() : 0;
-                const tb = b.createdAt ? b.createdAt.getTime() : 0;
-                return tb - ta;
-              })
-              .slice(0, Math.max(1, Math.min(maxCount || 10, 100)));
-            callback(items);
-          },
-          (err2) => {
-            console.error("subscribeToRecentLeadSales (fallback): erreur snapshot", err2);
-            callback([]);
-          }
+        console.warn(
+          "subscribeToRecentLeadSales: index manquant, on évite un fallback large pour économiser les reads"
         );
+        callback([]);
       } else {
         console.error("subscribeToRecentLeadSales: erreur snapshot", error);
       }
@@ -611,36 +539,8 @@ export const subscribeToLeadAgentSales = (
       (error) => {
         const code = (error as any)?.code;
         if (code === "failed-precondition") {
-          console.warn("subscribeToLeadAgentSales: index absent/en cours de construction, fallback sans filtre de date");
-          try { unsubscribe && unsubscribe(); } catch {}
-          const fbQuery = query(
-            collection(db, COLLECTION_PATH),
-            where("mission", "==", missionFilter),
-            where("createdBy.userId", "==", userId)
-          );
-          unsubscribe = onSnapshot(
-            fbQuery,
-            (snap) => {
-              // Filter by month and sort desc client-side
-              const items = snap.docs
-                .map(mapDoc)
-                .filter((d) => d.createdAt && d.createdAt >= monthStart && d.createdAt < monthEnd)
-                .sort((a, b) => {
-                  const ta = a.createdAt ? a.createdAt.getTime() : 0;
-                  const tb = b.createdAt ? b.createdAt.getTime() : 0;
-                  return tb - ta;
-                });
-              callback(items);
-            },
-            (err2) => {
-              if ((err2 as any)?.code === "permission-denied") {
-                console.warn("subscribeToLeadAgentSales (fallback): accès refusé (auth/règles)", err2);
-              } else {
-                console.error("subscribeToLeadAgentSales (fallback): erreur snapshot", err2);
-              }
-              callback([]);
-            }
-          );
+          console.warn("subscribeToLeadAgentSales: index absent/en cours de construction, on évite un fallback large pour économiser les reads");
+          callback([]);
         } else if (code === "permission-denied") {
           console.warn("subscribeToLeadAgentSales: accès refusé (auth/règles)", error);
           callback([]);

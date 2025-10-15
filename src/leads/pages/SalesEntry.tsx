@@ -9,6 +9,7 @@ import { calcProgress, ratioToColor, isStepValid, getStepFields, stepOrder } fro
 import { saveLeadSale } from "../services/leadsSalesService";
 import { useAuth } from "../../contexts/AuthContext";
 import { auth } from "../../firebase";
+import { getLeadOffersCatalog } from "../services/leadOffersCatalog";
 
 const steps = [
   {
@@ -56,6 +57,8 @@ const SalesEntry: React.FC = () => {
   >({});
   const [submitting, setSubmitting] = React.useState(false);
   const [submissionError, setSubmissionError] = React.useState<string | null>(null);
+  const [offerSuggestions, setOfferSuggestions] = React.useState<string[]>([]);
+  const [offerGroups, setOfferGroups] = React.useState<{ name: string; items: string[] }[] | undefined>(undefined);
 
   const fieldRefs = React.useRef<Record<keyof FormState, HTMLElement | null>>({
     numeroId: null,
@@ -67,6 +70,19 @@ const SalesEntry: React.FC = () => {
     origineLead: null,
     telephone: null,
   });
+
+  // Load offer suggestions once per mount (public read per rules)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const cat = await getLeadOffersCatalog();
+        if (cat && Array.isArray(cat.items)) setOfferSuggestions(cat.items);
+        if (cat?.groups && Array.isArray(cat.groups)) setOfferGroups(cat.groups);
+      } catch (e) {
+        // non bloquant
+      }
+    })();
+  }, []);
 
   const validateField = React.useCallback(
     (field: keyof FormState, value: string, context?: { typeOffre?: string }): string => {
@@ -591,6 +607,8 @@ const SalesEntry: React.FC = () => {
                 onUpdateAdditional={updateAdditionalOffer}
                 onRemoveAdditional={removeAdditionalOffer}
                 disabled={submitting}
+                suggestions={offerSuggestions}
+                groups={offerGroups}
               />
             )}
             {currentStep === 2 && (

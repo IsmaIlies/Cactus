@@ -7,6 +7,7 @@ import type {
   TouchedState,
 } from "../../types/sales";
 import { OFFER_LABELS } from "../../types/sales";
+import Autocomplete from "../common/Autocomplete";
 
 const inputClass =
   "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002FA7] transition";
@@ -30,6 +31,8 @@ type StepBProps = {
   ) => void;
   onRemoveAdditional: (id: string) => void;
   disabled?: boolean;
+  suggestions?: string[];
+  groups?: { name: string; items: string[] }[];
 };
 
 const StepB: React.FC<StepBProps> = ({
@@ -45,7 +48,13 @@ const StepB: React.FC<StepBProps> = ({
   onUpdateAdditional,
   onRemoveAdditional,
   disabled = false,
+  suggestions = [],
+  groups,
 }) => {
+  const finalSuggestions: string[] = React.useMemo(
+    () => (suggestions.length > 0 ? suggestions.slice() : [...OFFER_LABELS]),
+    [suggestions]
+  );
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -55,7 +64,7 @@ const StepB: React.FC<StepBProps> = ({
             Décris précisément l’offre vendue et sa référence panier.
           </p>
         </div>
-        <button
+  <button
           type="button"
           onClick={onAddAdditional}
           disabled={disabled}
@@ -69,24 +78,18 @@ const StepB: React.FC<StepBProps> = ({
       <div className="grid gap-6">
         <div>
           <label htmlFor="intituleOffre" className="text-sm font-medium text-gray-700">
-            Intitulé de l'offre
+            Intitulé de l'offre (Libellé ALF)
           </label>
-          <select
+          <Autocomplete
             id="intituleOffre"
-            ref={registerRef("intituleOffre")}
+            inputRef={registerRef("intituleOffre")}
             value={form.intituleOffre}
-            onChange={(e) => onChange("intituleOffre", e.target.value)}
-            onBlur={() => onBlur("intituleOffre")}
-            className={`${inputClass} mt-1`}
-          >
-            <option value="">Sélectionner une offre</option>
-            {OFFER_LABELS.map((label, idx) => (
-              // Some labels can be duplicates; ensure unique React keys by suffixing with index
-              <option key={`${label}-${idx}`} value={label}>
-                {label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => onChange("intituleOffre", v)}
+            suggestions={finalSuggestions}
+            groups={groups}
+            placeholder="Saisir ou choisir une suggestion"
+            className="mt-1"
+          />
           {touched.intituleOffre && errors.intituleOffre && (
             <p className="mt-1 text-sm text-red-600">{errors.intituleOffre}</p>
           )}
@@ -136,15 +139,16 @@ const StepB: React.FC<StepBProps> = ({
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium text-gray-700">
-                    Intitulé de l'offre
+                    Intitulé de l'offre (Libellé ALF)
                   </label>
-                  <input
+                  <Autocomplete
                     id={`additional-intituleOffre-${offer.id}`}
-                    type="text"
                     value={offer.intituleOffre}
-                    onChange={(e) => onUpdateAdditional(offer.id, "intituleOffre", e.target.value)}
+                    onChange={(v) => onUpdateAdditional(offer.id, "intituleOffre", v)}
+                    suggestions={finalSuggestions}
+                    groups={groups}
                     placeholder="Ex : Fibre 2G, Forfait 150 Go…"
-                    className={`${inputClass} mt-1`}
+                    className="mt-1"
                   />
                   {additionalErrors[offer.id]?.intituleOffre && (
                     <p className="mt-1 text-sm text-red-600">

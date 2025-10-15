@@ -15,30 +15,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import React from "react";
 
-// Utility: normalize various shapes of `user.assigned` into a safe array of strings
-function getAssignedArray(user: any): string[] {
-  if (!user) return [];
-  const a = (user as any).assigned;
-  if (!a) return [];
-  if (Array.isArray(a)) return a.filter(Boolean).map(String);
-  if (typeof a === 'string') return a ? [a] : [];
-  if (typeof a === 'object') {
-    // if it's an object with numeric keys or nested arrays, try to flatten
-    try {
-      // Common case: { 'id1': true, 'id2': true } or { items: [...] }
-      if (Array.isArray((a as any).items)) return (a as any).items.map(String);
-      return Object.keys(a).filter(k => !!a[k]).map(String);
-    } catch (e) {
-      return [];
-    }
-  }
-  return [];
-}
-
-function isCanalSupervisor(user: any): boolean {
-  const assigned = getAssignedArray(user);
-  return assigned.some((s) => typeof s === 'string' && s.toLowerCase().includes('canal'));
-}
+// reserved for future supervisor-specific entries if needed
 
 const Sidebar = () => {
   const { user, logout } = useAuth();
@@ -190,6 +167,7 @@ const Sidebar = () => {
           <DollarSign className="w-5 h-5 mr-3" />
           Ventes
         </NavLink>
+
 
         <NavLink
               to="/checklist"
