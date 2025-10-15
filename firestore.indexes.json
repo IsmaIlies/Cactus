@@ -19,6 +19,24 @@
       ]
     },
     {
+        "collectionGroup": "leads_sales",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "mission", "order": "ASCENDING" },
+          { "fieldPath": "createdAt", "order": "ASCENDING" },
+          { "fieldPath": "__name__", "order": "ASCENDING" }
+        ]
+      },
+      {
+        "collectionGroup": "leads_sales",
+        "queryScope": "COLLECTION",
+        "fields": [
+          { "fieldPath": "mission", "order": "ASCENDING" },
+          { "fieldPath": "createdAt", "order": "DESCENDING" },
+          { "fieldPath": "__name__", "order": "DESCENDING" }
+        ]
+      },
+    {
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
       "fields": [
@@ -63,8 +81,7 @@
         { "fieldPath": "createdAt", "order": "ASCENDING" },
         { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
-    }
-    ,
+    },
     {
       "collectionGroup": "hoursEntries",
       "queryScope": "COLLECTION",

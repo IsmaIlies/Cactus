@@ -126,38 +126,7 @@ const NouveautesPage: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return ()=> window.removeEventListener('keydown', onKey);
   },[]);
-  // FOOT Schedules
-  // (Contenu des grilles : rester statique tant que tu ne fournis pas de source dynamique)
-  const mardi: ScheduleEntry[] = [
-    { time: '18h45', title: 'ATHLETIC BILBAO - ARSENAL', channels: 'CANAL+FOOT / LIVE 2' },
-    { time: '18h45', title: 'PSV EINDHOVEN - SAINT-GILLOISE', channels: 'CANAL+SPORT / LIVE 3' },
-    { time: '19h50', title: 'CANAL CHAMPIONS CLUB', channels: 'CANAL+ / LIVE 1', badge: 'mag' },
-    { time: '21h00', title: 'REAL MADRID - MARSEILLE', channels: 'CANAL+ / LIVE 1' },
-    { time: '22h57', title: 'CANAL CHAMPIONS CLUB - LE DEBRIEF', channels: 'CANAL+ / LIVE 1', badge: 'debrief' },
-  ];
-  const mercredi: ScheduleEntry[] = [
-    { time: '18h45', title: 'SLAVIA PRAGUE - BODÃ˜/GLIMT', channels: 'CANAL+SPORT / LIVE 3' },
-    { time: '18h45', title: 'OLYMPIAKOS - PAFOS', channels: 'CANAL+FOOT / LIVE 2' },
-    { time: '19h50', title: 'CANAL CHAMPIONS CLUB', channels: 'CANAL+ / LIVE 1', badge: 'mag' },
-    { time: '21h00', title: 'PARIS SG - ATALANTA BERGAME', channels: 'CANAL+ / LIVE 1' },
-    { time: '21h00', title: 'LIVERPOOL - ATLÃ‰TICO MADRID', channels: 'CANAL+FOOT / LIVE 2' },
-    { time: '21h00', title: 'BAYERN MUNICH - CHELSEA', channels: 'CANAL+SPORT / LIVE 3' },
-    { time: '21h00', title: 'AJAX - INTER MILAN', channels: 'LIVE 4 (Exclu)' , badge: 'exclu'},
-    { time: '21h00', title: 'MULTIPLEX', channels: 'CANAL+SPORT 360' },
-    { time: '22h57', title: 'CANAL CHAMPIONS CLUB - LE DEBRIEF', channels: 'CANAL+ / LIVE 1', badge: 'debrief' },
-  ];
-  const jeudi: ScheduleEntry[] = [
-    { time: '18h15', title: 'CANAL CHAMPIONS CLUB', channels: 'CANAL+FOOT / LIVE 1', badge: 'mag' },
-    { time: '18h45', title: 'CLUB BRUGES - MONACO', channels: 'CANAL+FOOT / LIVE 1' },
-    { time: '18h45', title: 'COPENHAGUE - LEVERKUSEN', channels: 'CANAL+SPORT / LIVE 2' },
-    { time: '20h45', title: 'CANAL CHAMPIONS CLUB', channels: 'CANAL+FOOT / LIVE 1', badge: 'mag' },
-    { time: '21h00', title: 'NEWCASTLE - FC BARCELONE', channels: 'CANAL+FOOT / LIVE 1' },
-    { time: '21h00', title: 'MANCHESTER CITY - NAPLES', channels: 'LIVE 2 (Exclu)', badge: 'exclu' },
-    { time: '21h00', title: 'FRANCFORT - GALATASARAY', channels: 'LIVE 3 (Exclu)', badge: 'exclu' },
-    { time: '21h00', title: 'SPORTING CP - KAIRAT ALMATY', channels: 'LIVE 4 (Exclu)', badge: 'exclu' },
-    { time: '21h00', title: 'MULTIPLEX', channels: 'CANAL+SPORT 360' },
-    { time: '22h57', title: 'CANAL CHAMPIONS CLUB - LE DEBRIEF', channels: 'CANAL+FOOT / LIVE 1', badge: 'debrief' },
-  ];
+    // Ancien programme Mardi/Mercredi/Jeudi retiré selon la demande
 
   // Etat pour déclencher re-render au passage minuit
   const [today, setToday] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
@@ -174,10 +143,7 @@ const NouveautesPage: React.FC = () => {
     return () => clearTimeout(t);
   }, [today]);
 
-  // Calcul des dates dynamiques (Mardi=2, Mercredi=3, Jeudi=4)
-  const dateMardi = getNextWeekday(2, today);
-  const dateMercredi = getNextWeekday(3, today);
-  const dateJeudi = getNextWeekday(4, today);
+  // Programme hebdomadaire retiré; conservation des utilitaires si besoin futur
 
   // Label jour localisé
   const dayLabel = (d: Date) => {
@@ -185,9 +151,9 @@ const NouveautesPage: React.FC = () => {
   };
 
   // Mettre en évidence le bloc du jour si on est exactement ce jour-là
-  const highlightMardi = isSameDay(today, dateMardi);
-  const highlightMercredi = isSameDay(today, dateMercredi);
-  const highlightJeudi = isSameDay(today, dateJeudi);
+  const highlightMardi = false;
+  const highlightMercredi = false;
+  const highlightJeudi = false;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -226,62 +192,80 @@ const NouveautesPage: React.FC = () => {
     <div className="flex-1 overflow-auto scroll-beauty scroll-fade p-5 sm:p-8 space-y-10 bg-gradient-to-br from-cactus-950 via-cactus-900 to-cactus-800 relative">
   <ProgrammePdfTopBar />
   <ProgrammePdfBanner />
-  <div className="grid gap-6 md:grid-cols-2 2xl:grid-cols-3">
-          <SectionBlock title="Programme Mardi">
-            {scheduleDay(dayLabel(dateMardi), mardi, highlightMardi)}
-          </SectionBlock>
-          <SectionBlock title="Programme Mercredi">
-            {scheduleDay(dayLabel(dateMercredi), mercredi, highlightMercredi)}
-          </SectionBlock>
-          <SectionBlock title="Programme Jeudi">
-            {scheduleDay(dayLabel(dateJeudi), jeudi, highlightJeudi)}
-          </SectionBlock>
-        </div>
+  {/* Bloc régionalisation (remplace les blocs Programme mardi/mercredi/jeudi) */}
+  <SectionBlock title="Régionalisation des sports — Partie 1" subtitle="Contenus localisés par régions (extraits)">
+    <div className="space-y-6 text-[13px] leading-relaxed">
+      <div>
+        <h4 className="text-white font-semibold mb-2">Île-de-France (IDF)</h4>
+        <p className="mb-2">Le football est représenté par deux clubs principaux évoluant en Ligue 1 (L1) :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>Paris Saint-Germain (PSG)</strong> — récent vainqueur de la Ligue des Champions — joue au Parc des Princes; le club compte aussi une section handball au haut niveau national et européen.</li>
+          <li><strong>Paris FC (PFC)</strong> — joue au Stade Jean Bouin (récemment promu).</li>
+        </ul>
+        <p className="mt-3 mb-2">Autres clubs pros ou semi-pros :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>Red Star</strong> (Stade du Docteur Bauer) — Ligue 2 (L2), statut professionnel.</li>
+          <li>En National (3e échelon) : <strong>Paris 13 Athlético</strong>, <strong>FC Versailles 78</strong>, <strong>FC Fleury 91</strong> (statuts pro et amateur).</li>
+        </ul>
+        <p className="mt-3 mb-2">Rugby — deux clubs phares au Top 14, présents selon les saisons en Champions Cup ou EPCR Challenge Cup :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>Racing 92</strong> — joue à la Défense Arena.</li>
+          <li><strong>Stade Français</strong> — joue à Jean Bouin.</li>
+        </ul>
+        <p className="mt-3 mb-2">Événements majeurs :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>Masters 1000 (ATP)</strong> — Accor Arena.</li>
+          <li><strong>Internationaux de France</strong> — Roland Garros (terre battue, Porte d’Auteuil).</li>
+          <li><strong>Schneider Electric Marathon de Paris</strong> — plus de 55 000 coureurs.</li>
+          <li>Arrivée finale du <strong>Tour de France</strong> sur les Champs-Élysées.</li>
+        </ul>
+        <p className="mt-3 mb-2">Basket — deux clubs en Betclic Élite et EuroLeague (équivalent Champions League) :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>Nanterre 92</strong> — Palais des Sports Maurice Thorez.</li>
+          <li><strong>Paris Basketball</strong> — Adidas Arena.</li>
+        </ul>
+      </div>
 
-  <SectionBlock title="Europa & Conference" subtitle="Prochains matchs européens (sélection)">
-          <ul className="space-y-2 text-sm">
-            <li className="flex items-start gap-2"><span className="text-cactus-200 font-mono text-xs w-28">Europa</span> <span>24 sept : Nice vs Rome</span></li>
-            <li className="flex items-start gap-2"><span className="text-cactus-200 font-mono text-xs w-28">Europa</span> <span>25 sept : Lille vs Brann • Utrecht vs Lyon</span></li>
-            <li className="flex items-start gap-2"><span className="text-cactus-200 font-mono text-xs w-28">Conference</span> <span>2 oct : Slovan vs Strasbourg</span></li>
-          </ul>
-        </SectionBlock>
+      <div>
+        <h4 className="text-white font-semibold mb-2">🌊 Région Ouest (Bretagne – Pays de la Loire – Centre-Val de Loire)</h4>
+        <p className="mb-2">⚽ <strong>Football</strong> — Région très représentée avec 10 clubs professionnels :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>Ligue 1</strong> : FC Nantes (Les Canaris), Stade Rennais, Stade Brestois 29, FC Lorient (Les Merlus).</li>
+          <li><strong>Ligue 2</strong> : En Avant Guingamp, Le Mans FC (Les Mucistes), Stade Lavallois (Les Tangos).</li>
+          <li><strong>National</strong> : Stade Briochin (Les Griffons), US Concarneau (Les Thoniers), La Berrichonne de Châteauroux (Les Sorciers berrichons).</li>
+        </ul>
+        <p className="mt-3 mb-2">⛵ <strong>Voile</strong> — Événements majeurs :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li>Vendée Globe, Route du Rhum, Solitaire du Figaro.</li>
+        </ul>
+        <p className="mt-3 mb-2">🚴 <strong>Cyclisme</strong> — Courses emblématiques :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li>Bretagne Classic (ex GP de Plouay), Tro Bro Leon.</li>
+        </ul>
+        <p className="mt-3 mb-2">🏉 <strong>Rugby</strong> :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>RC Vannes</strong> — La Rabine : passé par le Top 14, actuellement en Pro D2.</li>
+          <li><strong>Stade Rochelais</strong> — Marcel-Deflandre : double champion d’Europe (Champions Cup), finaliste du Bouclier de Brennus — Les Maritimes.</li>
+        </ul>
+        <p className="mt-3 mb-2">🤾 <strong>Handball</strong> :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>HBC Nantes</strong> — H Arena : 3 Coupes de France, 2 Coupes de la Ligue, 3 Trophées des Champions.</li>
+        </ul>
+        <p className="mt-3 mb-2">🏃 <strong>Course à pied</strong> :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li>Semi-marathon Auray–Vannes (référence nationale).</li>
+        </ul>
+        <p className="mt-3 mb-2">🚗 <strong>Automobile</strong> :</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li><strong>24 Heures du Mans</strong> — Circuit Bugatti (Sarthe), course mythique.</li>
+        </ul>
+      </div>
+    </div>
+  </SectionBlock>
 
-  <SectionBlock title="Rugby - TOP14" subtitle="Audiences +10% vs saison précédente">
-          <div className="space-y-4">
-            <div>
-              <h4 className="text-sm font-semibold text-white/90 mb-2">Samedi 13 septembre</h4>
-              <ul className="space-y-1 text-sm">
-                <li>16h35 : Aviron Bayonnais – Montpellier Hérault Rugby</li>
-                <li>16h35 : Section Paloise – Stade Français Paris</li>
-                <li>16h35 : Stade Rochelais – ASM Clermont</li>
-                <li>16h35 : Stade Toulousain – USA Perpignan</li>
-                <li>21h05 : RC Toulon – Castres Olympique</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white/90 mb-2">Dimanche 14 septembre</h4>
-              <ul className="space-y-1 text-sm">
-                <li>21h05 : Racing 92 – Union Bordeaux-Bègles</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white/90 mb-2">Samedi 20 septembre</h4>
-              <ul className="space-y-1 text-sm">
-                <li>16h35 : Castres Olympique – Aviron Bayonnais</li>
-                <li>16h35 : Lou Rugby – Stade Français Paris</li>
-                <li>16h35 : Union Bordeaux-Bègles – US Montauban</li>
-                <li>16h35 : USA Perpignan – Racing 92</li>
-                <li>21h00 : Montpellier Hérault Rugby – Stade Toulousain</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-white/90 mb-2">Dimanche 21 septembre</h4>
-              <ul className="space-y-1 text-sm">
-                <li>21h05 : RC Toulon – Stade Rochelais</li>
-              </ul>
-            </div>
-          </div>
-        </SectionBlock>
+  {/* Bloc Europa/Conference retiré selon la demande */}
+
+  {/* Bloc Rugby TOP14 retiré au profit de la régionalisation */}
 
   <SectionBlock title="Visuels Clubs" subtitle="Calendriers clubs">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

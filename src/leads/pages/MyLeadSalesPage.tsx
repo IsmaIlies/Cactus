@@ -57,12 +57,11 @@ const MyLeadSalesPage: React.FC = () => {
     };
   }, [user?.id, selectedMonth]);
 
-  const totalMobiles = summary?.mobiles ?? 0;
-  const totalBox = summary?.box ?? 0;
+  // Les totaux renvoyés par subscribeToLeadAgentSummary sont déjà hors SOSH pour mobiles et internet
+  const mobiles = summary?.mobiles ?? 0; // hors SOSH
+  const internet = summary?.box ?? 0; // hors SOSH
   const mobileSosh = summary?.mobileSosh ?? 0;
   const internetSosh = summary?.internetSosh ?? 0;
-  const mobileNonSosh = Math.max(0, totalMobiles - mobileSosh);
-  const internetNonSosh = Math.max(0, totalBox - internetSosh);
 
   const flattenedSales = React.useMemo(() => {
     return sales.flatMap((sale) => {
@@ -104,8 +103,8 @@ const MyLeadSalesPage: React.FC = () => {
       </header>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <StatTile label="Mobiles" value={loadingSummary ? "--" : mobileNonSosh.toString()} />
-        <StatTile label="Internet" value={loadingSummary ? "--" : internetNonSosh.toString()} />
+        <StatTile label="Mobiles" value={loadingSummary ? "--" : mobiles.toString()} />
+        <StatTile label="Internet" value={loadingSummary ? "--" : internet.toString()} />
         <StatTile label="Mobile SOSH" value={loadingSummary ? "--" : mobileSosh.toString()} />
         <StatTile label="Internet SOSH" value={loadingSummary ? "--" : internetSosh.toString()} />
       </div>

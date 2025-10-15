@@ -204,7 +204,7 @@ const LoginPage = () => {
     }
   };
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-b from-cactus-600 to-cactus-800">
+    <div className="min-h-screen flex flex-col items-center justify-start p-4 pt-10 pb-16 bg-gradient-to-b from-cactus-600 to-cactus-800">
       <div className="w-full max-w-md">
         <div className="text-center mb-10 flex flex-col items-center">
           <img
@@ -216,10 +216,8 @@ const LoginPage = () => {
             SaaS TMK Solution powered by IA
           </p>
         </div>
-
-        <div className="bg-white rounded-lg shadow-lg w-full max-h-[80vh] flex flex-col">
-          {/* Conteneur scroll interne */}
-          <div className="p-6 pt-6 scroll-beauty scroll-fade flex-1">
+        <div className="bg-white rounded-lg shadow-lg w-full">
+          <div className="p-6 pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="space-y-2">
@@ -468,6 +466,16 @@ const LoginPage = () => {
             >
               {loading ? "Connexion..." : "Se connecter"}
             </button>
+
+            {/* Lien discret vers l'inscription */}
+            <div className="mt-3 flex justify-center">
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-2 rounded-full border border-cactus-600/30 bg-white/90 px-4 py-2 text-sm font-medium text-cactus-700 hover:bg-cactus-50 shadow-sm"
+              >
+                Créer un compte
+              </Link>
+            </div>
           </form>
 
           <div className="mt-8 pb-2 flex justify-center">
@@ -482,7 +490,7 @@ const LoginPage = () => {
               <span className="text-[10px] tracking-[0.2em] text-white/60 normal-case">Accès sécurisé</span>
             </button>
           </div>
-          </div>{/* fin scroll */}
+          </div>
         </div>
       </div>
     </div>

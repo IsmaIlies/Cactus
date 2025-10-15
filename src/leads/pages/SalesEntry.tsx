@@ -464,13 +464,19 @@ const SalesEntry: React.FC = () => {
       setShowSuccess(true);
     } catch (error: any) {
       console.error("saveLeadSale failed", error);
-      if (error?.code === "permission-denied") {
+      const code = error?.code || error?.details?.rawCode || 'unknown';
+      const message = error?.message || '';
+      if (code === "permission-denied") {
         setSubmissionError(
           "Accès refusé par les règles Firestore. Vérifie que tu es bien connecté et que l'origine du lead est hipto/dolead/mm."
         );
+      } else if (code === 'unauthenticated') {
+        setSubmissionError("Session expirée. Merci de vous reconnecter et de réessayer.");
+      } else if (code === 'invalid-argument') {
+        setSubmissionError("Champs invalides ou manquants. Merci de vérifier le formulaire.");
       } else {
         setSubmissionError(
-          "Impossible d'enregistrer la vente. Vérifie ta connexion et réessaie."
+          `Impossible d'enregistrer la vente (${code}). Réessaie. ${message ? '\\n' + message : ''}`
         );
       }
     } finally {

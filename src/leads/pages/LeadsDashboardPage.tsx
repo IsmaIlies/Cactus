@@ -5,6 +5,9 @@ import {
   LeadDailySeriesEntry,
   subscribeToLeadKpis,
   subscribeToLeadMonthlySeries,
+  subscribeToLeadMonthlyTotalsAllSources,
+  subscribeToRecentLeadSales,
+  RecentLeadSale,
 } from "../services/leadsSalesService";
 
 const leadSources: Array<{ key: keyof LeadKpiSnapshot; label: string }> = [
@@ -49,6 +52,8 @@ const LeadsDashboardPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [selectedOrigin, setSelectedOrigin] = React.useState<"hipto" | "dolead" | "mm">("hipto");
   const [series, setSeries] = React.useState<LeadDailySeriesEntry[]>([]);
+  const [monthlyTotals, setMonthlyTotals] = React.useState({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+  const [recentSales, setRecentSales] = React.useState<RecentLeadSale[]>([]);
 
   React.useEffect(() => {
     const unsubscribe = subscribeToLeadKpis((snapshot) => {
@@ -66,6 +71,15 @@ const LeadsDashboardPage: React.FC = () => {
     return () => unsubscribe();
   }, [selectedOrigin]);
 
+  React.useEffect(() => {
+    const un1 = subscribeToLeadMonthlyTotalsAllSources((tot) => setMonthlyTotals(tot));
+    const un2 = subscribeToRecentLeadSales(10, (items) => setRecentSales(items));
+    return () => {
+      try { (un1 as any)?.(); } catch {}
+      try { (un2 as any)?.(); } catch {}
+    };
+  }, []);
+
   const totals = React.useMemo(() => {
     return leadSources.reduce(
       (acc, source) => {
@@ -73,9 +87,11 @@ const LeadsDashboardPage: React.FC = () => {
         return {
           mobiles: acc.mobiles + metrics.mobiles,
           box: acc.box + metrics.box,
-        };
+          mobileSosh: (acc as any).mobileSosh + metrics.mobileSosh,
+          internetSosh: (acc as any).internetSosh + metrics.internetSosh,
+        } as any;
       },
-      { mobiles: 0, box: 0 }
+      { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 } as any
     );
   }, [data]);
 
@@ -122,6 +138,16 @@ const LeadsDashboardPage: React.FC = () => {
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Ventes du jour</h2>
+        <div className="grid grid-cols-2 gap-3 text-center">
+          <div className="rounded-2xl bg-white/10 px-4 py-2">
+            <p className="text-xs text-blue-100/80">Total Mobiles</p>
+            <p className="text-xl font-semibold text-white">{loading ? "--" : totals.mobiles}</p>
+          </div>
+          <div className="rounded-2xl bg-white/10 px-4 py-2">
+            <p className="text-xs text-blue-100/80">Total Box</p>
+            <p className="text-xl font-semibold text-white">{loading ? "--" : totals.box}</p>
+          </div>
+        </div>
       </div>
 
       <section className="grid gap-6 md:grid-cols-3">
@@ -151,12 +177,14 @@ const LeadsDashboardPage: React.FC = () => {
                   <p className="mt-1 text-3xl font-semibold text-white">
                     {loading ? "--" : metrics.mobiles}
                   </p>
+                  <p className="mt-1 text-xs text-blue-100/80">dont Sosh: {loading ? "--" : metrics.mobileSosh}</p>
                 </div>
                 <div className="rounded-2xl bg-blue-900/70 p-4 shadow-inner">
                   <p className="text-blue-100/80 text-sm">Box vendues</p>
                   <p className="mt-1 text-3xl font-semibold text-blue-50">
                     {loading ? "--" : metrics.box}
                   </p>
+                  <p className="mt-1 text-xs text-blue-100/80">dont Sosh: {loading ? "--" : metrics.internetSosh}</p>
                 </div>
               </div>
             </article>
@@ -168,9 +196,7 @@ const LeadsDashboardPage: React.FC = () => {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold">Évolution mensuelle</h2>
-            <p className="text-sm text-blue-100/80">
-              Nombre de ventes mobiles et box réalisées ce mois-ci.
-            </p>
+            <p className="text-sm text-blue-100/80">Nombre de ventes mobiles et box réalisées ce mois-ci.</p>
           </div>
           <div className="flex rounded-full border border-white/20 p-1 bg-white/5">
             {leadSources.map((source) => (
@@ -211,17 +237,51 @@ const LeadsDashboardPage: React.FC = () => {
           <div className="grid grid-cols-2 gap-4 text-center text-white">
             <div className="rounded-2xl bg-[#002FA7]/80 px-4 py-3">
               <p className="text-xs text-blue-100/80">Mobiles</p>
-              <p className="text-2xl font-semibold">{loading ? "--" : totals.mobiles}</p>
+              <p className="text-2xl font-semibold">{loading ? "--" : monthlyTotals.mobiles}</p>
+              <p className="text-xs mt-1 text-blue-100/80">dont Sosh: {loading ? "--" : monthlyTotals.mobileSosh}</p>
             </div>
             <div className="rounded-2xl bg-blue-900/80 px-4 py-3">
               <p className="text-xs text-blue-100/80">Box</p>
-              <p className="text-2xl font-semibold">{loading ? "--" : totals.box}</p>
+              <p className="text-2xl font-semibold">{loading ? "--" : monthlyTotals.box}</p>
+              <p className="text-xs mt-1 text-blue-100/80">dont Sosh: {loading ? "--" : monthlyTotals.internetSosh}</p>
             </div>
           </div>
         </div>
         <p className="mt-4 text-xs text-blue-100/60">
           Les indicateurs se mettent à jour automatiquement dès qu'une vente est enregistrée via l'espace Leads.
         </p>
+      </section>
+
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md text-white shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Ventes récentes</h2>
+        </div>
+        {recentSales.length === 0 ? (
+          <p className="text-sm text-blue-100/70">{loading ? "Chargement..." : "Aucune vente récente."}</p>
+        ) : (
+          <ul className="divide-y divide-white/10">
+            {recentSales.map((s) => (
+              <li key={s.id} className="py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-sm text-blue-100/80 shrink-0">
+                    {s.createdAt ? s.createdAt.toLocaleString() : "--"}
+                  </span>
+                  <span className="text-sm truncate">
+                    {s.intituleOffre || s.typeOffre || "Offre"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs rounded-full px-2 py-0.5 border border-white/20 text-blue-100/90">
+                    {s.origineLead || "n/a"}
+                  </span>
+                  {s.agent ? (
+                    <span className="text-xs text-blue-100/80">{s.agent}</span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

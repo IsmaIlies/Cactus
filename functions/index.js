@@ -411,6 +411,22 @@ exports.submitLeadSale = onCall({ region: "europe-west9" }, async (req) => {
   const referencePanier = normalizeString(data.referencePanier, { maxLength: 120 });
   const additionalOffers = sanitizeAdditionalOffers(data.additionalOffers);
 
+  // Logging non-sensible pour diagnostic (sans données personnelles brutes)
+  try {
+    console.log('[submitLeadSale] input-summary', {
+      uid: auth.uid,
+      numeroIdLen: numeroId ? numeroId.length : 0,
+      typeOffre,
+      ficheDuJour,
+      origineLead,
+      telephoneLen: telephone ? telephone.length : 0,
+      hasDateTechnicien: !!dateTechnicien,
+      additionalOffersCount: Array.isArray(additionalOffers) ? additionalOffers.length : 0,
+    });
+  } catch (e) {
+    // ignore logging failures
+  }
+
   if (!numeroId) {
     throw new HttpsError("invalid-argument", "Le numéro d'identification est requis.");
   }
@@ -462,9 +478,13 @@ exports.submitLeadSale = onCall({ region: "europe-west9" }, async (req) => {
     const ref = await admin.firestore().collection("leads_sales").add(doc);
     return { success: true, id: ref.id };
   } catch (error) {
-    console.error("[submitLeadSale] failed", error);
+    console.error("[submitLeadSale] failed", {
+      code: error && error.code,
+      message: error && error.message,
+      stack: error && error.stack,
+    });
     throw new HttpsError("internal", "Enregistrement impossible pour le moment.", {
-      rawCode: error?.code,
+      rawCode: error?.code || 'unknown',
     });
   }
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, onSnapshot, orderBy, query as fsQuery, where, Timestamp } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 
 type Sale = {
   id: string;
@@ -113,7 +114,12 @@ const SupervisorSales: React.FC = () => {
     telephone: string | null;
   };
   // En LEADS: tableau visible détaillé (toutes colonnes) et CSV au format demandé
+  // Colonnes CSV (uniquement pour l'export) — ne pas confondre avec l'UI
   const LEADS_CSV_HEADERS = [
+    'Id',
+    'Adresse de messagerie',
+    'Nom',
+    'DID',
     "Type d'offre",
     "Intitulé de l'offre (jaune)",
     'Référence du panier',
@@ -121,16 +127,26 @@ const SupervisorSales: React.FC = () => {
     'FICHE DU JOUR',
     'ORIGINE LEADS',
     'Date technicien',
-    'Numéro de téléphone'
+    'Numéro de téléphone de la fiche'
   ] as const;
   const LEADS_TABLE_HEADERS = [
-    'ID', 'Heure de début', 'Heure de fin', 'Adresse de messagerie', 'Nom', 'DID', "Type d'offre",
+    'ID', 'Date', 'Adresse de messagerie', 'Nom', 'DID', "Type d'offre",
     "Intitulé de l'offre (jaune)", 'Référence du panier', 'CODE ALF', 'FICHE DU JOUR', 'ORIGINE LEADS', 'Date technicien', 'Numéro de téléphone de la fiche'
   ] as const;
-  const toCsv = (rows: LeadRow[]) => {
-    const lines: string[] = [LEADS_CSV_HEADERS.join(';')];
-    for (const r of rows) {
-      const vals = [
+  const pad2 = (n: number) => n.toString().padStart(2, '0');
+  const formatDateOnly = (d: Date | null) => {
+    if (!d) return '—';
+    return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+  };
+  // Génère un classeur Excel soigné avec largeurs, auto-filter, header stylé, et freeze top row
+  const toXlsxBlob = (rows: LeadRow[]) => {
+    const data = [LEADS_CSV_HEADERS as unknown as string[]];
+    rows.forEach((r, i) => {
+      data.push([
+        String(i + 1),
+        r.email || '',
+        r.displayName || '',
+        r.numeroId || '',
         r.typeOffre || '',
         r.intituleOffre || '',
         r.referencePanier || '',
@@ -139,27 +155,68 @@ const SupervisorSales: React.FC = () => {
         r.origineLead || '',
         r.dateTechnicien || '',
         r.telephone || ''
-      ];
-      const esc = vals.map(raw => {
-        const v = String(raw ?? '');
-        return /[;"\n\r]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
-      });
-      lines.push(esc.join(';'));
+      ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    // Largeur de colonnes
+    const colWidths = [5, 28, 22, 14, 16, 42, 18, 12, 14, 14, 16, 20].map(w => ({ wch: w }));
+    (ws as any)['!cols'] = colWidths;
+    // Freeze first row and add autofilter
+    (ws as any)['!freeze'] = { rows: 1, columns: 0 };
+    (ws as any)['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r:0, c:0 }, e: { r: Math.max(rows.length,1), c: LEADS_CSV_HEADERS.length-1 } }) };
+    // Header style (gras, fond foncé, texte blanc, centré)
+    for (let c = 0; c < LEADS_CSV_HEADERS.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      const cell = (ws as any)[addr];
+      if (cell) {
+        cell.s = {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { patternType: 'solid', fgColor: { rgb: '1F2937' } }, // slate-800
+          alignment: { horizontal: 'center', vertical: 'center' }
+        } as any;
+      }
     }
-    return '\uFEFF' + lines.join('\r\n');
+    // Hauteur de la première ligne
+    (ws as any)['!rows'] = [{ hpt: 22 }];
+    // Alignements sélectifs par colonne (ID, DID, CODE ALF, Date tech, Téléphone)
+    const centerCols = new Set([0, 3, 7, 10, 11]);
+    for (let r = 1; r <= rows.length; r++) {
+      centerCols.forEach((c) => {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const cell = (ws as any)[addr];
+        if (cell) {
+          cell.s = Object.assign({}, cell.s || {}, { alignment: { horizontal: 'center', vertical: 'center' } });
+        }
+      });
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'PANIER LEADS');
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   };
   const [leadsRows, setLeadsRows] = React.useState<LeadRow[]>([]);
   const [leadsLoading, setLeadsLoading] = React.useState<boolean>(false);
   const [leadsError, setLeadsError] = React.useState<string | null>(null);
   const [leadsUsingFallback, setLeadsUsingFallback] = React.useState<boolean>(false);
   // Filtres LEADS côté client (offre + télévendeur)
-  const [selectedLeadOffers, setSelectedLeadOffers] = React.useState<string[]>([]);
   const [selectedLeadSellers, setSelectedLeadSellers] = React.useState<string[]>([]);
+  const [selectedLeadOrigins, setSelectedLeadOrigins] = React.useState<string[]>([]);
   const leadSellerLabel = (r: LeadRow) => (r.displayName || r.email || '—');
-  const availableLeadOffers = React.useMemo(() => {
+  const availableLeadOrigins = React.useMemo(() => {
     const set = new Set<string>();
-    for (const r of leadsRows) { const v = (r.typeOffre || '').trim(); if (v) set.add(v); }
-    return Array.from(set).sort((a,b)=>a.localeCompare(b,'fr'));
+    for (const r of leadsRows) {
+      const v = String(r.origineLead || '').toLowerCase().trim();
+      if (v) set.add(v);
+    }
+    // Garder l'ordre connu si présents
+    const known = ['hipto','dolead','mm'];
+    const list = Array.from(set);
+    return list.sort((a,b) => {
+      const ia = known.indexOf(a); const ib = known.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1; if (ib !== -1) return 1;
+      return a.localeCompare(b, 'fr');
+    });
   }, [leadsRows]);
   const availableLeadSellers = React.useMemo(() => {
     const set = new Set<string>();
@@ -169,16 +226,45 @@ const SupervisorSales: React.FC = () => {
   const filteredLeadsRows = React.useMemo(() => {
     // La période est déjà gérée par la requête Firestore (start/end) et par le fallback.
     return leadsRows.filter(r => {
-      const offerOk = selectedLeadOffers.length === 0 || (r.typeOffre && selectedLeadOffers.includes(r.typeOffre));
-      if (!offerOk) return false;
+      // Origine
+      if (selectedLeadOrigins.length > 0) {
+        const origin = String(r.origineLead || '').toLowerCase().trim();
+        if (!selectedLeadOrigins.includes(origin)) return false;
+      }
       if (selectedLeadSellers.length > 0) {
         const lbl = leadSellerLabel(r);
         if (!selectedLeadSellers.includes(lbl)) return false;
       }
       return true;
     });
-  }, [leadsRows, selectedLeadOffers, selectedLeadSellers]);
+  }, [leadsRows, selectedLeadOrigins, selectedLeadSellers]);
   const leadsCount = filteredLeadsRows.length;
+
+  // ——— Persistance des filtres LEADS (localStorage) ———
+  React.useEffect(() => {
+    if (!isLeads) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('leadsFilters') || '{}');
+      if (saved && typeof saved === 'object') {
+        if (typeof saved.start === 'string') setStart(saved.start);
+        if (typeof saved.end === 'string') setEnd(saved.end);
+        if (Array.isArray(saved.origins)) setSelectedLeadOrigins(saved.origins);
+        if (Array.isArray(saved.sellers)) setSelectedLeadSellers(saved.sellers);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLeads]);
+
+  React.useEffect(() => {
+    if (!isLeads) return;
+    const payload = {
+      start,
+      end,
+      origins: selectedLeadOrigins,
+      sellers: selectedLeadSellers,
+    };
+    try { localStorage.setItem('leadsFilters', JSON.stringify(payload)); } catch {}
+  }, [isLeads, start, end, selectedLeadOrigins, selectedLeadSellers]);
 
   // Si on est en mode LEADS, on ne branche pas l'abonnement Canal+
   // Abonnement temps réel aux ventes de la région sélectionnée (FR par défaut côté superviseur Canal+)
@@ -464,7 +550,7 @@ const SupervisorSales: React.FC = () => {
             <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-white">Filtres</h3>
-                <button onClick={() => { setStart(defaultStart.toISOString().slice(0,10)); setEnd(''); setSelectedLeadOffers([]); setSelectedLeadSellers([]); }} className="text-rose-300 text-sm hover:underline">Effacer tout</button>
+                <button onClick={() => { setStart(defaultStart.toISOString().slice(0,10)); setEnd(''); setSelectedLeadOrigins([]); setSelectedLeadSellers([]); }} className="text-rose-300 text-sm hover:underline">Effacer tout</button>
               </div>
               <div>
                 <p className="text-blue-200 text-sm mb-2">Période</p>
@@ -474,18 +560,19 @@ const SupervisorSales: React.FC = () => {
                 </div>
               </div>
               <div>
-                <p className="text-blue-200 text-sm mb-2">Type d'offre</p>
+                <p className="text-blue-200 text-sm mb-2">Origine lead</p>
                 <div className="flex flex-wrap gap-2">
-                  {availableLeadOffers.map(opt => {
-                    const active = selectedLeadOffers.includes(opt);
+                  {availableLeadOrigins.map(opt => {
+                    const label = opt === 'mm' ? 'MM' : opt.charAt(0).toUpperCase() + opt.slice(1);
+                    const active = selectedLeadOrigins.includes(opt);
                     return (
-                      <button key={opt} onClick={() => setSelectedLeadOffers(prev => active ? prev.filter(x => x!==opt) : [...prev, opt])}
+                      <button key={opt} onClick={() => setSelectedLeadOrigins(prev => active ? prev.filter(x => x!==opt) : [...prev, opt])}
                         className={`px-3 py-1 rounded-full text-sm border transition ${active ? 'bg-cactus-600 text-white border-cactus-500 shadow-sm' : 'bg-white/5 border-white/10 text-blue-100 hover:bg-white/10'}`}>
-                        {opt}
+                        {label}
                       </button>
                     );
                   })}
-                  {availableLeadOffers.length === 0 && <div className="text-blue-300 text-sm">—</div>}
+                  {availableLeadOrigins.length === 0 && <div className="text-blue-300 text-sm">—</div>}
                 </div>
               </div>
               <div>
@@ -515,19 +602,18 @@ const SupervisorSales: React.FC = () => {
                 <div className="px-4 pt-4">
                   <button
                     onClick={() => {
-                      const csv = toCsv(filteredLeadsRows);
-                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const blob = toXlsxBlob(filteredLeadsRows);
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a'); a.href = url;
                       const now = new Date(); const pad = (n:number)=>n.toString().padStart(2,'0');
-                      a.download = `leads_sales_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.csv`;
+                      a.download = `leads_sales_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.xlsx`;
                       a.click(); URL.revokeObjectURL(url);
                     }}
                     disabled={leadsRows.length===0}
                     className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20 disabled:opacity-50"
-                    title={leadsRows.length===0 ? 'Aucune donnée à exporter' : 'Exporter en CSV'}
+                    title={leadsRows.length===0 ? 'Aucune donnée à exporter' : 'Exporter en Excel (.xlsx)'}
                   >
-                    Export CSV
+                    Export Excel
                   </button>
                 </div>
               </div>
@@ -546,11 +632,10 @@ const SupervisorSales: React.FC = () => {
                         {LEADS_TABLE_HEADERS.map((_,j)=>(<td key={j} className="p-3 text-blue-300">…</td>))}
                       </tr>
                     ))}
-                    {!leadsLoading && filteredLeadsRows.map((r) => (
+                    {!leadsLoading && filteredLeadsRows.map((r, idx) => (
                       <tr key={r.id} className="border-t border-white/10 hover:bg-white/5 even:bg-white/[0.03]">
-                        <td className="p-3 text-white whitespace-nowrap">{r.id}</td>
-                        <td className="p-3 text-white whitespace-nowrap">{r.createdAt ? r.createdAt.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '—'}</td>
-                        <td className="p-3 text-white whitespace-nowrap"></td>
+                        <td className="p-3 text-white whitespace-nowrap">{idx + 1}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{formatDateOnly(r.createdAt)}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.email || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.displayName || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.numeroId || '—'}</td>

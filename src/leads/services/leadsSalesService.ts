@@ -1,10 +1,13 @@
 import {
   collection,
+  addDoc,
   onSnapshot,
   query,
   where,
   Timestamp,
   orderBy,
+  limit,
+  serverTimestamp,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "../../firebase";
@@ -60,17 +63,59 @@ export const categorize = (typeOffre: string | undefined | null) => {
 export const saveLeadSale = async (payload: LeadSaleInput) => {
   const functions = getFunctions(undefined, "europe-west9");
   const submitLeadSale = httpsCallable(functions, "submitLeadSale");
-  await submitLeadSale({
-    numeroId: payload.numeroId,
-    typeOffre: payload.typeOffre,
-    dateTechnicien: payload.dateTechnicien,
-    intituleOffre: payload.intituleOffre,
-    referencePanier: payload.referencePanier,
-    additionalOffers: payload.additionalOffers,
-    ficheDuJour: payload.ficheDuJour,
-    origineLead: payload.origineLead,
-    telephone: payload.telephone,
-  });
+  try {
+    await submitLeadSale({
+      numeroId: payload.numeroId,
+      typeOffre: payload.typeOffre,
+      dateTechnicien: payload.dateTechnicien,
+      intituleOffre: payload.intituleOffre,
+      referencePanier: payload.referencePanier,
+      additionalOffers: payload.additionalOffers,
+      ficheDuJour: payload.ficheDuJour,
+      origineLead: payload.origineLead,
+      telephone: payload.telephone,
+    });
+    return;
+  } catch (err: any) {
+    const code: string = (err?.code || err?.details?.rawCode || 'unknown').toString();
+    const message: string = (err?.message || '').toString();
+    const isInternal = code === 'internal' || code === 'functions/internal' || /internal/i.test(code);
+    const isUnavailable = code === 'unavailable' || code === 'functions/unavailable';
+    const isUnknown = code === 'unknown' || code === 'functions/unknown';
+    const looksLikeCorsOrNetwork = /CORS|Failed to fetch|net::ERR|preflight|No 'Access-Control-Allow-Origin'/i.test(message);
+    // If the callable failed with an internal/server or network/CORS error, attempt a direct Firestore write as a fallback
+    if (!(isInternal || isUnavailable || isUnknown || looksLikeCorsOrNetwork)) {
+      throw err;
+    }
+    // Build a Firestore-compliant document that passes security rules
+    const cat = categorize(payload.typeOffre);
+    const doc: any = {
+      numeroId: payload.numeroId,
+      typeOffre: payload.typeOffre,
+      dateTechnicien: payload.dateTechnicien || null,
+      intituleOffre: payload.intituleOffre,
+      referencePanier: payload.referencePanier,
+      additionalOffers: Array.isArray(payload.additionalOffers) ? payload.additionalOffers : [],
+      ficheDuJour: payload.ficheDuJour,
+      origineLead: payload.origineLead,
+      telephone: payload.telephone,
+      mission: missionFilter,
+      // Optional counters for convenience
+      mobileCount: cat.mobile,
+      boxCount: cat.internet,
+      mobileSoshCount: cat.mobileSosh,
+      internetSoshCount: cat.internetSosh,
+      createdAt: serverTimestamp(),
+    };
+    if (payload.createdBy?.userId) {
+      doc.createdBy = {
+        userId: payload.createdBy.userId,
+        displayName: payload.createdBy.displayName || '',
+        email: payload.createdBy.email || '',
+      };
+    }
+    await addDoc(collection(db, COLLECTION_PATH), doc);
+  }
 };
 
 export type LeadKpiSnapshot = {
@@ -81,7 +126,12 @@ export type LeadKpiSnapshot = {
 
 export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) => {
   const todayStart = startOfDay(new Date());
-  const q = query(collection(db, COLLECTION_PATH), where("mission", "==", missionFilter));
+  // IMPORTANT: limiter aux ventes du jour pour éviter de lire toute la collection (coûteux en reads)
+  const q = query(
+    collection(db, COLLECTION_PATH),
+    where("mission", "==", missionFilter),
+    where("createdAt", ">=", Timestamp.fromDate(todayStart))
+  );
   return onSnapshot(
     q,
     (snapshot) => {
@@ -93,10 +143,7 @@ export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) =
 
       snapshot.forEach((doc) => {
         const data = doc.data() as any;
-        const createdAt: Timestamp | null = data?.createdAt ?? null;
-        if (!createdAt) return;
-        const createdDate = createdAt.toDate();
-        if (createdDate < todayStart) return;
+        // plus besoin de filtrer côté client: le where(createdAt >= todayStart) réduit la fenêtre
         const originRaw = (data?.origineLead || "").toLowerCase();
         if (originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm") {
           const origin = originRaw as keyof LeadKpiSnapshot;
@@ -143,38 +190,68 @@ export const subscribeToLeadMonthlySeries = (
     where("createdAt", ">=", Timestamp.fromDate(monthStart)),
     orderBy("createdAt", "asc")
   );
+  let unsubscribe: (() => void) | null = null;
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const map = new Map<string, { mobiles: number; box: number }>();
-      snapshot.forEach((doc) => {
-        const data = doc.data() as any;
-        const createdAt: Timestamp | null = data?.createdAt ?? null;
-        if (!createdAt) return;
-        const key = formatDateKey(createdAt.toDate());
-        const bucket = map.get(key) || { mobiles: 0, box: 0 };
-        const cat = categorize(data?.typeOffre);
-        bucket.mobiles += cat.mobile + cat.mobileSosh;
-        bucket.box += cat.internet + cat.internetSosh;
-        map.set(key, bucket);
-      });
+  const computeAndCallback = (snapshot: any, filterByDate = false) => {
+    const map = new Map<string, { mobiles: number; box: number }>();
+    snapshot.forEach((doc: any) => {
+      const data = doc.data() as any;
+      const createdAt: Timestamp | null = data?.createdAt ?? null;
+      if (!createdAt) return;
+      const d = createdAt.toDate();
+      if (filterByDate && d < monthStart) return;
+      const key = formatDateKey(d);
+      const bucket = map.get(key) || { mobiles: 0, box: 0 };
+      const cat = categorize(data?.typeOffre);
+      bucket.mobiles += cat.mobile + cat.mobileSosh;
+      bucket.box += cat.internet + cat.internetSosh;
+      map.set(key, bucket);
+    });
+    const series = Array.from(map.entries())
+      .sort(([a], [b]) => (a > b ? 1 : -1))
+      .map(([date, value]) => ({ date, ...value }));
+    callback(series);
+  };
 
-      const series = Array.from(map.entries())
-        .sort(([a], [b]) => (a > b ? 1 : -1))
-        .map(([date, value]) => ({ date, ...value }));
-
-      callback(series);
-    },
-    (error) => {
-      if ((error as any)?.code === "permission-denied") {
-        console.warn("subscribeToLeadMonthlySeries: accès refusé (auth/règles)", error);
-      } else {
-        console.error("subscribeToLeadMonthlySeries: erreur snapshot", error);
+  const subscribePrimary = () => {
+    unsubscribe = onSnapshot(
+      q,
+      (snapshot) => computeAndCallback(snapshot, false),
+      (error) => {
+        const code = (error as any)?.code;
+        if (code === 'failed-precondition') {
+          console.warn('subscribeToLeadMonthlySeries: index absent/en cours de construction, fallback sans filtre de date');
+          try { unsubscribe && unsubscribe(); } catch {}
+          const fb = query(
+            collection(db, COLLECTION_PATH),
+            where('mission', '==', missionFilter),
+            where('origineLead', '==', origin)
+          );
+          unsubscribe = onSnapshot(
+            fb,
+            (snap) => computeAndCallback(snap, true),
+            (err2) => {
+              if ((err2 as any)?.code === 'permission-denied') {
+                console.warn('subscribeToLeadMonthlySeries (fallback): accès refusé (auth/règles)', err2);
+              } else {
+                console.error('subscribeToLeadMonthlySeries (fallback): erreur snapshot', err2);
+              }
+              callback([]);
+            }
+          );
+        } else if (code === 'permission-denied') {
+          console.warn('subscribeToLeadMonthlySeries: accès refusé (auth/règles)', error);
+          callback([]);
+        } else {
+          console.error('subscribeToLeadMonthlySeries: erreur snapshot', error);
+          callback([]);
+        }
       }
-      callback([]);
-    }
-  );
+    );
+  };
+
+  subscribePrimary();
+  return () => { if (unsubscribe) unsubscribe(); };
 };
 
 export type LeadAgentSummary = {
@@ -287,6 +364,198 @@ export const subscribeToLeadAgentSummary = (
   return () => {
     if (unsubscribe) unsubscribe();
   };
+};
+
+// ---- Monthly totals across all sources (current month) ----
+export type LeadMonthlyTotals = {
+  mobiles: number;
+  box: number;
+  mobileSosh: number;
+  internetSosh: number;
+};
+
+export const subscribeToLeadMonthlyTotalsAllSources = (
+  callback: (totals: LeadMonthlyTotals) => void
+) => {
+  const monthStart = startOfMonth();
+  const monthEnd = startOfNextMonth();
+  const primaryQuery = query(
+    collection(db, COLLECTION_PATH),
+    where("mission", "==", missionFilter),
+    where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+    where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+    orderBy("createdAt", "asc")
+  );
+
+  let unsubscribe: (() => void) | null = null;
+
+  const computeAndCallback = (snapshot: any, filterByDate = false) => {
+    const totals: LeadMonthlyTotals = {
+      mobiles: 0,
+      box: 0,
+      mobileSosh: 0,
+      internetSosh: 0,
+    };
+    snapshot.forEach((doc: any) => {
+      const data = doc.data() as any;
+      const createdAt: Timestamp | null = data?.createdAt ?? null;
+      if (filterByDate) {
+        if (!createdAt) return;
+        const d = createdAt.toDate();
+        if (d < monthStart || d >= monthEnd) return;
+      }
+      const cat = categorize(data?.typeOffre);
+      totals.mobiles += cat.mobile + cat.mobileSosh;
+      totals.box += cat.internet + cat.internetSosh;
+      totals.mobileSosh += cat.mobileSosh;
+      totals.internetSosh += cat.internetSosh;
+    });
+    callback(totals);
+  };
+
+  const subscribePrimary = () => {
+    unsubscribe = onSnapshot(
+      primaryQuery,
+      (snapshot) => computeAndCallback(snapshot, false),
+      (error) => {
+        const code = (error as any)?.code;
+        if (code === "failed-precondition") {
+          console.warn(
+            "subscribeToLeadMonthlyTotalsAllSources: index absent/en cours de construction, fallback sans filtre de date"
+          );
+          try {
+            unsubscribe && unsubscribe();
+          } catch {}
+          const fbQuery = query(
+            collection(db, COLLECTION_PATH),
+            where("mission", "==", missionFilter)
+          );
+          unsubscribe = onSnapshot(
+            fbQuery,
+            (snap) => computeAndCallback(snap, true),
+            (err2) => {
+              if ((err2 as any)?.code === "permission-denied") {
+                console.warn(
+                  "subscribeToLeadMonthlyTotalsAllSources (fallback): accès refusé (auth/règles)",
+                  err2
+                );
+              } else {
+                console.error(
+                  "subscribeToLeadMonthlyTotalsAllSources (fallback): erreur snapshot",
+                  err2
+                );
+              }
+              callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+            }
+          );
+        } else if (code === "permission-denied") {
+          console.warn(
+            "subscribeToLeadMonthlyTotalsAllSources: accès refusé (auth/règles)",
+            error
+          );
+          callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+        } else {
+          console.error(
+            "subscribeToLeadMonthlyTotalsAllSources: erreur snapshot",
+            error
+          );
+          callback({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+        }
+      }
+    );
+  };
+
+  subscribePrimary();
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
+};
+
+// ---- Recent sales feed ----
+export type RecentLeadSale = {
+  id: string;
+  createdAt: Date | null;
+  intituleOffre: string;
+  typeOffre: string;
+  origineLead?: "hipto" | "dolead" | "mm" | "";
+  agent?: string; // createdBy.displayName
+};
+
+export const subscribeToRecentLeadSales = (
+  maxCount: number,
+  callback: (sales: RecentLeadSale[]) => void
+) => {
+  const q = query(
+    collection(db, COLLECTION_PATH),
+    where("mission", "==", missionFilter),
+    orderBy("createdAt", "desc"),
+    limit(Math.max(1, Math.min(maxCount || 10, 100)))
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: RecentLeadSale[] = snapshot.docs.map((doc) => {
+        const data = doc.data() as any;
+        const createdAt: Timestamp | null = data?.createdAt ?? null;
+        const originRaw = (data?.origineLead || "").toString().toLowerCase();
+        const origin: "hipto" | "dolead" | "mm" | "" =
+          originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm" ? (originRaw as any) : "";
+        return {
+          id: doc.id,
+          createdAt: createdAt ? createdAt.toDate() : null,
+          intituleOffre: data?.intituleOffre || "",
+          typeOffre: data?.typeOffre || "",
+          origineLead: origin,
+          agent: data?.createdBy?.displayName || data?.createdBy?.email || "",
+        };
+      });
+      callback(items);
+    },
+    (error) => {
+      if ((error as any)?.code === "permission-denied") {
+        console.warn("subscribeToRecentLeadSales: accès refusé (auth/règles)", error);
+      } else if ((error as any)?.code === "failed-precondition") {
+        console.warn("subscribeToRecentLeadSales: index manquant, fallback sans orderBy/limit");
+        const fb = query(collection(db, COLLECTION_PATH), where("mission", "==", missionFilter));
+        return onSnapshot(
+          fb,
+          (snap) => {
+            const items = snap.docs
+              .map((doc: any) => {
+                const data = doc.data() as any;
+                const createdAt: Timestamp | null = data?.createdAt ?? null;
+                const originRaw = (data?.origineLead || "").toString().toLowerCase();
+                const origin: "hipto" | "dolead" | "mm" | "" =
+                  originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm" ? (originRaw as any) : "";
+                return {
+                  id: doc.id,
+                  createdAt: createdAt ? createdAt.toDate() : null,
+                  intituleOffre: data?.intituleOffre || "",
+                  typeOffre: data?.typeOffre || "",
+                  origineLead: origin,
+                  agent: data?.createdBy?.displayName || data?.createdBy?.email || "",
+                } as RecentLeadSale;
+              })
+              .sort((a: RecentLeadSale, b: RecentLeadSale) => {
+                const ta = a.createdAt ? a.createdAt.getTime() : 0;
+                const tb = b.createdAt ? b.createdAt.getTime() : 0;
+                return tb - ta;
+              })
+              .slice(0, Math.max(1, Math.min(maxCount || 10, 100)));
+            callback(items);
+          },
+          (err2) => {
+            console.error("subscribeToRecentLeadSales (fallback): erreur snapshot", err2);
+            callback([]);
+          }
+        );
+      } else {
+        console.error("subscribeToRecentLeadSales: erreur snapshot", error);
+      }
+      callback([]);
+    }
+  );
 };
 
 export type LeadAgentSaleEntry = {
