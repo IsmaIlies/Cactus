@@ -12,6 +12,24 @@ admin.initializeApp();
 
 const cors = require('cors')({ origin: true });
 
+const ADMIN_ACTIVITY_WINDOW_DAYS = 30;
+const ADMIN_ACTIVITY_WINDOW_MS = ADMIN_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+const isAdminFromToken = (token = {}) => {
+  if (!token || typeof token !== "object") {
+    return false;
+  }
+  if (token.isAdmin === true) {
+    return true;
+  }
+  const role = typeof token.role === "string" ? token.role.toLowerCase() : "";
+  if (role === "admin") {
+    return true;
+  }
+  const roles = Array.isArray(token.roles) ? token.roles.map((value) => String(value).toLowerCase()) : [];
+  return roles.includes("admin");
+};
+
 // =============================================================
 // Purge automatique des matchs passés
 // - Supprime les documents de la collection 'matches' dont startTime < (now - 48h)
@@ -346,6 +364,63 @@ exports.disableUsersCallable = onCall({ region: "europe-west9" }, async (req) =>
       rawCode: error?.code,
     });
   }
+});
+
+exports.getAdminUserStats = onCall({ region: "europe-west9" }, async (req) => {
+  const auth = req.auth;
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "Authentification requise");
+  }
+
+  if (!isAdminFromToken(auth.token)) {
+    throw new HttpsError("permission-denied", "Réservé aux administrateurs");
+  }
+
+  const now = Date.now();
+  const threshold = now - ADMIN_ACTIVITY_WINDOW_MS;
+  let totalUsers = 0;
+  let activeUsers = 0;
+  let disabledUsers = 0;
+  let pageToken;
+
+  try {
+    do {
+      const result = await admin.auth().listUsers(1000, pageToken);
+      result.users.forEach((userRecord) => {
+        if (userRecord.disabled) {
+          disabledUsers += 1;
+          return;
+        }
+
+        totalUsers += 1;
+
+        const lastSignInTime = userRecord.metadata?.lastSignInTime;
+        const lastRefreshTime = userRecord.metadata?.lastRefreshTime;
+        const signInMs = lastSignInTime ? Date.parse(lastSignInTime) : NaN;
+        const refreshMs = lastRefreshTime ? Date.parse(lastRefreshTime) : NaN;
+        const latestActivity = Math.max(Number.isFinite(signInMs) ? signInMs : 0, Number.isFinite(refreshMs) ? refreshMs : 0);
+
+        if (latestActivity && latestActivity >= threshold) {
+          activeUsers += 1;
+        }
+      });
+      pageToken = result.pageToken;
+    } while (pageToken);
+  } catch (error) {
+    console.error("[getAdminUserStats] error", error);
+    throw new HttpsError("internal", error?.message || "Erreur lors de la récupération des statistiques", {
+      rawCode: error?.code,
+    });
+  }
+
+  return {
+    success: true,
+    totalUsers,
+    activeUsers,
+    disabledUsers,
+    windowDays: ADMIN_ACTIVITY_WINDOW_DAYS,
+    updatedAt: new Date(now).toISOString(),
+  };
 });
 
 const LEADS_MISSION = "ORANGE_LEADS";

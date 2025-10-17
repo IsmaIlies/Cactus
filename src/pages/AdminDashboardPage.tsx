@@ -133,7 +133,23 @@ const AdminDashboardPage: React.FC = () => {
 
   const [activeSection, setActiveSection] = React.useState<string>("dashboard");
   const [sidebarOpen, setSidebarOpen] = React.useState<boolean>(true);
-  const [userStats, setUserStats] = React.useState({ totalUsers: 0, activeUsers: 0 });
+  type StatsSnapshot = {
+    totalUsers: number;
+    activeUsers: number;
+    disabledUsers?: number;
+    updatedAt?: string;
+    windowDays?: number;
+  };
+
+  const [firestoreStats, setFirestoreStats] = React.useState<StatsSnapshot>({
+    totalUsers: 0,
+    activeUsers: 0,
+    disabledUsers: 0,
+  });
+  const [authStats, setAuthStats] = React.useState<StatsSnapshot | null>(null);
+  const [authStatsLoading, setAuthStatsLoading] = React.useState<boolean>(false);
+  const [authStatsError, setAuthStatsError] = React.useState<string | null>(null);
+  const [authStatsNonce, setAuthStatsNonce] = React.useState<number>(0);
   const [statsLoading, setStatsLoading] = React.useState<boolean>(true);
   const [statsError, setStatsError] = React.useState<string | null>(null);
   const [userRows, setUserRows] = React.useState<AdminUserRow[]>([]);
@@ -150,6 +166,75 @@ const AdminDashboardPage: React.FC = () => {
   const [newUserForm, setNewUserForm] = React.useState<NewUserForm>(() => createEmptyNewUserForm());
   const [createUserLoading, setCreateUserLoading] = React.useState<boolean>(false);
   const [createUserFeedback, setCreateUserFeedback] = React.useState<CreateUserFeedback | null>(null);
+
+  const requestAuthStatsRefresh = React.useCallback(() => {
+    setAuthStatsNonce((prev) => prev + 1);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const fetchStats = async () => {
+      if (!isAuthenticated) {
+        setAuthStats(null);
+        setAuthStatsError("Authentification requise pour récupérer les statistiques globales.");
+        setAuthStatsLoading(false);
+        return;
+      }
+
+      setAuthStatsLoading(true);
+      setAuthStatsError(null);
+
+      try {
+        const callable = httpsCallable(functions, "getAdminUserStats");
+        const response = await callable({});
+        const payload: any = response?.data || {};
+
+        if (cancelled) {
+          return;
+        }
+
+        if (payload?.success) {
+          setAuthStats({
+            totalUsers: typeof payload.totalUsers === "number" ? payload.totalUsers : 0,
+            activeUsers: typeof payload.activeUsers === "number" ? payload.activeUsers : 0,
+            disabledUsers: typeof payload.disabledUsers === "number" ? payload.disabledUsers : undefined,
+            updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : undefined,
+            windowDays: typeof payload.windowDays === "number" ? payload.windowDays : undefined,
+          });
+        } else {
+          setAuthStatsError(
+            typeof payload?.message === "string"
+              ? payload.message
+              : "Impossible de récupérer les statistiques globales."
+          );
+        }
+      } catch (err: any) {
+        if (cancelled) {
+          return;
+        }
+        const code = err?.code || err?.details?.rawCode;
+        const defaultMessage = "Impossible de récupérer les statistiques globales.";
+        if (code === "unauthenticated") {
+          setAuthStatsError("Authentifie-toi à Firebase pour consulter ces chiffres.");
+        } else if (code === "permission-denied") {
+          setAuthStatsError("Ton compte ne dispose pas des autorisations admin pour voir ces chiffres.");
+        } else {
+          setAuthStatsError(typeof err?.message === "string" ? err.message : defaultMessage);
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthStatsLoading(false);
+        }
+      }
+    };
+
+    fetchStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [functions, isAuthenticated, authStatsNonce]);
 
   React.useEffect(() => {
     if (!isAuthenticated && localStorage.getItem("adminAuth") !== "1") {
@@ -178,10 +263,14 @@ const AdminDashboardPage: React.FC = () => {
       if (!isMounted) return;
 
       let active = 0;
+      let disabledCount = 0;
       const rows: AdminUserRow[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
         const email = typeof data.email === "string" ? data.email : "";
         const disabledFlag = data?.disabled === true;
+        if (disabledFlag) {
+          disabledCount += 1;
+        }
         const displayName = (() => {
           if (typeof data.displayName === "string" && data.displayName.trim().length > 0) {
             return data.displayName.trim();
@@ -240,8 +329,8 @@ const AdminDashboardPage: React.FC = () => {
         return a.displayName.localeCompare(b.displayName, "fr", { sensitivity: "base" });
       });
 
-      const total = sortedRows.filter((row) => row.status !== "disabled").length;
-      setUserStats({ totalUsers: total, activeUsers: active });
+      const total = sortedRows.length;
+      setFirestoreStats({ totalUsers: total, activeUsers: active, disabledUsers: disabledCount });
       setUserRows(sortedRows);
       setSelectedUserIds((prev) =>
         prev.filter((id) => sortedRows.some((row) => row.id === id && row.status !== "disabled"))
@@ -407,6 +496,7 @@ const AdminDashboardPage: React.FC = () => {
         setCreateUserFeedback({ type: "success", message: "Compte créé avec succès." });
         // Reset form after success
         setNewUserForm(createEmptyNewUserForm());
+        requestAuthStatsRefresh();
       } catch (err: any) {
         // Network or unexpected error
         setCreateUserFeedback({ type: "error", message: mapRegisterUserError(undefined, err?.message) });
@@ -414,7 +504,7 @@ const AdminDashboardPage: React.FC = () => {
         setCreateUserLoading(false);
       }
     },
-    [isAuthenticated, newUserForm, registerUserEndpoint]
+    [isAuthenticated, newUserForm, registerUserEndpoint, requestAuthStatsRefresh]
   );
 
   const handleToggleUserSelection = React.useCallback(
@@ -487,6 +577,7 @@ const AdminDashboardPage: React.FC = () => {
         message: [`Accès révoqué pour ${disabledCount} utilisateur(s).`, ...extraMessages].join(" "),
       });
       setSelectedUserIds([]);
+      requestAuthStatsRefresh();
     } catch (err: any) {
       const message =
         typeof err?.message === "string"
@@ -499,7 +590,20 @@ const AdminDashboardPage: React.FC = () => {
     } finally {
       setDisableLoading(false);
     }
-  }, [functions, isAuthenticated, selectedUserIds]);
+  }, [functions, isAuthenticated, selectedUserIds, requestAuthStatsRefresh]);
+
+  const displayStats = authStats ?? firestoreStats;
+  const cardsLoading = !authStats && (authStatsLoading || statsLoading);
+  const statsUpdatedLabel = authStats?.updatedAt
+    ? new Date(authStats.updatedAt).toLocaleString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const activityWindowDays = authStats?.windowDays ?? Math.round(ACTIVITY_WINDOW_MS / (1000 * 60 * 60 * 24));
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-[#030b1d] via-[#02132b] to-[#010511] text-white">
@@ -590,23 +694,41 @@ const AdminDashboardPage: React.FC = () => {
                   {statsError}
                 </div>
               )}
+              {authStatsError && (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+                  {authStatsError}
+                  {!authStats && " Les chiffres affichés proviennent des données Firestore locales."}
+                </div>
+              )}
 
               <div className="grid gap-6 sm:grid-cols-2">
                 <StatCard
                   icon={Users}
                   title="Utilisateurs enregistrés"
-                  value={formatStatValue(userStats.totalUsers, statsLoading)}
-                  helperText={statsLoading ? "Chargement en cours..." : "Total des comptes créés sur Cactus."}
+                  value={formatStatValue(displayStats.totalUsers, cardsLoading)}
+                  helperText={
+                    cardsLoading
+                      ? "Chargement en cours..."
+                      : authStats
+                      ? statsUpdatedLabel
+                        ? `Mise à jour ${statsUpdatedLabel}`
+                        : "Données issues de Firebase Auth."
+                      : displayStats.disabledUsers
+                      ? `Total des comptes créés (dont ${displayStats.disabledUsers} désactivé${displayStats.disabledUsers > 1 ? 's' : ''}).`
+                      : "Total des comptes créés sur Cactus (snapshot Firestore)."
+                  }
                 />
 
                 <StatCard
                   icon={UserCheck2}
                   title="Utilisateurs actifs"
-                  value={formatStatValue(userStats.activeUsers, statsLoading)}
+                  value={formatStatValue(displayStats.activeUsers, cardsLoading)}
                   helperText={
-                    statsLoading
+                    cardsLoading
                       ? "Détection de l'activité..."
-                      : "Utilisateurs considérés actifs sur les 30 derniers jours."
+                      : authStats
+                      ? `Connexions sur ${activityWindowDays} jours via Firebase Auth.`
+                      : "Utilisateurs considérés actifs sur les 30 derniers jours (FireStore)."
                   }
                 />
               </div>
