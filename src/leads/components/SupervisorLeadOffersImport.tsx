@@ -108,11 +108,9 @@ const SupervisorLeadOffersImport: React.FC = () => {
     setSuccess(null);
     try {
       // Priorité aux groupes par "Type de produit" (Informations, Produits, Options) si présents ; sinon Famille ; sinon groupes par feuille
-      const groups = (types && types.length)
-        ? types
-        : ((sourceType === 'xlsx' || (sourceType === 'csv' && sheets.length)) && sheets.length
-          ? sheets.map((sh) => ({ name: sh.name, items: sh.items }))
-          : null);
+      const groups = sheets.length
+        ? sheets.map((sh) => ({ name: sh.name, items: sh.items }))
+        : (types && types.length ? types : null);
       await setLeadOffersCatalog(preview, groups);
       setCurrent(preview);
       setPreview([]);

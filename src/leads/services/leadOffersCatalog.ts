@@ -215,7 +215,8 @@ export async function parseXlsxOffers(buffer: ArrayBuffer): Promise<XlsxOffersPa
         ordered.push(v);
       }
     }
-    perSheet.push({ name: normalizeLabel(sheetName), items: ordered });
+    const displayName = String(sheetName || '').trim() || 'Feuille';
+    perSheet.push({ name: displayName, items: ordered });
   });
   let flat = Array.from(all); // already in insertion order
   // If there is a sheet named TOTAL but it had no items, fill it with the global flat list
