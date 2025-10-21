@@ -39,6 +39,7 @@ export type OrigineLead = "hipto" | "dolead" | "mm" | "";
 
 export type AdditionalOffer = {
   id: string;
+  typeOffre: OfferType | "";
   intituleOffre: string;
   referencePanier: string;
 };

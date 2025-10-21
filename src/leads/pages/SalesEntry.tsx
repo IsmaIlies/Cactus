@@ -53,7 +53,7 @@ const SalesEntry: React.FC = () => {
   const [showSuccess, setShowSuccess] = React.useState(false);
   const [additionalOffers, setAdditionalOffers] = React.useState<AdditionalOffer[]>([]);
   const [additionalErrors, setAdditionalErrors] = React.useState<
-    Record<string, { intituleOffre?: string; referencePanier?: string }>
+    Record<string, { typeOffre?: string; intituleOffre?: string; referencePanier?: string }>
   >({});
   const [submitting, setSubmitting] = React.useState(false);
   const [submissionError, setSubmissionError] = React.useState<string | null>(null);
@@ -168,55 +168,21 @@ const SalesEntry: React.FC = () => {
   };
 
   const addAdditionalOffer = () => {
-    const intituleError = validateField("intituleOffre", form.intituleOffre);
-    const referenceError = validateField("referencePanier", form.referencePanier);
-
-    if (intituleError || referenceError) {
-      setErrors((prev) => ({
-        ...prev,
-        ...(intituleError ? { intituleOffre: intituleError } : {}),
-        ...(referenceError ? { referencePanier: referenceError } : {}),
-      }));
-      setTouched((prev) => ({
-        ...prev,
-        intituleOffre: true,
-        referencePanier: true,
-      }));
-      const focusField = intituleError ? "intituleOffre" : "referencePanier";
-      fieldRefs.current[focusField]?.focus();
-      return;
-    }
-
+    // Ajouter une carte vide: choisir d'abord le type, puis l'intitulé et la référence
     setAdditionalOffers((prev) => [
       ...prev,
       {
         id: generateId(),
-        intituleOffre: form.intituleOffre.trim(),
-        referencePanier: form.referencePanier.trim(),
+        typeOffre: "",
+        intituleOffre: "",
+        referencePanier: "",
       },
     ]);
-
-    setForm((prev) => ({
-      ...prev,
-      intituleOffre: "",
-      referencePanier: "",
-    }));
-
-    setTouched((prev) => ({
-      ...prev,
-      intituleOffre: false,
-      referencePanier: false,
-    }));
-
-    setErrors((prev) => {
-      const { intituleOffre, referencePanier, ...rest } = prev;
-      return rest;
-    });
   };
 
   const updateAdditionalOffer = (
     id: string,
-    field: keyof Pick<AdditionalOffer, "intituleOffre" | "referencePanier">,
+    field: keyof Pick<AdditionalOffer, "typeOffre" | "intituleOffre" | "referencePanier">,
     value: string
   ) => {
     setAdditionalOffers((prev) =>
@@ -226,16 +192,16 @@ const SalesEntry: React.FC = () => {
       if (!prev[id]) return prev;
       const nextErrors = { ...prev };
       const trimmed = value.trim();
-      const errorMessage = field === "intituleOffre" ? "Intitulé requis" : "Référence requise";
+      const errorMessage = field === "intituleOffre" ? "Intitulé requis" : field === "referencePanier" ? "Référence requise" : "Type d'offre requis";
       if (!trimmed) {
-        nextErrors[id] = { ...nextErrors[id], [field]: errorMessage };
+        nextErrors[id] = { ...nextErrors[id], [field]: errorMessage } as any;
       } else {
         const { [field]: _, ...rest } = nextErrors[id];
         if (Object.keys(rest).length === 0) {
           const { [id]: __, ...remaining } = nextErrors;
           return remaining;
         }
-        nextErrors[id] = rest;
+        nextErrors[id] = rest as any;
       }
       return nextErrors;
     });
@@ -263,12 +229,19 @@ const SalesEntry: React.FC = () => {
 
       let valid = true;
       let firstInvalid:
-        | { id: string; field: keyof Pick<AdditionalOffer, "intituleOffre" | "referencePanier"> }
+        | { id: string; field: keyof Pick<AdditionalOffer, "typeOffre" | "intituleOffre" | "referencePanier"> }
         | undefined;
-      const nextErrors: Record<string, { intituleOffre?: string; referencePanier?: string }> = {};
+      const nextErrors: Record<string, { typeOffre?: string; intituleOffre?: string; referencePanier?: string }> = {};
 
       additionalOffers.forEach((offer) => {
-        const offerErrors: { intituleOffre?: string; referencePanier?: string } = {};
+        const offerErrors: { typeOffre?: string; intituleOffre?: string; referencePanier?: string } = {};
+        if (!String(offer.typeOffre || '').trim()) {
+          offerErrors.typeOffre = "Type d'offre requis";
+          valid = false;
+          if (!firstInvalid) {
+            firstInvalid = { id: offer.id, field: "typeOffre" };
+          }
+        }
         if (!offer.intituleOffre.trim()) {
           offerErrors.intituleOffre = "Intitulé requis";
           valid = false;
@@ -381,6 +354,7 @@ const SalesEntry: React.FC = () => {
 
   const getPayload = React.useCallback(() => {
     const sanitizedAdditional = additionalOffers.map((offer) => ({
+      typeOffre: (offer.typeOffre || '').trim(),
       intituleOffre: offer.intituleOffre.trim(),
       referencePanier: offer.referencePanier.trim(),
     }));
@@ -459,6 +433,9 @@ const SalesEntry: React.FC = () => {
       try { await auth.currentUser?.getIdToken(true); } catch { /* noop */ }
       const docToSave = {
         ...payload,
+        // Nous enregistrons les offres supplémentaires en tant que ventes séparées.
+        // On vide donc additionalOffers du document principal pour éviter les doublons d'affichage.
+        additionalOffers: [],
         origineLead: payload.origineLead as "hipto" | "dolead" | "mm",
         createdBy: {
           userId: user.id,
@@ -475,8 +452,34 @@ const SalesEntry: React.FC = () => {
         telephone: docToSave.telephone,
         mobileCountPreview: docToSave.typeOffre,
       });
+      // 1) Enregistrer la vente principale
       await saveLeadSale(docToSave);
-      console.log("payload", payload);
+
+      // 2) Enregistrer chaque offre supplémentaire comme une vente séparée
+      if (additionalOffers.length > 0) {
+        const extrasPayloads = additionalOffers.map((off) => ({
+          numeroId: payload.numeroId,
+          typeOffre: (off.typeOffre || '').trim() || payload.typeOffre,
+          dateTechnicien: null, // Pas de saisie de date pour les offres supplémentaires
+          intituleOffre: off.intituleOffre.trim(),
+          referencePanier: off.referencePanier.trim(),
+          additionalOffers: [],
+          ficheDuJour: payload.ficheDuJour,
+          origineLead: payload.origineLead as "hipto" | "dolead" | "mm",
+          telephone: payload.telephone,
+          createdBy: {
+            userId: user.id,
+            displayName: user.displayName,
+            email: user.email,
+          },
+        }));
+        const results = await Promise.allSettled(extrasPayloads.map((p) => saveLeadSale(p as any)));
+        const failed = results.filter((r) => r.status === 'rejected');
+        if (failed.length > 0) {
+          throw new Error(`${failed.length} offre(s) supplémentaire(s) non enregistrée(s).`);
+        }
+      }
+
       setShowSuccess(true);
     } catch (error: any) {
       console.error("saveLeadSale failed", error);
@@ -528,11 +531,12 @@ const SalesEntry: React.FC = () => {
   const progress = calcProgress(form, validateField);
   const extraValidCount = additionalOffers.reduce((count, offer) => {
     let current = count;
+    if (String(offer.typeOffre || '').trim()) current += 1;
     if (offer.intituleOffre.trim()) current += 1;
     if (offer.referencePanier.trim()) current += 1;
     return current;
   }, 0);
-  const extraTotal = additionalOffers.length * 2;
+  const extraTotal = additionalOffers.length * 3;
   const totalValid = progress.validCount + extraValidCount;
   const totalFields = progress.total + extraTotal;
   const ratio = totalFields === 0 ? 0 : totalValid / totalFields;

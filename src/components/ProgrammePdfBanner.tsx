@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { FileUp, Loader2, Download, RefreshCw, Heart, MessageCircle, X, Sparkles } from 'lucide-react';
 import { db } from '../firebase';
-import { doc, onSnapshot, collection, setDoc, deleteDoc, serverTimestamp, addDoc, query, orderBy, limit } from 'firebase/firestore';
+import { doc, onSnapshot, collection, setDoc, deleteDoc, serverTimestamp, addDoc, query, orderBy, limit, getDoc, getCountFromServer } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 
 const ProgrammePdfBanner: React.FC = () => {
@@ -17,41 +17,45 @@ const ProgrammePdfBanner: React.FC = () => {
   const OBJECT_DOC = doc(db, 'shared', 'programmePdf');
 
   useEffect(() => {
-    // Lecture publique maintenant permise (pas besoin d'attendre user)
+    // Lecture one-shot (réduit la charge réseau). L'UI propose un bouton "Recharger" pour rafraîchir l'aperçu.
+    let active = true;
     setLoading(true);
-    const unsub = onSnapshot(OBJECT_DOC, (snap) => {
-      if (!snap.exists()) {
-        setFileName(null); setB64(null); setSizeKB(null); setUpdatedAt(null); setError(null); setLoading(false); return;
+    (async () => {
+      try {
+        const snap = await getDoc(OBJECT_DOC);
+        if (!active) return;
+        if (!snap.exists()) {
+          setFileName(null); setB64(null); setSizeKB(null); setUpdatedAt(null); setError(null); setLoading(false); return;
+        }
+        const d: any = snap.data();
+        setFileName(typeof d.name === 'string' ? d.name : null);
+        setSizeKB(typeof d.size === 'number' ? Math.round(d.size / 1024) : null);
+        setUpdatedAt(d.updatedAt?.toDate ? d.updatedAt.toDate() : null);
+        setStoragePath(typeof d.storagePath === 'string' ? d.storagePath : null);
+        setVersion(typeof d.version === 'number' ? d.version : (d.version? Number(d.version): 0));
+        // Priorité url (Storage) sinon fallback base64
+        if (typeof d.url === 'string') {
+          setDirectUrl(d.url);
+          setB64(null);
+        } else if (typeof d.data === 'string') {
+          setB64(d.data);
+          setDirectUrl(null);
+        } else {
+          setB64(null);
+          setDirectUrl(null);
+        }
+        setError(null);
+      } catch (err: any) {
+        if (err?.code === 'permission-denied') {
+          setError("Accès refusé (permissions insuffisantes). Vérifie que ton compte est connecté ou demande l'ajout du rôle.");
+        } else {
+          setError(err?.message || 'Erreur chargement PDF');
+        }
+      } finally {
+        if (active) setLoading(false);
       }
-      const d: any = snap.data();
-      setFileName(typeof d.name === 'string' ? d.name : null);
-      setSizeKB(typeof d.size === 'number' ? Math.round(d.size / 1024) : null);
-      setUpdatedAt(d.updatedAt?.toDate ? d.updatedAt.toDate() : null);
-      setStoragePath(typeof d.storagePath === 'string' ? d.storagePath : null);
-  setVersion(typeof d.version === 'number' ? d.version : (d.version? Number(d.version): 0));
-      // Priorité url (Storage) sinon fallback base64
-      if (typeof d.url === 'string') {
-        setDirectUrl(d.url);
-        setB64(null);
-      } else if (typeof d.data === 'string') {
-        setB64(d.data);
-        setDirectUrl(null);
-      } else {
-        setB64(null);
-        setDirectUrl(null);
-      }
-      setError(null);
-      setLoading(false);
-    }, (err) => {
-      // Gère permission-denied proprement
-      if (err.code === 'permission-denied') {
-        setError("Accès refusé (permissions insuffisantes). Vérifie que ton compte est connecté ou demande l'ajout du rôle.");
-      } else {
-        setError(err.message || 'Erreur chargement PDF');
-      }
-      setLoading(false);
-    });
-    return () => unsub();
+    })();
+    return () => { active = false; };
   }, []);
 
   const [directUrl, setDirectUrl] = useState<string | null>(null);
@@ -109,27 +113,43 @@ const ProgrammePdfBanner: React.FC = () => {
 
   // Listener global compteur likes
   useEffect(()=>{
-    const likesCol = collection(db, likesCollectionPath);
-    const unsub = onSnapshot(likesCol, (snap)=>{
-      setLikeCount(snap.size);
-      setLoadingLikes(false);
-    }, (err)=>{ console.warn('like count listener error', err); setLoadingLikes(false); setLikeError('Sync likes interrompue'); });
-    return ()=>unsub();
+    // Utilise un comptage serveur one-shot pour éviter un listener en temps réel
+    let canceled = false;
+    setLoadingLikes(true);
+    (async () => {
+      try {
+        const likesCol = collection(db, likesCollectionPath);
+        const snap = await getCountFromServer(likesCol);
+        if (!canceled) setLikeCount(Number(snap.data().count || 0));
+      } catch (err) {
+        console.warn('like count fetch error', err);
+        if (!canceled) setLikeError('Impossible de charger le compteur de likes');
+      } finally {
+        if (!canceled) setLoadingLikes(false);
+      }
+    })();
+    return ()=>{ canceled = true; };
   }, []);
 
   // Listener spécifique au like de l'utilisateur
   useEffect(()=>{
     if(!user){ setLiked(false); return; }
+    let canceled = false;
     const likeDocRef = doc(db, likesCollectionPath, user.id);
-    const unsub = onSnapshot(likeDocRef, snap => {
-      if(!likePending){
-        const exists = snap.exists();
-        setLiked(exists);
-        try { localStorage.setItem('programmePdf_like_'+user.id, exists? '1':'0'); } catch {}
+    (async () => {
+      try {
+        const snap = await getDoc(likeDocRef);
+        if (!canceled && !likePending) {
+          const exists = snap.exists();
+          setLiked(exists);
+          try { localStorage.setItem('programmePdf_like_'+user.id, exists? '1':'0'); } catch {}
+        }
+      } catch (err) {
+        console.warn('user like fetch error', err);
       }
-    }, err => { console.warn('user like listener error', err); });
-    return ()=>unsub();
-  }, [user, likePending]);
+    })();
+    return ()=>{ canceled = true; };
+  }, [user]);
 
   // Hydrate liked state depuis cache local pour éviter flash
   useEffect(()=>{
@@ -176,7 +196,9 @@ const ProgrammePdfBanner: React.FC = () => {
 
   // Charger commentaires (temps réel)
   useEffect(()=>{
-  const commentsCol = collection(db, commentsCollectionPath);
+    // N'activer l'écoute temps réel des commentaires que lorsque la zone est ouverte
+    if (!showComments) return;
+    const commentsCol = collection(db, commentsCollectionPath);
     const q = query(commentsCol, orderBy('createdAt','desc'), limit(30));
     const unsub = onSnapshot(q, (snap)=>{
       const list = snap.docs.map(d=>{
@@ -186,7 +208,7 @@ const ProgrammePdfBanner: React.FC = () => {
       setComments(list);
     });
     return ()=>unsub();
-  }, []);
+  }, [showComments]);
 
   const addComment = async () => {
     if(!user || !commentDraft.trim()) return;

@@ -1,6 +1,6 @@
 import React from 'react';
-import { getLeadOffersCatalog, parseCsvOffers, parseCsvOffersAdvanced, parseXlsxOffers, setLeadOffersCatalog, type XlsxSheetOffers } from '../services/leadOffersCatalog';
-import { PlusCircle, MinusCircle, Equal, UploadCloud, CheckCircle2, Download, ChevronDown } from 'lucide-react';
+import { getLeadOffersCatalog, parseCsvOffers, parseCsvOffersAdvanced, parseXlsxOffers, setLeadOffersCatalog, type XlsxSheetOffers, type CatalogGroup } from '../services/leadOffersCatalog';
+import { PlusCircle, MinusCircle, Equal, UploadCloud, CheckCircle2, ChevronDown } from 'lucide-react';
 
 const box = 'rounded-2xl border border-gray-200 bg-white p-4 shadow-sm';
 
@@ -8,6 +8,7 @@ const SupervisorLeadOffersImport: React.FC = () => {
   const [current, setCurrent] = React.useState<string[]>([]);
   const [preview, setPreview] = React.useState<string[]>([]);
   const [sheets, setSheets] = React.useState<XlsxSheetOffers[]>([]);
+  const [types, setTypes] = React.useState<CatalogGroup[] | undefined>(undefined);
   const [sourceType, setSourceType] = React.useState<'xlsx' | 'csv' | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -65,9 +66,10 @@ const SupervisorLeadOffersImport: React.FC = () => {
       const name = file.name.toLowerCase();
       if (name.endsWith('.xlsx')) {
         const buf = await file.arrayBuffer();
-        const { flat, sheets } = await parseXlsxOffers(buf);
+        const { flat, sheets, types } = await parseXlsxOffers(buf);
         setPreview(flat);
         setSheets(sheets);
+        setTypes(types);
         setSourceType('xlsx');
         setDiff(computeDiff(current, flat));
       } else {
@@ -90,6 +92,7 @@ const SupervisorLeadOffersImport: React.FC = () => {
   const items = adv.flat.length ? adv.flat : parseCsvOffers(text);
   setPreview(items);
   setSheets(adv.sheets); // si pas de groupe, tableau vide
+  setTypes(adv.types);
   setSourceType('csv');
   setDiff(computeDiff(current, items));
       }
@@ -104,10 +107,12 @@ const SupervisorLeadOffersImport: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      // Publier les groupes uniquement pour les fichiers XLSX
-      const groups = (sourceType === 'xlsx' || (sourceType === 'csv' && sheets.length)) && sheets.length
-        ? sheets.map((sh) => ({ name: sh.name, items: sh.items }))
-        : null; // CSV: efface le champ groups côté Firestore
+      // Priorité aux groupes par "Type de produit" (Informations, Produits, Options) si présents ; sinon Famille ; sinon groupes par feuille
+      const groups = (types && types.length)
+        ? types
+        : ((sourceType === 'xlsx' || (sourceType === 'csv' && sheets.length)) && sheets.length
+          ? sheets.map((sh) => ({ name: sh.name, items: sh.items }))
+          : null);
       await setLeadOffersCatalog(preview, groups);
       setCurrent(preview);
       setPreview([]);
@@ -130,29 +135,7 @@ const SupervisorLeadOffersImport: React.FC = () => {
     return `${date} ${time}`;
   };
 
-  const downloadTemplateCsv = () => {
-    const csv = '\uFEFFLibellé ALF\r\nFibre 2G\r\nForfait 150 Go\r\n';
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modele_catalogue_offres.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadTemplateXlsx = async () => {
-    const { utils, writeFile } = await import('xlsx');
-    const data = [
-      ['Libellé ALF'],
-      ['Fibre 2G'],
-      ['Forfait 150 Go'],
-    ];
-    const ws = utils.aoa_to_sheet(data);
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, 'Catalogue');
-    writeFile(wb, 'modele_catalogue_offres.xlsx');
-  };
+  // Modèles retirés sur demande
 
   return (
     <section className="space-y-4">
@@ -176,12 +159,7 @@ const SupervisorLeadOffersImport: React.FC = () => {
             <UploadCloud className="h-4 w-4" /> Importer .xlsx / .csv
             <input type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" className="hidden" onChange={(e) => e.target.files && e.target.files[0] && onFile(e.target.files[0])} />
           </label>
-          <button type="button" onClick={downloadTemplateCsv} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 text-sm hover:bg-gray-50 shadow-sm">
-            <Download className="h-4 w-4" /> Modèle CSV
-          </button>
-          <button type="button" onClick={downloadTemplateXlsx} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 text-sm hover:bg-gray-50 shadow-sm">
-            <Download className="h-4 w-4" /> Modèle XLSX
-          </button>
+          {/* Boutons de modèles supprimés */}
           <button disabled={preview.length===0 || saving} onClick={publish} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-600 bg-emerald-600 text-white text-sm disabled:opacity-50 shadow-sm hover:brightness-110">
             <CheckCircle2 className="h-4 w-4" /> Publier {preview.length>0 ? `(${preview.length})` : ''}
           </button>

@@ -8,10 +8,12 @@ import {
   query,
   where,
   orderBy,
+  limit,
   Timestamp,
   arrayUnion,
   serverTimestamp,
   getDoc,
+  getDocs,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -487,6 +489,14 @@ class MrWhiteService {
         callback([]);
       }
     );
+  }
+
+  // Récupération one-shot des derniers événements (sans écoute temps réel)
+  async getRecentEvents(max: number = 10): Promise<GameEvent[]> {
+    const q = query(this.eventsCollection, orderBy("createdAt", "desc"), limit(max));
+    const snap = await getDocs(q);
+    const events = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as GameEvent[];
+    return events;
   }
 
   // Créer un événement

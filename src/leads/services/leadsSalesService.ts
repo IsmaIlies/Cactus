@@ -27,7 +27,7 @@ type LeadSaleInput = {
   dateTechnicien: string | null;
   intituleOffre: string;
   referencePanier: string;
-  additionalOffers: Array<Pick<AdditionalOffer, "intituleOffre" | "referencePanier">>;
+  additionalOffers: Array<Pick<AdditionalOffer, "typeOffre" | "intituleOffre" | "referencePanier">>;
   ficheDuJour: string;
   origineLead: "hipto" | "dolead" | "mm";
   telephone: string;

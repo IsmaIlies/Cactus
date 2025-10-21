@@ -60,16 +60,18 @@ const SupervisorLayout: React.FC = () => {
           >
             Ventes
           </NavLink>
-          <NavLink
-            to={`${base}/leads-supervision`}
-            className={({ isActive }) =>
-              `block px-3 py-2 rounded-md text-sm font-semibold ${
-                isActive ? 'bg-blue-600 text-white' : 'text-blue-100 hover:bg-white/10'
-              }`
-            }
-          >
-            LEADS
-          </NavLink>
+          {String(area).toLowerCase() === 'leads' && (
+            <NavLink
+              to={`${base}/leads-supervision`}
+              className={({ isActive }) =>
+                `block px-3 py-2 rounded-md text-sm font-semibold ${
+                  isActive ? 'bg-blue-600 text-white' : 'text-blue-100 hover:bg-white/10'
+                }`
+              }
+            >
+              LEADS
+            </NavLink>
+          )}
           <NavLink
             to={`${base}/checklist`}
             className={({ isActive }) =>

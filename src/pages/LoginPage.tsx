@@ -19,7 +19,10 @@ const LoginPage = () => {
   const [advResults, setAdvResults] = useState<any | null>(null);
   const [showDiag, setShowDiag] = useState(false);
   // Option B: whitelist temporary supervisor access based on email typed on login screen
-  const SUPERVISOR_WHITELIST = ["i.brai@mars-marketing.fr"]; // temporary
+  const SUPERVISOR_WHITELIST = [
+    "i.brai@mars-marketing.fr",
+    "l.raynaud@mars-marketing.fr",
+  ]; // temporary
   type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
   const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);
 
@@ -295,7 +298,7 @@ const LoginPage = () => {
                       onChange={() => setSelectedRegion('FR')}
                       className="accent-cactus-600"
                     />
-                    <span>France (FR)</span>
+                    <span className="text-gray-900">France (FR)</span>
                   </label>
                   <label className="flex items-center gap-1 cursor-pointer">
                     <input
@@ -306,7 +309,7 @@ const LoginPage = () => {
                       onChange={() => setSelectedRegion('CIV')}
                       className="accent-cactus-600"
                     />
-                    <span>Côte d'Ivoire (CIV)</span>
+                    <span className="text-gray-900">Côte d'Ivoire (CIV)</span>
                   </label>
                 </div>
               </div>
@@ -346,7 +349,7 @@ const LoginPage = () => {
                 </div>
                 {!isSupervisorAllowed && (
                   <p className="mt-2 text-[11px] text-blue-900/80">
-                    Indiquez un email autorisé pour activer l'accès superviseur. Accès accordé à: i.brai@mars-marketing.fr
+                    Indiquez un email autorisé pour activer l'accès superviseur. Accès accordé à: {SUPERVISOR_WHITELIST.join(', ')}
                   </p>
                 )}
                 {isSupervisorAllowed && supervisorChoice && (

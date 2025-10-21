@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, Users, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MrWhiteService, { GameEvent } from "../services/mrWhiteService";
@@ -12,17 +12,29 @@ const GameNotification: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = MrWhiteService.subscribeToEvents((newEvents) => {
-      // Ne garder que les événements des 5 dernières minutes
-      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-      const recentEvents = newEvents.filter(event => 
-        event.createdAt.toMillis() > fiveMinutesAgo &&
-        event.type === "NEW_GAME"
-      );
-      setEvents(recentEvents);
-    });
+    let canceled = false;
+    const inFlight = { v: false };
 
-    return unsubscribe;
+    const fetchOnce = async () => {
+      if (inFlight.v || canceled) return;
+      inFlight.v = true;
+      try {
+        const list = await MrWhiteService.getRecentEvents(10);
+        if (canceled) return;
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        const recent = list.filter(ev => ev.createdAt.toMillis() > fiveMinutesAgo && ev.type === "NEW_GAME");
+        setEvents(recent);
+      } catch (e) {
+        // silencieux pour éviter le spam console
+      } finally {
+        inFlight.v = false;
+      }
+    };
+
+    // première récupération immédiate, puis toutes les 60s
+    fetchOnce();
+    const id = setInterval(fetchOnce, 60_000);
+    return () => { canceled = true; clearInterval(id); };
   }, [user]);
 
   const handleJoinGame = (gameId: string) => {

@@ -130,12 +130,30 @@ export function parseCsvOffers(csvText: string): string[] {
 }
 
 export type XlsxSheetOffers = { name: string; items: string[] };
-export type XlsxOffersParseResult = { flat: string[]; sheets: XlsxSheetOffers[] };
+// Note: the 'types' field below now carries "Famille" groups (all distinct families),
+// kept as 'types' for backward compatibility with existing consumers.
+// 'types' transporte en priorité les groupes par "Type de produit"
+// (Informations, Produits, Options), avec repli sur les groupes par "Famille"
+// si aucune colonne de type n'est détectée.
+export type XlsxOffersParseResult = { flat: string[]; sheets: XlsxSheetOffers[]; types?: CatalogGroup[] };
 
 export async function parseXlsxOffers(buffer: ArrayBuffer): Promise<XlsxOffersParseResult> {
   const wb = XLSX.read(buffer, { type: 'array' });
   const perSheet: XlsxSheetOffers[] = [];
   const all = new Set<string>(); // preserves insertion order
+  // Global type groups and family groups across all sheets (first-seen order)
+  const typeOrder: string[] = [];
+  const typeMap = new Map<string, string[]>();
+  const familyOrder: string[] = [];
+  const familyMap = new Map<string, string[]>();
+  const canonicalType = (raw: string): string | undefined => {
+    const n = normalizeHeader(normalizeLabel(raw));
+    if (/^informations?$/.test(n) || /\binfo\b/.test(n)) return 'Informations';
+    if (/^produits?$/.test(n) || /\bproduct\b/.test(n)) return 'Produits';
+    if (/^offres?$/.test(n) || /^offers?$/.test(n)) return 'Offres';
+    if (/^options?$/.test(n) || /\boption\b/.test(n)) return 'Options';
+    return undefined;
+  };
   wb.SheetNames.forEach((sheetName) => {
     const ws = wb.Sheets[sheetName];
     if (!ws) return;
@@ -144,6 +162,16 @@ export async function parseXlsxOffers(buffer: ArrayBuffer): Promise<XlsxOffersPa
     if (!rows || rows.length === 0) return;
     const header = rows[0] as string[];
     const idx = findAlfColumn(header);
+    // detect both "Type de produit" and "Famille" columns
+    const normHeaders = header.map((h) => normalizeHeader(String(h || '')));
+    let typeIdx = -1;
+    let familyIdx = -1;
+    normHeaders.forEach((h, i) => {
+      const isTypeProduit = (h.includes('type') && h.includes('produit')) || h === 'type de produit' || h === 'type produit' || h === 'type_produit' || h === 'type';
+      const isFamille = h.includes('famille') || h.includes('family');
+      if (typeIdx === -1 && isTypeProduit) typeIdx = i;
+      if (familyIdx === -1 && isFamille) familyIdx = i;
+    });
     const items: string[] = [];
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r] as any[];
@@ -153,6 +181,30 @@ export async function parseXlsxOffers(buffer: ArrayBuffer): Promise<XlsxOffersPa
       items.push(norm);
       // Add to global flat list preserving sheet/row order
       if (!all.has(norm)) all.add(norm);
+      if (typeIdx >= 0) {
+        const rawType = String(row[typeIdx] ?? '').trim();
+        const can = canonicalType(rawType);
+        if (can) {
+          if (!typeMap.has(can)) {
+            typeMap.set(can, []);
+            if (!typeOrder.includes(can)) typeOrder.push(can);
+          }
+          const arr = typeMap.get(can)!;
+          if (!arr.includes(norm)) arr.push(norm);
+        }
+      }
+      if (familyIdx >= 0) {
+        const rawFamily = String(row[familyIdx] ?? '').trim();
+        const fam = normalizeLabel(rawFamily);
+        if (fam) {
+          if (!familyMap.has(fam)) {
+            familyMap.set(fam, []);
+            if (!familyOrder.includes(fam)) familyOrder.push(fam);
+          }
+          const arr = familyMap.get(fam)!;
+          if (!arr.includes(norm)) arr.push(norm);
+        }
+      }
     }
     // De-dupe preserving original sheet order (no sort). If this is a TOTAL sheet and empty, we'll fill later.
     const seen = new Set<string>();
@@ -174,10 +226,18 @@ export async function parseXlsxOffers(buffer: ArrayBuffer): Promise<XlsxOffersPa
     // Use the TOTAL sheet as the authoritative global list if it exists and has content
     flat = perSheet[idxTotal].items.slice();
   }
-  return { flat, sheets: perSheet };
+  // Build groups: prefer Type de produit (Informations, Produits, Options), otherwise fallback to Famille
+  const preferred = ['Informations', 'Produits', 'Offres', 'Options'];
+  const types: CatalogGroup[] | undefined = typeOrder.length
+    ? preferred
+        .filter((t) => typeMap.has(t))
+        .concat(typeOrder.filter((t) => !preferred.includes(t)))
+        .map((t) => ({ name: t, items: typeMap.get(t)! }))
+    : (familyOrder.length ? familyOrder.map((f) => ({ name: f, items: familyMap.get(f)! })) : undefined);
+  return { flat, sheets: perSheet, types };
 }
 
-export function parseCsvOffersAdvanced(csvText: string): { flat: string[]; sheets: XlsxSheetOffers[] } {
+export function parseCsvOffersAdvanced(csvText: string): { flat: string[]; sheets: XlsxSheetOffers[]; types?: CatalogGroup[] } {
   // Parse CSV into rows
   const rows = csvText
     .split(/\r?\n/)
@@ -190,10 +250,31 @@ export function parseCsvOffersAdvanced(csvText: string): { flat: string[]; sheet
   // Detect group column
   const normalizedHeaders = header.map((h) => normalizeHeader(h));
   const groupIdx = normalizedHeaders.findIndex((h) => /^(groupe|feuille|sheet|categorie|categorie|cat|grouper)$/.test(h));
+  // Detect both "Type de produit" and "Famille" columns
+  let typeIdx = -1;
+  let familyIdx = -1;
+  normalizedHeaders.forEach((h, i) => {
+    const isTypeProduit = (h.includes('type') && h.includes('produit')) || h === 'type de produit' || h === 'type produit' || h === 'type_produit' || h === 'type';
+    const isFamille = h.includes('famille') || h.includes('family');
+    if (typeIdx === -1 && isTypeProduit) typeIdx = i;
+    if (familyIdx === -1 && isFamille) familyIdx = i;
+  });
 
   const groupsOrder: string[] = [];
   const groupMap = new Map<string, string[]>();
   const flatSet = new Set<string>();
+  const typeOrder: string[] = [];
+  const typeMap = new Map<string, string[]>();
+  const familyOrder: string[] = [];
+  const familyMap = new Map<string, string[]>();
+  const canonicalType = (raw: string): string | undefined => {
+    const n = normalizeHeader(normalizeLabel(raw));
+    if (/^informations?$/.test(n) || /\binfo\b/.test(n)) return 'Informations';
+    if (/^produits?$/.test(n) || /\bproduct\b/.test(n)) return 'Produits';
+    if (/^offres?$/.test(n) || /^offers?$/.test(n)) return 'Offres';
+    if (/^options?$/.test(n) || /\boption\b/.test(n)) return 'Options';
+    return undefined;
+  };
 
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r].map((c) => String(c).trim());
@@ -213,9 +294,41 @@ export function parseCsvOffersAdvanced(csvText: string): { flat: string[]; sheet
       const arr = groupMap.get(gName)!;
       if (!arr.includes(title)) arr.push(title);
     }
+
+    if (typeIdx >= 0) {
+      const rawType = cells[typeIdx] || '';
+      const can = canonicalType(rawType);
+      if (can) {
+        if (!typeMap.has(can)) {
+          typeMap.set(can, []);
+          if (!typeOrder.includes(can)) typeOrder.push(can);
+        }
+        const arr = typeMap.get(can)!;
+        if (!arr.includes(title)) arr.push(title);
+      }
+    }
+    if (familyIdx >= 0) {
+      const rawFamily = cells[familyIdx] || '';
+      const fam = normalizeLabel(rawFamily);
+      if (fam) {
+        if (!familyMap.has(fam)) {
+          familyMap.set(fam, []);
+          if (!familyOrder.includes(fam)) familyOrder.push(fam);
+        }
+        const arr = familyMap.get(fam)!;
+        if (!arr.includes(title)) arr.push(title);
+      }
+    }
   }
 
   const sheets: XlsxSheetOffers[] = groupsOrder.map((g) => ({ name: g, items: groupMap.get(g)! }));
   const flat = Array.from(flatSet);
-  return { flat, sheets };
+  const preferred = ['Informations', 'Produits', 'Offres', 'Options'];
+  const types: CatalogGroup[] | undefined = typeOrder.length
+    ? preferred
+        .filter((t) => typeMap.has(t))
+        .concat(typeOrder.filter((t) => !preferred.includes(t)))
+        .map((t) => ({ name: t, items: typeMap.get(t)! }))
+    : (familyOrder.length ? familyOrder.map((f) => ({ name: f, items: familyMap.get(f)! })) : undefined);
+  return { flat, sheets, types };
 }
