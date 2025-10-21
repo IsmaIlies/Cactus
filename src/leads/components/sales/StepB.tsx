@@ -168,7 +168,7 @@ const StepB: React.FC<StepBProps> = ({
                     Supprimer
                   </button>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4">
                   <div>
                     <label className="text-sm font-medium text-gray-700">Type d'offre</label>
                     <select

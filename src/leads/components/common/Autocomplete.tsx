@@ -48,49 +48,75 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
     return () => clearTimeout(t);
   }, [value]);
 
-  const filter = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let list = suggestions;
-    if (q.length > 0) list = suggestions.filter((s) => s.toLowerCase().includes(q));
-    return list;
-  }, [query, suggestions]);
+  const normalizedQuery = query.trim().toLowerCase();
 
-  const grouped = React.useMemo(() => {
+  const userGroups = React.useMemo(() => {
     if (!groups || groups.length === 0) return undefined;
-    const q = query.trim().toLowerCase();
-    const out: Group[] = groups
-      .map((g) => ({ name: g.name, items: q ? g.items.filter((s) => s.toLowerCase().includes(q)) : g.items }))
-      .filter((g) => g.items.length > 0);
-    return out.length ? out : undefined;
-  }, [groups, query]);
+    return groups
+      .map((g) => {
+        const name = g.name;
+        const items = g.items || [];
+        if (!normalizedQuery) return { name, items };
+        const nameMatch = name.toLowerCase().includes(normalizedQuery);
+        const filteredItems = nameMatch
+          ? items
+          : items.filter((s) => s.toLowerCase().includes(normalizedQuery));
+        if (!filteredItems.length && !nameMatch) return null;
+        return { name, items: filteredItems };
+      })
+      .filter(Boolean) as Group[];
+  }, [groups, normalizedQuery]);
 
   // Fallback grouping by heuristics when groups are not provided (ensures groups-first UX)
   const derived = React.useMemo(() => {
     if (groups && groups.length) return undefined;
     const all = suggestions;
-    const q = query.trim().toLowerCase();
-    const inQuery = (s: string) => (q ? s.toLowerCase().includes(q) : true);
-    const internet = all.filter((s) => /(internet|fibre|adsl|vdsl|livebox|decodeur|tv orange)/i.test(s) && inQuery(s));
-    const mobile = all.filter((s) => /(mobile|sosh|forfait|sim|go)/i.test(s) && inQuery(s));
-    const top = all.filter((s) => /(\+\s?vendus|top|meilleur|best)/i.test(s) && inQuery(s));
-    const setAll = new Set(all);
-    const used = new Set<string>([...internet, ...mobile, ...top]);
-    const autres = [...all.filter((s) => !used.has(s) && inQuery(s))];
     const buckets: Group[] = [];
+    const internet = all.filter((s) => /(internet|fibre|adsl|vdsl|livebox|decodeur|tv orange)/i.test(s));
+    const mobile = all.filter((s) => /(mobile|sosh|forfait|sim|go)/i.test(s));
+    const top = all.filter((s) => /(\+\s?vendus|top|meilleur|best)/i.test(s));
+    const used = new Set<string>([...internet, ...mobile, ...top]);
+    const autres = all.filter((s) => !used.has(s));
     if (internet.length) buckets.push({ name: 'Internet', items: internet });
     if (mobile.length) buckets.push({ name: 'Mobile', items: mobile });
     if (top.length) buckets.push({ name: 'Les + vendus', items: top });
     if (autres.length) buckets.push({ name: 'Autres', items: autres });
-    return buckets.length ? buckets : undefined;
-  }, [groups, suggestions, query]);
 
-  const chosenGroups = grouped ?? derived;
+    if (!buckets.length) return undefined;
+    if (!normalizedQuery) return buckets;
+
+    const filtered = buckets
+      .map((bucket) => {
+        const nameMatch = bucket.name.toLowerCase().includes(normalizedQuery);
+        const filteredItems = nameMatch
+          ? bucket.items
+          : bucket.items.filter((item) => item.toLowerCase().includes(normalizedQuery));
+        if (!filteredItems.length && !nameMatch) return null;
+        return { name: bucket.name, items: filteredItems };
+      })
+      .filter(Boolean) as Group[];
+    return filtered.length ? filtered : undefined;
+  }, [groups, suggestions, normalizedQuery]);
+
+  const chosenGroups = userGroups ?? derived;
+
+  const filteredSuggestions = React.useMemo(() => {
+    if (!normalizedQuery) return suggestions;
+    const direct = suggestions.filter((s) => s.toLowerCase().includes(normalizedQuery));
+    const set = new Set(direct);
+    (chosenGroups || []).forEach((group) => {
+      if (group.name.toLowerCase().includes(normalizedQuery)) {
+        group.items.forEach((item) => set.add(item));
+      }
+    });
+    return Array.from(set);
+  }, [suggestions, normalizedQuery, chosenGroups]);
 
   // Build a flat visible list for consistent keyboard navigation
   const visibleList = React.useMemo(() => {
     if (chosenGroups) return chosenGroups.flatMap((g) => g.items);
-    return filter;
-  }, [chosenGroups, filter]);
+    return filteredSuggestions;
+  }, [chosenGroups, filteredSuggestions]);
 
   const onSelect = (v: string) => {
     onChange(v);
@@ -107,13 +133,13 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
     if (!open) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlight((h) => Math.min(h + 1, Math.max(filter.length - 1, 0)));
+      setHighlight((h) => Math.min(h + 1, Math.max(filteredSuggestions.length - 1, 0)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlight((h) => Math.max(h - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const v = filter[highlight];
+      const v = filteredSuggestions[highlight];
       if (v) onSelect(v);
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -171,7 +197,7 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
 
       <div
         className={`absolute z-20 mt-1 w-full origin-top rounded-xl border border-gray-200 bg-white shadow-lg transition-all duration-150 ease-out ${
-          open && (((chosenGroups && chosenGroups.length > 0) || filter.length > 0))
+          open && (((chosenGroups && chosenGroups.length > 0) || filteredSuggestions.length > 0))
             ? 'opacity-100 scale-100'
             : 'opacity-0 scale-95 pointer-events-none'
         }`}
@@ -179,7 +205,7 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
         {chosenGroups ? (
           <div className="max-h-72 overflow-auto p-2 space-y-2">
             {chosenGroups.map((g, gi) => (
-              <details key={g.name + gi} className="rounded-lg border border-gray-100">
+              <details key={g.name + gi} className="rounded-lg border border-gray-100" open={normalizedQuery.length > 0}>
                 <summary className="flex items-center justify-between list-none cursor-pointer select-none px-3 py-2">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-[#002FA7]/10 text-[#002FA7]">
@@ -197,23 +223,22 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
                 </summary>
                 <ul className="px-2 pb-2">
                   {g.items.map((s, i) => {
-                    // compute global index for keyboard highlight
                     const offset = chosenGroups
                       .slice(0, gi)
                       .reduce((acc, gg) => acc + gg.items.length, 0);
                     const idx = offset + i;
                     return (
-                    <li
-                      key={`${g.name}-${s}-${i}`}
-                      className={`${itemBase} ${idx === highlight ? 'bg-[#002FA7]/10 text-[#002FA7]' : 'text-[#002FA7] hover:bg-[#002FA7]/5'}`}
-                      onMouseEnter={() => setHighlight(idx)}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        onSelect(s);
-                      }}
-                    >
-                      {renderHighlighted(s)}
-                    </li>
+                      <li
+                        key={`${g.name}-${s}-${i}`}
+                        className={`${itemBase} ${idx === highlight ? 'bg-[#002FA7]/10 text-[#002FA7]' : 'text-[#002FA7] hover:bg-[#002FA7]/5'}`}
+                        onMouseEnter={() => setHighlight(idx)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          onSelect(s);
+                        }}
+                      >
+                        {renderHighlighted(s)}
+                      </li>
                     );
                   })}
                 </ul>
@@ -222,13 +247,12 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
           </div>
         ) : (
           <ul className="max-h-64 overflow-auto p-2">
-            {filter.map((s, i) => (
+            {filteredSuggestions.map((s, i) => (
               <li
                 key={`${s}-${i}`}
                 className={`${itemBase} ${i === highlight ? 'bg-[#002FA7]/10 text-[#002FA7]' : 'text-[#002FA7] hover:bg-[#002FA7]/5'}`}
                 onMouseEnter={() => setHighlight(i)}
                 onMouseDown={(e) => {
-                  // prevent input blur before selection
                   e.preventDefault();
                   onSelect(s);
                 }}
