@@ -56,7 +56,7 @@ const createEmptyNewUserForm = (): NewUserForm => ({
   confirmPassword: "",
 });
 
-const ACTIVITY_WINDOW_MS = 1000 * 60 * 60 * 24 * 30; // 30 jours pour considérer un utilisateur actif
+const ACTIVITY_WINDOW_MS = 1000 * 60 * 60; // 1 heure pour considérer un utilisateur actif
 
 const StatCard: React.FC<{
   icon?: React.ComponentType<{ className?: string }>;
@@ -138,7 +138,7 @@ const AdminDashboardPage: React.FC = () => {
     activeUsers: number;
     disabledUsers?: number;
     updatedAt?: string;
-    windowDays?: number;
+    windowHours?: number;
   };
 
   const [firestoreStats, setFirestoreStats] = React.useState<StatsSnapshot>({
@@ -200,7 +200,7 @@ const AdminDashboardPage: React.FC = () => {
             activeUsers: typeof payload.activeUsers === "number" ? payload.activeUsers : 0,
             disabledUsers: typeof payload.disabledUsers === "number" ? payload.disabledUsers : undefined,
             updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : undefined,
-            windowDays: typeof payload.windowDays === "number" ? payload.windowDays : undefined,
+            windowHours: typeof payload.windowHours === "number" ? payload.windowHours : undefined,
           });
         } else {
           setAuthStatsError(
@@ -603,7 +603,7 @@ const AdminDashboardPage: React.FC = () => {
         minute: "2-digit",
       })
     : null;
-  const activityWindowDays = authStats?.windowDays ?? Math.round(ACTIVITY_WINDOW_MS / (1000 * 60 * 60 * 24));
+  const activityWindowHours = authStats?.windowHours ?? Math.round(ACTIVITY_WINDOW_MS / (1000 * 60 * 60));
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-[#030b1d] via-[#02132b] to-[#010511] text-white">
@@ -727,8 +727,10 @@ const AdminDashboardPage: React.FC = () => {
                     cardsLoading
                       ? "Détection de l'activité..."
                       : authStats
-                      ? `Connexions sur ${activityWindowDays} jours via Firebase Auth.`
-                      : "Utilisateurs considérés actifs sur les 30 derniers jours (FireStore)."
+                      ? activityWindowHours <= 1
+                        ? "Connexions sur la dernière heure via Firebase Auth."
+                        : `Connexions sur les ${activityWindowHours} dernières heures via Firebase Auth.`
+                      : "Utilisateurs actifs sur la dernière heure (Firestore)."
                   }
                 />
               </div>

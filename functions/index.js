@@ -12,8 +12,8 @@ admin.initializeApp();
 
 const cors = require('cors')({ origin: true });
 
-const ADMIN_ACTIVITY_WINDOW_DAYS = 30;
-const ADMIN_ACTIVITY_WINDOW_MS = ADMIN_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+const ADMIN_ACTIVITY_WINDOW_HOURS = 1;
+const ADMIN_ACTIVITY_WINDOW_MS = ADMIN_ACTIVITY_WINDOW_HOURS * 60 * 60 * 1000;
 
 const isAdminFromToken = (token = {}) => {
   if (!token || typeof token !== "object") {
@@ -418,7 +418,7 @@ exports.getAdminUserStats = onCall({ region: "europe-west9" }, async (req) => {
     totalUsers,
     activeUsers,
     disabledUsers,
-    windowDays: ADMIN_ACTIVITY_WINDOW_DAYS,
+    windowHours: ADMIN_ACTIVITY_WINDOW_HOURS,
     updatedAt: new Date(now).toISOString(),
   };
 });
