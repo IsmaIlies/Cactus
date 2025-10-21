@@ -592,8 +592,10 @@ const AdminDashboardPage: React.FC = () => {
     }
   }, [functions, isAuthenticated, selectedUserIds, requestAuthStatsRefresh]);
 
-  const displayStats = authStats ?? firestoreStats;
-  const cardsLoading = !authStats && (authStatsLoading || statsLoading);
+  const displayStats = firestoreStats;
+  const cardsLoading = statsLoading;
+  const authTotals = authStats?.totalUsers;
+  const authActiveUsers = authStats?.activeUsers;
   const statsUpdatedLabel = authStats?.updatedAt
     ? new Date(authStats.updatedAt).toLocaleString("fr-FR", {
         day: "2-digit",
@@ -604,6 +606,23 @@ const AdminDashboardPage: React.FC = () => {
       })
     : null;
   const activityWindowHours = authStats?.windowHours ?? Math.round(ACTIVITY_WINDOW_MS / (1000 * 60 * 60));
+  const totalFirestoreLabel = displayStats.totalUsers.toLocaleString("fr-FR");
+  const authTotalsLabel = typeof authTotals === "number" ? authTotals.toLocaleString("fr-FR") : null;
+  const authActiveLabel = typeof authActiveUsers === "number" ? authActiveUsers.toLocaleString("fr-FR") : null;
+  const totalHelperText = cardsLoading
+    ? "Chargement en cours..."
+    : authTotalsLabel
+    ? statsUpdatedLabel
+      ? `Firestore : ${totalFirestoreLabel} comptes. Auth mis à jour ${statsUpdatedLabel} (${authTotalsLabel}).`
+      : `Firestore : ${totalFirestoreLabel} comptes. Auth : ${authTotalsLabel}.`
+    : `Total des comptes présents dans Firestore${displayStats.disabledUsers ? ` (dont ${displayStats.disabledUsers.toLocaleString("fr-FR")} désactivé${displayStats.disabledUsers > 1 ? 's' : ''})` : ''}.`;
+  const activeHelperText = cardsLoading
+    ? "Détection de l'activité..."
+    : authActiveLabel
+    ? activityWindowHours <= 1
+      ? `Actifs sur la dernière heure (Firestore). Auth signale ${authActiveLabel}.`
+      : `Actifs sur les ${activityWindowHours} dernières heures (Firestore). Auth : ${authActiveLabel}.`
+    : "Utilisateurs actifs sur la dernière heure (Firestore).";
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-[#030b1d] via-[#02132b] to-[#010511] text-white">
@@ -706,32 +725,14 @@ const AdminDashboardPage: React.FC = () => {
                   icon={Users}
                   title="Utilisateurs enregistrés"
                   value={formatStatValue(displayStats.totalUsers, cardsLoading)}
-                  helperText={
-                    cardsLoading
-                      ? "Chargement en cours..."
-                      : authStats
-                      ? statsUpdatedLabel
-                        ? `Mise à jour ${statsUpdatedLabel}`
-                        : "Données issues de Firebase Auth."
-                      : displayStats.disabledUsers
-                      ? `Total des comptes créés (dont ${displayStats.disabledUsers} désactivé${displayStats.disabledUsers > 1 ? 's' : ''}).`
-                      : "Total des comptes créés sur Cactus (snapshot Firestore)."
-                  }
+                  helperText={totalHelperText}
                 />
 
                 <StatCard
                   icon={UserCheck2}
                   title="Utilisateurs actifs"
                   value={formatStatValue(displayStats.activeUsers, cardsLoading)}
-                  helperText={
-                    cardsLoading
-                      ? "Détection de l'activité..."
-                      : authStats
-                      ? activityWindowHours <= 1
-                        ? "Connexions sur la dernière heure via Firebase Auth."
-                        : `Connexions sur les ${activityWindowHours} dernières heures via Firebase Auth.`
-                      : "Utilisateurs actifs sur la dernière heure (Firestore)."
-                  }
+                  helperText={activeHelperText}
                 />
               </div>
             </div>
