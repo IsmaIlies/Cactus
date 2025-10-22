@@ -109,7 +109,7 @@ export function parseCsvOffers(csvText: string): string[] {
 
   if (rows.length === 0) return [];
   const firstRow = rows[0].map((c) => c.trim());
-  let alfIdx = findAlfColumn(firstRow);
+  const alfIdx = findAlfColumn(firstRow);
   const items: string[] = [];
   rows.forEach((cols, rowIdx) => {
     const cells = cols.map((c) => String(c).trim());

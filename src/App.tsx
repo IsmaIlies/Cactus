@@ -34,6 +34,9 @@ import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
 import SupervisorArchives from "./supervisor/SupervisorArchives";
 import SupervisorImport from "./supervisor/SupervisorImport";
 import SupervisorLeadsPage from "./pages/SupervisorLeadsPage";
+import SupervisorLeadsDashboard2 from "./pages/SupervisorLeadsDashboard2";
+import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
+import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
 
 function App() {
   return (
@@ -90,6 +93,9 @@ function App() {
           <Route path="presence" element={<SupervisorPresencePage />} />
           <Route path="ventes" element={<SupervisorSales />} />
           <Route path="import" element={<SupervisorImport />} />
+          <Route path="dashboard2" element={<SupervisorLeadsDashboard2 />} />
+          <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
+          <Route path="export" element={<SupervisorLeadsExportPage />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />
           {/* New nested page: Supervisor LEADS page (dashboard + CSV import) */}

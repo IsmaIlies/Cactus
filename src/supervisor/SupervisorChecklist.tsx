@@ -81,7 +81,7 @@ const SupervisorChecklist: React.FC = () => {
 
     const buildBase = (status: string) => query(collection(db, 'hoursEntries'), where('reviewStatus', '==', status));
 
-    let unsubs: Unsubscribe[] = [];
+    const unsubs: Unsubscribe[] = [];
     try {
       // Pending + legacy
       let cacheP: Row[] = []; let cachePL: Row[] = [];

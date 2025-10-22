@@ -22,6 +22,11 @@ const LoginPage = () => {
   const SUPERVISOR_WHITELIST = [
     "i.brai@mars-marketing.fr",
     "l.raynaud@mars-marketing.fr",
+    "m.demauret@mars-marketing.fr",
+    "i.boultame@mars-marketing.fr",
+    "j.allione@mars-marketing.fr",
+    "j.pariolleau@mars-marketing.fr",
+    "olivier@evenmedia.fr",
   ]; // temporary
   type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
   const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);

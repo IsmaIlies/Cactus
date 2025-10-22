@@ -1,8 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LayoutDashboard, Users, UserCheck2 } from "lucide-react";
-import { collection, getDocs, onSnapshot, QuerySnapshot, DocumentData } from "firebase/firestore";
+import { LayoutDashboard, Users, UserCheck2, BarChart3, Tv, LineChart } from "lucide-react";
+import { collection, getDocs, onSnapshot, QuerySnapshot, DocumentData, query, where } from "firebase/firestore";
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from "firebase/functions";
 import { db } from "../firebase";
 import { subscribeEntriesByPeriod, type HoursEntryDoc } from "../services/hoursService";
@@ -13,6 +13,7 @@ type NavItem = {
   id: string;
   label: string;
   icon?: React.ComponentType<{ className?: string }>;
+  children?: NavItem[];
 };
 
 type NewUserForm = {
@@ -41,8 +42,16 @@ type AdminUserRow = {
 
 const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "users", label: "Utilisateurs" },
-  { id: "reports", label: "Rapports" },
+  { id: "users", label: "Utilisateurs", icon: Users },
+  {
+    id: "reports",
+    label: "Rapports",
+    icon: BarChart3,
+    children: [
+      { id: "reports-canal", label: "CANAL+", icon: Tv },
+      { id: "reports-leads", label: "Leads", icon: LineChart },
+    ],
+  },
   { id: "heures", label: "Heures" },
   { id: "operations", label: "Opérations" },
   { id: "settings", label: "Paramètres" },
@@ -64,17 +73,29 @@ const StatCard: React.FC<{
   value: React.ReactNode;
   helperText?: string | React.ReactNode;
 }> = ({ icon: Icon, title, value, helperText }) => (
-  <div className="relative overflow-hidden rounded-xl border border-white/12 bg-[#06142b] p-3 transition-all duration-300 hover:border-sky-400 shadow-[0_14px_34px_rgba(59,130,246,0.25)]">
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(6,182,212,0.12),transparent_55%),radial-gradient(circle_at_85%_80%,rgba(59,130,246,0.06),transparent_60%)]" />
+  <div className="group relative overflow-hidden rounded-2xl border border-sky-500/15 bg-gradient-to-br from-[#0a1535] via-[#070f26] to-[#040817] p-4 sm:p-5 transition-all duration-300 hover:border-sky-300/40 hover:shadow-[0_20px_45px_rgba(8,53,138,0.45)]">
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(14,165,233,0.18),transparent_55%),radial-gradient(circle_at_80%_90%,rgba(59,130,246,0.12),transparent_60%)] opacity-80" />
     <div className="relative flex flex-col gap-3">
-      <div className="flex items-center gap-1.5">
-        <div className="rounded-lg border border-sky-500/45 bg-sky-500/15 p-2">
-          {Icon ? <Icon className="h-3.5 w-3.5 text-sky-200" aria-hidden="true" /> : null}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1">
+          <span className="text-[0.65rem] uppercase tracking-[0.45em] text-sky-200/80">{title}</span>
+          <span className="text-[11px] font-medium text-sky-200/60">Tableau de bord</span>
         </div>
-        <p className="text-[0.65rem] uppercase tracking-[0.4em] text-sky-200/80">{title}</p>
+        {Icon ? (
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[0_10px_25px_rgba(34,197,235,0.25)]">
+            <Icon className="h-4 w-4" aria-hidden="true" />
+          </div>
+        ) : null}
       </div>
-      <p className="text-2xl font-semibold text-white">{value}</p>
-      {helperText ? <p className="text-xs text-sky-200/70">{helperText}</p> : null}
+      <div className="flex items-baseline gap-2">
+        <p className="text-2xl font-semibold tracking-tight text-sky-100 sm:text-[1.75rem]">{value}</p>
+        <span className="text-[10px] uppercase tracking-[0.4em] text-[#6bffb6]">Live</span>
+      </div>
+      {helperText ? (
+        <p className="text-xs leading-relaxed text-sky-200/70">
+          {helperText}
+        </p>
+      ) : null}
     </div>
   </div>
 );
@@ -170,6 +191,9 @@ const AdminDashboardPage: React.FC = () => {
   const requestAuthStatsRefresh = React.useCallback(() => {
     setAuthStatsNonce((prev) => prev + 1);
   }, []);
+  const [expandedNav, setExpandedNav] = React.useState<Record<string, boolean>>({});
+  const [canalStats, setCanalStats] = React.useState({ fr: 0, civ: 0, total: 0, loading: true });
+  const [canalError, setCanalError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -235,6 +259,13 @@ const AdminDashboardPage: React.FC = () => {
       cancelled = true;
     };
   }, [functions, isAuthenticated, authStatsNonce]);
+
+  React.useEffect(() => {
+    const parentWithChild = navItems.find((item) => item.children?.some((child) => child.id === activeSection));
+    if (parentWithChild && !expandedNav[parentWithChild.id]) {
+      setExpandedNav((prev) => ({ ...prev, [parentWithChild.id]: true }));
+    }
+  }, [activeSection, expandedNav]);
 
   React.useEffect(() => {
     if (!isAuthenticated && localStorage.getItem("adminAuth") !== "1") {
@@ -592,6 +623,123 @@ const AdminDashboardPage: React.FC = () => {
     }
   }, [functions, isAuthenticated, selectedUserIds, requestAuthStatsRefresh]);
 
+  React.useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+
+    if (!isAuthenticated) {
+      setCanalStats({ fr: 0, civ: 0, total: 0, loading: false });
+      setCanalError("Authentification requise pour consulter les rapports CANAL+.");
+      return () => {};
+    }
+
+    setCanalStats((prev) => ({ ...prev, loading: true }));
+    setCanalError(null);
+
+    const missionOptions = ["CANAL_PLUS", "CANAL+", "CANAL", "CANALPLUS"] as const;
+    const canalQuery = query(collection(db, "sales"), where("mission", "in", missionOptions));
+
+    const sanitize = (value: string) =>
+      value
+        .trim()
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[^A-Z0-9]/g, "");
+
+    const normalizeRegion = (input: unknown): "FR" | "CIV" | "OTHER" => {
+      if (typeof input !== "string") return "OTHER";
+      const normalized = sanitize(input);
+      if (!normalized) return "OTHER";
+
+      const isFr = (val: string) =>
+        val === "FR" ||
+        val === "FRANCE" ||
+        val === "MARSEILLE" ||
+        val.includes("MARSEILLE") ||
+        val.startsWith("FR");
+
+      const isCiv = (val: string) =>
+        val === "CIV" ||
+        val === "CI" ||
+        val === "COTEDIVOIRE" ||
+        val === "ABIDJAN" ||
+        val.includes("ABIDJAN") ||
+        val.includes("COTEDIVOIRE") ||
+        val.startsWith("CIV") ||
+        val.startsWith("CI");
+
+      if (isFr(normalized)) return "FR";
+      if (isCiv(normalized)) return "CIV";
+      return "OTHER";
+    };
+
+    const computeStats = (docs: Array<{ data: () => any }>) => {
+      let fr = 0;
+      let civ = 0;
+      docs.forEach((doc) => {
+        const data = doc.data() as any;
+        const candidates: Array<unknown> = [
+          data?.region,
+          data?.region?.name,
+          data?.region?.code,
+          data?.site,
+          data?.site?.name,
+          data?.site?.region,
+          data?.zone,
+          data?.zone?.name,
+          data?.location,
+        ];
+        const region = candidates
+          .map((value) => normalizeRegion(value))
+          .find((value) => value !== "OTHER") ?? "OTHER";
+
+        if (region === "FR") fr += 1;
+        else if (region === "CIV") civ += 1;
+      });
+      setCanalStats({ fr, civ, total: fr + civ, loading: false });
+    };
+
+    const fallbackFetch = async () => {
+      try {
+        const backupSnap = await getDocs(collection(db, "sales"));
+        const filtered = backupSnap.docs.filter((doc) => {
+          const missionValue = (doc.data() as any)?.mission;
+          if (typeof missionValue !== "string") return false;
+          const normalizedMission = sanitize(missionValue);
+          return missionOptions.some((mission) => normalizedMission.includes(mission));
+        });
+        computeStats(filtered);
+      } catch (err: any) {
+        setCanalStats((prev) => ({ ...prev, loading: false }));
+        setCanalError(err?.message || "Impossible de charger les ventes CANAL+.");
+      }
+    };
+
+    unsubscribe = onSnapshot(
+      canalQuery,
+      (snapshot) => {
+        computeStats(snapshot.docs);
+      },
+      (error) => {
+        const code = (error as any)?.code || "";
+        if (code === "failed-precondition" || code === "permission-denied") {
+          fallbackFetch();
+        } else {
+          setCanalStats((prev) => ({ ...prev, loading: false }));
+          setCanalError(error?.message || "Impossible de charger les ventes CANAL+.");
+        }
+      }
+    );
+
+    return () => {
+      try {
+        unsubscribe && unsubscribe();
+      } catch (e) {
+        // noop
+      }
+    };
+  }, [isAuthenticated]);
+
   const displayStats = firestoreStats;
   const cardsLoading = statsLoading;
   const authTotals = authStats?.totalUsers;
@@ -607,20 +755,23 @@ const AdminDashboardPage: React.FC = () => {
     : null;
   const activityWindowHours = authStats?.windowHours ?? Math.round(ACTIVITY_WINDOW_MS / (1000 * 60 * 60));
   const totalFirestoreLabel = displayStats.totalUsers.toLocaleString("fr-FR");
+  const disabledSuffix = displayStats.disabledUsers
+    ? ` (dont ${displayStats.disabledUsers.toLocaleString("fr-FR")} désactivé${displayStats.disabledUsers > 1 ? 's' : ''})`
+    : "";
   const authTotalsLabel = typeof authTotals === "number" ? authTotals.toLocaleString("fr-FR") : null;
   const authActiveLabel = typeof authActiveUsers === "number" ? authActiveUsers.toLocaleString("fr-FR") : null;
   const totalHelperText = cardsLoading
     ? "Chargement en cours..."
     : authTotalsLabel
     ? statsUpdatedLabel
-      ? `Firestore : ${totalFirestoreLabel} comptes. Auth mis à jour ${statsUpdatedLabel} (${authTotalsLabel}).`
-      : `Firestore : ${totalFirestoreLabel} comptes. Auth : ${authTotalsLabel}.`
-    : `Total des comptes présents dans Firestore${displayStats.disabledUsers ? ` (dont ${displayStats.disabledUsers.toLocaleString("fr-FR")} désactivé${displayStats.disabledUsers > 1 ? 's' : ''})` : ''}.`;
+      ? `Firestore : ${totalFirestoreLabel}${disabledSuffix}. Auth mis à jour ${statsUpdatedLabel} (${authTotalsLabel}).`
+      : `Firestore : ${totalFirestoreLabel}${disabledSuffix}. Auth : ${authTotalsLabel}.`
+    : `Total Firestore : ${totalFirestoreLabel}${disabledSuffix}.`;
   const activeHelperText = cardsLoading
     ? "Détection de l'activité..."
     : authActiveLabel
     ? activityWindowHours <= 1
-      ? `Actifs sur la dernière heure (Firestore). Auth signale ${authActiveLabel}.`
+      ? `Actifs sur la dernière heure (Firestore). Auth : ${authActiveLabel}.`
       : `Actifs sur les ${activityWindowHours} dernières heures (Firestore). Auth : ${authActiveLabel}.`
     : "Utilisateurs actifs sur la dernière heure (Firestore).";
 
@@ -656,29 +807,72 @@ const AdminDashboardPage: React.FC = () => {
             <p className="text-xs uppercase tracking-[0.4em] text-sky-200/70">Admin</p>
             <h2 className="mt-2 text-xl font-semibold text-white">Cactus Console</h2>
           </div>
-          <nav className="space-y-1 px-2 py-6">
+          <nav className="space-y-2 px-2 py-6">
             {navItems.map((item) => {
               const Icon = item.icon;
+              const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+              const isActiveParent =
+                activeSection === item.id || (hasChildren && item.children!.some((child) => child.id === activeSection));
+              const isExpanded = !!expandedNav[item.id];
+
               return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveSection(item.id)}
-                  className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium transition-all ${
-                    activeSection === item.id
-                      ? "bg-gradient-to-r from-sky-500/20 via-blue-600/15 to-transparent text-white border border-sky-400/40"
-                      : "text-sky-100/70 hover:bg-white/5"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    {Icon && <Icon className="h-4 w-4 text-sky-300" aria-hidden="true" />}
-                    <span>{item.label}</span>
-                  </span>
-                  <span
-                    className={`h-2 w-2 rounded-full transition ${
-                      activeSection === item.id ? "bg-sky-400" : "bg-white/20"
+                <div key={item.id} className="space-y-1">
+                  <button
+                    onClick={() => {
+                      if (hasChildren) {
+                        setExpandedNav((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
+                        setActiveSection(item.id);
+                      } else {
+                        setActiveSection(item.id);
+                      }
+                    }}
+                    className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium transition-all ${
+                      isActiveParent || isExpanded
+                        ? "bg-gradient-to-r from-sky-500/25 via-blue-600/15 to-transparent text-white border border-sky-400/40"
+                        : "text-sky-100/70 hover:bg-white/5"
                     }`}
-                  />
-                </button>
+                  >
+                    <span className="flex items-center gap-2">
+                      {Icon && <Icon className="h-4 w-4 text-sky-300" aria-hidden="true" />}
+                      <span>{item.label}</span>
+                    </span>
+                    <span
+                      className={`h-2 w-2 rounded-full transition ${
+                        isActiveParent || isExpanded ? "bg-sky-400" : "bg-white/20"
+                      }`}
+                    />
+                  </button>
+
+                  {hasChildren && isExpanded ? (
+                    <div className="space-y-1 pl-6">
+                      {item.children!.map((child) => {
+                        const ChildIcon = child.icon;
+                        const childActive = activeSection === child.id;
+                        return (
+                          <button
+                            key={child.id}
+                            onClick={() => setActiveSection(child.id)}
+                            className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-medium transition-all ${
+                              childActive
+                                ? "bg-sky-500/20 text-white border border-sky-400/40"
+                                : "text-sky-100/60 hover:bg-white/5"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              {ChildIcon && <ChildIcon className="h-3.5 w-3.5 text-sky-300" aria-hidden="true" />}
+                              <span>{child.label}</span>
+                            </span>
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full transition ${
+                                childActive ? "bg-sky-300" : "bg-white/15"
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
           </nav>
@@ -716,11 +910,10 @@ const AdminDashboardPage: React.FC = () => {
               {authStatsError && (
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
                   {authStatsError}
-                  {!authStats && " Les chiffres affichés proviennent des données Firestore locales."}
                 </div>
               )}
 
-              <div className="grid gap-6 sm:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                   icon={Users}
                   title="Utilisateurs enregistrés"
@@ -733,6 +926,51 @@ const AdminDashboardPage: React.FC = () => {
                   title="Utilisateurs actifs"
                   value={formatStatValue(displayStats.activeUsers, cardsLoading)}
                   helperText={activeHelperText}
+                />
+              </div>
+            </div>
+          ) : activeSection === "reports-canal" ? (
+            <div className="space-y-8 pt-16 md:pt-20">
+              <div className="flex flex-col gap-2">
+                <h1 className="text-2xl font-semibold text-white">Rapports CANAL+</h1>
+                <p className="text-sm text-blue-100/70">
+                  Ventilation des ventes CANAL+ par hub de production, consolidée en temps réel.
+                </p>
+              </div>
+
+              {canalError && (
+                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-100">
+                  {canalError}
+                </div>
+              )}
+
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                <StatCard
+                  icon={Tv}
+                  title="Ventes CANAL+ Marseille"
+                  value={formatStatValue(canalStats.fr, canalStats.loading)}
+                  helperText={
+                    canalStats.loading
+                      ? "Chargement en cours..."
+                      : "Comptes mission CANAL+ attribués à l'équipe Marseille."}
+                />
+                <StatCard
+                  icon={Tv}
+                  title="Ventes CANAL+ Abidjan"
+                  value={formatStatValue(canalStats.civ, canalStats.loading)}
+                  helperText={
+                    canalStats.loading
+                      ? "Chargement en cours..."
+                      : "Comptes mission CANAL+ attribués à l'équipe Abidjan."}
+                />
+                <StatCard
+                  icon={BarChart3}
+                  title="Total CANAL+"
+                  value={formatStatValue(canalStats.total, canalStats.loading)}
+                  helperText={
+                    canalStats.loading
+                      ? "Chargement en cours..."
+                      : "Somme des ventes Marseille + Abidjan."}
                 />
               </div>
             </div>

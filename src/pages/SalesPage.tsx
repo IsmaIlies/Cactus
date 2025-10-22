@@ -112,7 +112,7 @@ const SalesPage = () => {
       const user = auth.currentUser;
       if (!user) return;
       // Filtrer par user + region active (si définie)
-      let baseConstraints: any[] = [where("userId", "==", user.uid)];
+      const baseConstraints: any[] = [where("userId", "==", user.uid)];
       if (region) baseConstraints.push(where('region', '==', region));
       const q = query(collection(db, "sales"), ...baseConstraints);
       const querySnapshot = await getDocs(q);
