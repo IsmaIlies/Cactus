@@ -36,6 +36,7 @@ import SupervisorImport from "./supervisor/SupervisorImport";
 import SupervisorLeadsPage from "./pages/SupervisorLeadsPage";
 import SupervisorLeadsDashboard2 from "./pages/SupervisorLeadsDashboard2";
 import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
+import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
 import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
 
 function App() {
@@ -94,6 +95,7 @@ function App() {
           <Route path="ventes" element={<SupervisorSales />} />
           <Route path="import" element={<SupervisorImport />} />
           <Route path="dashboard2" element={<SupervisorLeadsDashboard2 />} />
+          <Route path="leads-plus" element={<SupervisorLeadsPlusPage />} />
           <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
           <Route path="export" element={<SupervisorLeadsExportPage />} />
           <Route path="checklist" element={<SupervisorChecklist />} />

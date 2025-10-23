@@ -18,6 +18,7 @@
         "date-fns": "^4.1.0",
         "firebase": "^11.8.1",
         "firebase-admin": "^12.7.0",
+        "firebase-functions": "^6.6.0",
         "justwatch-api": "^1.0.7",
         "lucide-react": "^0.344.0",
         "marked": "^15.0.12",

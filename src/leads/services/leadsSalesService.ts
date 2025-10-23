@@ -39,7 +39,7 @@ type LeadSaleInput = {
 };
 
 export const categorize = (typeOffre: string | undefined | null) => {
-  const type = (typeOffre || "").trim().toLowerCase();
+  const type = (typeOffre || "").trim().toLowerCase().replace(/\s+/g, "");
   const zero = { internet: 0, mobile: 0, internetSosh: 0, mobileSosh: 0 } as const;
 
   switch (type) {

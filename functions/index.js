@@ -12,6 +12,47 @@ admin.initializeApp();
 
 const cors = require('cors')({ origin: true });
 
+// Réécriture Hosting → leadsStats (europe-west1)
+exports.leadsStats = onRequest({ region: 'europe-west1' }, async (req, res) => {
+  try {
+    const token = process.env.LEADS_API_TOKEN || 'b7E8g2QEBh8jz7eF57uT';
+    const { date_start, date_end } = req.query || {};
+    const url = new URL('https://orange-leads.mm.emitel.io/stats-lead.php');
+    url.searchParams.set('token', token);
+    if (typeof date_start === 'string' && date_start) {
+      url.searchParams.set('date_start', date_start);
+    }
+    if (typeof date_end === 'string' && date_end) {
+      url.searchParams.set('date_end', date_end);
+    }
+
+    const response = await fetch(url.toString());
+    const json = await response.json();
+
+    if (!json || json.RESPONSE !== 'OK' || !Array.isArray(json.DATA)) {
+      return res.status(502).json({ ok: false, error: 'API KO', dolead: 0, hipto: 0 });
+    }
+
+    const findCount = (type) => {
+      const entry = json.DATA.find((item) => item && item.type === type);
+      return entry && typeof entry.count === 'number' ? entry.count : 0;
+    };
+
+    return res.json({
+      ok: true,
+      dolead: findCount('dolead'),
+      hipto: findCount('hipto'),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error && error.message ? error.message : 'Erreur inconnue',
+      dolead: 0,
+      hipto: 0,
+    });
+  }
+});
+
 const ADMIN_ACTIVITY_WINDOW_HOURS = 1;
 const ADMIN_ACTIVITY_WINDOW_MS = ADMIN_ACTIVITY_WINDOW_HOURS * 60 * 60 * 1000;
 

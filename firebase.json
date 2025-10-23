@@ -18,9 +18,12 @@
     ],
     "rewrites": [
       {
-      "source": "/api/justwatch",
-      "function": "justwatchProxy",
-      "functionRegion": "europe-west9"
+        "source": "/api/justwatch",
+        "function": { "functionId": "justwatchProxy", "region": "europe-west9" }
+      },
+      {
+        "source": "/api/leads-stats",
+        "function": { "functionId": "leadsStats", "region": "europe-west1" }
       },
       {
         "source": "/auth/action",
