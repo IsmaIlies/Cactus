@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle } from 'lucide-react';
+import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const titleFor = (area?: string) => {
@@ -19,7 +19,7 @@ const SupervisorLayout: React.FC = () => {
   const base = `/dashboard/superviseur/${area || ''}`.replace(/\/$/, '');
   const { logout } = useAuth();
   const hideSpaceSwitch =
-    String(area).toLowerCase() === 'leads' && location.pathname.includes('/export');
+    String(area).toLowerCase() === 'leads' && (location.pathname.includes('/export') || location.pathname.includes('/ecoutes'));
 
   React.useEffect(() => {
     const normalizedArea = String(area || '').toLowerCase();
@@ -156,6 +156,24 @@ const SupervisorLayout: React.FC = () => {
                 <FlaskConical className="relative h-4 w-4" aria-hidden="true" />
               </span>
               Analyse
+            </NavLink>
+          )}
+          {String(area).toLowerCase() === 'leads' && (
+            <NavLink
+              to={`${base}/ecoutes`}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
+                  isActive
+                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
+                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
+                }`
+              }
+            >
+              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                <Phone className="relative h-4 w-4" aria-hidden="true" />
+              </span>
+              N° Écoutes
             </NavLink>
           )}
           {String(area).toLowerCase() === 'leads' && (

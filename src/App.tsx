@@ -38,6 +38,7 @@ import SupervisorLeadsDashboard2 from "./pages/SupervisorLeadsDashboard2";
 import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
 import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
 import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
+import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
 
 function App() {
   return (
@@ -97,6 +98,7 @@ function App() {
           <Route path="dashboard2" element={<SupervisorLeadsDashboard2 />} />
           <Route path="leads-plus" element={<SupervisorLeadsPlusPage />} />
           <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
+          <Route path="ecoutes" element={<SupervisorLeadsEcoutesPage />} />
           <Route path="export" element={<SupervisorLeadsExportPage />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />

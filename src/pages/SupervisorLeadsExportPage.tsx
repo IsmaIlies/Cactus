@@ -37,6 +37,8 @@ const HEADERS = [
   "Numéro de téléphone de la fiche",
 ] as const;
 
+const TABLE_COLUMNS = "grid grid-cols-[110px_110px_1.4fr_0.8fr_1.4fr_120px_100px]";
+
 const pad2 = (value: number) => value.toString().padStart(2, "0");
 
 const formatDateTime = (date: Date | null) => {
@@ -129,8 +131,6 @@ const SupervisorLeadsExportPage: React.FC = () => {
   const [startDate, setStartDate] = React.useState<string>("");
   const [endDate, setEndDate] = React.useState<string>("");
   const [offerFilter, setOfferFilter] = React.useState<string>("all");
-  const [scrollProgress, setScrollProgress] = React.useState<number>(0);
-  const [isDragging, setIsDragging] = React.useState<boolean>(false);
   const [editingRow, setEditingRow] = React.useState<LeadRow | null>(null);
   const [editData, setEditData] = React.useState<Record<EditableField, string>>(() => {
     const base = {} as Record<EditableField, string>;
@@ -142,10 +142,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
   const [saving, setSaving] = React.useState<boolean>(false);
   const [deleting, setDeleting] = React.useState<boolean>(false);
   const [modalError, setModalError] = React.useState<string | null>(null);
-
-  const historyScrollRef = React.useRef<HTMLDivElement | null>(null);
-  const dragStateRef = React.useRef<{ startX: number; scrollLeft: number }>({ startX: 0, scrollLeft: 0 });
-  const pointerActiveRef = React.useRef<boolean>(false);
+  const offerListId = React.useId();
+  const originListId = React.useId();
 
   const renderDateTimeCell = React.useCallback(
     (date: Date | null) => (
@@ -281,6 +279,21 @@ const SupervisorLeadsExportPage: React.FC = () => {
 
   const disabled = loading || filteredRows.length === 0;
 
+  const offerOptions = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      const label = row.intituleOffre?.trim();
+      if (!label) return;
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0], "fr", { sensitivity: "base" });
+      })
+      .map(([label, count]) => ({ label, count }));
+  }, [rows]);
+
   const handleExport = () => {
     if (filteredRows.length === 0) return;
     const workbook = createWorkbook(filteredRows);
@@ -289,68 +302,6 @@ const SupervisorLeadsExportPage: React.FC = () => {
     const filename = `leads_sales_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.xlsx`;
     writeXlsxFile(workbook, filename);
   };
-
-  const updateScrollProgressFromElement = React.useCallback((element: HTMLDivElement | null) => {
-    if (!element) {
-      setScrollProgress(0);
-      return;
-    }
-    const { scrollTop, scrollHeight, clientHeight } = element;
-    const maxScroll = scrollHeight - clientHeight;
-    if (maxScroll <= 0) {
-      setScrollProgress(0);
-      return;
-    }
-    const ratio = scrollTop / maxScroll;
-    setScrollProgress(Math.min(100, Math.max(0, ratio * 100)));
-  }, []);
-
-  const handleHistoryScroll = React.useCallback(
-    (event: React.UIEvent<HTMLDivElement>) => {
-      updateScrollProgressFromElement(event.currentTarget);
-    },
-    [updateScrollProgressFromElement]
-  );
-
-  const handlePointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    const element = event.currentTarget;
-    pointerActiveRef.current = true;
-    setIsDragging(true);
-    dragStateRef.current = { startX: event.clientX, scrollLeft: element.scrollLeft };
-    element.setPointerCapture(event.pointerId);
-  }, []);
-
-  const handlePointerMove = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!pointerActiveRef.current) return;
-    event.preventDefault();
-    const element = event.currentTarget;
-    const deltaX = event.clientX - dragStateRef.current.startX;
-    element.scrollLeft = dragStateRef.current.scrollLeft - deltaX;
-  }, []);
-
-  const handlePointerUp = React.useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!pointerActiveRef.current) return;
-      pointerActiveRef.current = false;
-      setIsDragging(false);
-      event.currentTarget.releasePointerCapture(event.pointerId);
-      updateScrollProgressFromElement(event.currentTarget);
-    },
-    [updateScrollProgressFromElement]
-  );
-
-  const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const element = historyScrollRef.current;
-    if (!element) return;
-    const value = Number(event.target.value);
-    const maxScroll = element.scrollHeight - element.clientHeight;
-    element.scrollTop = (value / 100) * (maxScroll <= 0 ? 0 : maxScroll);
-    updateScrollProgressFromElement(element);
-  };
-
-  React.useEffect(() => {
-    updateScrollProgressFromElement(historyScrollRef.current);
-  }, [filteredRows.length, updateScrollProgressFromElement]);
 
   const openEditModal = (row: LeadRow) => {
     const next = {} as Record<EditableField, string>;
@@ -413,242 +364,188 @@ const SupervisorLeadsExportPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-900/80 text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1700px] flex-col gap-10 px-4 py-8 sm:px-6 lg:px-10 xl:px-14">
-        <div className="flex w-full items-center justify-end">
-          <div className="space-y-3 text-right">
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={disabled}
-              className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-full px-8 py-3 text-sm font-semibold uppercase tracking-[0.35em] transition-all duration-300 ${
-                disabled
-                  ? "cursor-not-allowed text-slate-300"
-                  : "text-white hover:-translate-y-0.5"
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                className={`absolute inset-0 rounded-full bg-[linear-gradient(120deg,#102a72,#1d4ed8,#2563eb,#0b1f52)] opacity-90 transition-all duration-300 ${
-                  disabled ? "brightness-75" : "group-hover:opacity-100 group-hover:brightness-110"
-                }`}
+    <div className="flex flex-1 flex-col min-h-screen w-full px-10 py-10 bg-slate-950 text-white">
+      <div className="grid w-full items-start gap-8 lg:grid-cols-[380px_1fr]">
+        <aside className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-[0_12px_40px_rgba(30,64,175,0.3)]">
+          <div>
+            <p className="text-xs uppercase tracking-[0.4em] text-blue-300/70">Filtres</p>
+            <h3 className="mt-2 text-xl font-semibold text-white">Affiner l’historique</h3>
+          </div>
+          <div className="flex flex-col gap-6">
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Agent
+              <select
+                value={agentFilter}
+                onChange={(event) => setAgentFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+              >
+                <option value="all">Tous les agents</option>
+                {agentOptions.map((agent) => (
+                  <option key={agent} value={agent}>
+                    {agent}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Date de début
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+                max={endDate || undefined}
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
               />
-              <span
-                aria-hidden="true"
-                className={`absolute -inset-1 rounded-full blur-2xl bg-[radial-gradient(circle_at_20%_20%,rgba(96,165,250,0.9),transparent),radial-gradient(circle_at_80%_80%,rgba(20,80,200,0.85),transparent)] transition-all duration-500 ${
-                  disabled ? "opacity-30" : "opacity-80 group-hover:opacity-95 group-hover:blur-3xl"
-                }`}
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Date de fin
+              <input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                min={startDate || undefined}
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
               />
-              <span className="relative flex items-center gap-2">
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Fournisseur
+              <select
+                value={originFilter}
+                onChange={(event) => setOriginFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+              >
+                <option value="all">Tous les fournisseurs</option>
+                {originOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Offre
+              <select
+                value={offerFilter}
+                onChange={(event) => setOfferFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+              >
+                <option value="all">Toutes les offres</option>
+                {OFFER_FILTERS.map((offer) => (
+                  <option key={offer.value} value={offer.value}>
+                    {offer.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {(startDate || endDate || agentFilter !== "all" || originFilter !== "all" || offerFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAgentFilter("all");
+                  setOriginFilter("all");
+                  setOfferFilter("all");
+                  setStartDate("");
+                  setEndDate("");
+                }}
+                className="mt-2 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100 transition-colors duration-200 hover:bg-slate-800/60"
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
+        </aside>
+
+        <section className="flex flex-col rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
+          <div className="flex flex-wrap items-center justify-between gap-6">
+            <div className="space-y-1.5">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-blue-300/70">Historique</p>
+              <h2 className="text-2xl font-semibold text-white">Ventes LEADS</h2>
+              <span className="text-sm text-blue-200/80">
+                {filteredRows.length} vente{filteredRows.length > 1 ? "s" : ""} affichée{filteredRows.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex flex-col items-end gap-2 text-right">
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={disabled}
+                className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-500 px-8 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-white shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-300 ${
+                  disabled ? "cursor-not-allowed opacity-60" : "hover:brightness-110"
+                }`}
+              >
                 <Download className="h-4 w-4" aria-hidden="true" />
                 <span>Export XLSX</span>
-              </span>
-            </button>
-            {loading && <p className="text-sm text-blue-200">Chargement des ventes…</p>}
-            {!loading && filteredRows.length === 0 && !error && (
-              <p className="text-sm text-blue-200/80">Aucune vente LEADS disponible pour l'instant.</p>
-            )}
-            {error && <p className="text-sm text-rose-300">{error}</p>}
-          </div>
-        </div>
-
-        <div className="flex w-full flex-1 flex-col gap-6 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/60 via-slate-900/30 to-slate-900/10 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.45)] 2xl:p-8">
-          <div className="flex flex-1 flex-col gap-6 xl:flex-row xl:items-start">
-            <aside className="flex w-full flex-shrink-0 flex-col gap-6 rounded-2xl border border-white/5 bg-slate-950/60 p-6 shadow-[0_12px_40px_rgba(30,64,175,0.3)] xl:w-[420px]">
-              <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-blue-300/70">Filtres</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">Affiner l’historique</h3>
-              </div>
-              <div className="flex flex-col gap-4">
-                <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-                  Agent
-                  <select
-                    value={agentFilter}
-                    onChange={(event) => setAgentFilter(event.target.value)}
-                    className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                  >
-                    <option value="all">Tous les agents</option>
-                    {agentOptions.map((agent) => (
-                      <option key={agent} value={agent}>
-                        {agent}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-                  Date de début
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(event) => setStartDate(event.target.value)}
-                    max={endDate || undefined}
-                    className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                  />
-                </label>
-
-                <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-                  Date de fin
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(event) => setEndDate(event.target.value)}
-                    min={startDate || undefined}
-                    className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                  />
-                </label>
-
-                <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-                  Fournisseur
-                  <select
-                    value={originFilter}
-                    onChange={(event) => setOriginFilter(event.target.value)}
-                    className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                  >
-                    <option value="all">Tous les fournisseurs</option>
-                    {originOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-                  Offre
-                  <select
-                    value={offerFilter}
-                    onChange={(event) => setOfferFilter(event.target.value)}
-                    className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                  >
-                    <option value="all">Toutes les offres</option>
-                    {OFFER_FILTERS.map((offer) => (
-                      <option key={offer.value} value={offer.value}>
-                        {offer.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {(startDate || endDate || agentFilter !== "all" || originFilter !== "all" || offerFilter !== "all") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAgentFilter("all");
-                      setOriginFilter("all");
-                      setOfferFilter("all");
-                      setStartDate("");
-                      setEndDate("");
-                    }}
-                    className="mt-2 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100 transition-colors duration-200 hover:bg-slate-800/60"
-                  >
-                    Réinitialiser
-                  </button>
-                )}
-              </div>
-            </aside>
-
-            <div className="flex min-h-[640px] min-w-0 flex-1 flex-col gap-6">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-blue-300/70">Historique</p>
-                  <h2 className="text-2xl font-semibold text-white">Ventes LEADS</h2>
-                </div>
-                <div className="text-sm text-blue-200/80">
-                  {filteredRows.length} vente{filteredRows.length > 1 ? "s" : ""} affichée{filteredRows.length > 1 ? "s" : ""}
-                </div>
-              </div>
-
-              <div className="relative flex-1 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/45">
-                <div className="grid grid-cols-12 gap-4 border-b border-white/5 bg-slate-900/60 px-4 py-3 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-                  <span className="col-span-2">Début</span>
-                  <span className="col-span-2">Fin</span>
-                  <span className="col-span-2">Agent</span>
-                  <span className="col-span-2">Origine</span>
-                  <span className="col-span-2">Offre</span>
-                  <span className="col-span-1 text-right">ID</span>
-                  <span className="col-span-1 text-right">Actions</span>
-                </div>
-                <div
-                  ref={historyScrollRef}
-                  onScroll={handleHistoryScroll}
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerLeave={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
-                  className={`max-h-[560px] overflow-y-auto overflow-x-auto text-sm text-blue-50/90 ${
-                    isDragging ? "cursor-grabbing select-none" : "cursor-grab"
-                  }`}
-                >
-                  <div className="min-w-full 2xl:min-w-[1550px]">
-                    {filteredRows.length === 0 ? (
-                      <div className="px-4 py-12 text-center text-blue-200/70">
-                        Aucun résultat pour ces filtres.
-                      </div>
-                    ) : (
-                      filteredRows.map((row) => {
-                        const agentLabel = row.displayName || row.email || "—";
-                        const origin = (row.origineLead || "—").toUpperCase();
-                        return (
-                          <div
-                            key={row.id}
-                            className="grid grid-cols-12 gap-4 border-b border-white/5 px-4 py-3 last:border-b-0 transition-colors duration-200 hover:bg-slate-900/40"
-                          >
-                            <span className="col-span-2 font-medium text-blue-100">
-                              {renderDateTimeCell(row.startedAt)}
-                            </span>
-                            <span className="col-span-2 font-medium text-blue-100">
-                              {renderDateTimeCell(row.completedAt)}
-                            </span>
-                            <span className="col-span-2 flex flex-col">
-                              <span className="font-semibold text-blue-50">{agentLabel}</span>
-                              <span className="text-xs text-blue-200/70">{row.numeroId || "DID —"}</span>
-                            </span>
-                            <span className="col-span-2 flex items-center">
-                              <span className="inline-flex min-w-[72px] justify-center rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold tracking-[0.3em] text-blue-200">
-                                {origin}
-                              </span>
-                            </span>
-                            <span className="col-span-2 flex flex-col">
-                              <span className="font-semibold text-blue-50">{row.typeOffre || "—"}</span>
-                              <span className="text-xs text-blue-200/70">{row.intituleOffre || "—"}</span>
-                            </span>
-                            <span className="col-span-1 text-right text-xs text-blue-200/70">{row.id.slice(0, 6)}…</span>
-                            <span className="col-span-1 flex min-w-[120px] flex-col items-end gap-2 text-xs text-blue-200/70 sm:flex-row sm:items-center sm:justify-end">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => openEditModal(row)}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-400/40 bg-blue-500/10 text-blue-100 transition hover:border-blue-300/60 hover:bg-blue-500/20 hover:text-white"
-                                  aria-label={`Modifier la vente ${row.id}`}
-                                >
-                                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                                </button>
-                              </div>
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <span className="text-[11px] uppercase tracking-[0.3em] text-blue-200/60">Navigation</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={Math.round(scrollProgress)}
-                  onChange={handleSliderChange}
-                  className="h-1 w-full cursor-pointer rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500"
-                />
-              </div>
+              </button>
+              {loading && <p className="text-sm text-blue-200">Chargement des ventes…</p>}
+              {!loading && filteredRows.length === 0 && !error && (
+                <p className="text-sm text-blue-200/80">Aucune vente LEADS disponible pour l'instant.</p>
+              )}
+              {error && <p className="text-sm text-rose-300">{error}</p>}
             </div>
           </div>
-        </div>
+
+          <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
+            <div className={`${TABLE_COLUMNS} gap-4 border-b border-white/10 bg-slate-900 px-4 py-3 text-[11px] uppercase tracking-[0.3em] text-blue-200/70`}>
+              <span>Début</span>
+              <span>Fin</span>
+              <span>Agent</span>
+              <span>Origine</span>
+              <span>Offre</span>
+              <span className="text-right">ID</span>
+              <span className="text-center">Actions</span>
+            </div>
+            {filteredRows.length === 0 ? (
+              <div className="px-4 py-12 text-center text-sm text-blue-200/70">
+                Aucun résultat pour ces filtres.
+              </div>
+            ) : (
+              filteredRows.map((row) => {
+                const agentLabel = row.displayName || row.email || "—";
+                const secondaryAgentInfo = row.numeroId || row.email || "DID —";
+                const origin = (row.origineLead || "—").toUpperCase();
+                const trimmedId = row.id.length > 6 ? `${row.id.slice(0, 6)}…` : row.id;
+                return (
+                  <div
+                    key={row.id}
+                    className={`${TABLE_COLUMNS} gap-4 border-b border-white/5 px-4 py-4 text-sm text-blue-50 transition-colors duration-200 last:border-b-0 hover:bg-slate-900/30`}
+                  >
+                    <div>{renderDateTimeCell(row.startedAt)}</div>
+                    <div>{renderDateTimeCell(row.completedAt)}</div>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-blue-50">{agentLabel}</span>
+                      <span className="break-all text-xs text-blue-200/70 leading-snug">{secondaryAgentInfo}</span>
+                    </div>
+                    <div className="inline-flex min-h-[32px] items-center">
+                      <span className="inline-flex min-w-[72px] justify-center rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold tracking-[0.3em] text-blue-200">
+                        {origin}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-blue-50">{row.typeOffre || "—"}</span>
+                      <span className="break-all text-xs text-blue-200/70 leading-snug">{row.intituleOffre || "—"}</span>
+                    </div>
+                    <span className="text-right text-xs text-blue-200/70 break-all">{trimmedId}</span>
+                    <div className="flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(row)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-400/40 bg-blue-500/10 text-blue-100 hover:border-blue-300/60 hover:bg-blue-500/20 hover:text-white transition"
+                        aria-label={`Modifier la vente ${row.id}`}
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
       </div>
 
       {editingRow && (
@@ -657,50 +554,96 @@ const SupervisorLeadsExportPage: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-sale-title"
-            className="relative w-full max-w-2xl rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-slate-900/70 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.65)]"
+            className="relative w-full max-w-2xl rounded-3xl border border-sky-200/70 bg-gradient-to-br from-sky-100 via-sky-50 to-white p-8 font-sans shadow-[0_24px_80px_rgba(56,189,248,0.35)]"
           >
             <button
               type="button"
               onClick={closeEditModal}
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 text-blue-100 transition hover:border-blue-300/40 hover:bg-slate-800/80 hover:text-white"
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-sky-200/70 bg-white text-sky-600 transition hover:border-sky-300 hover:bg-sky-50"
               aria-label="Fermer la fenêtre d'édition"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
             <form onSubmit={handleSave} className="space-y-6">
               <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-blue-300/70">Modifier la vente</p>
-                <h3 id="edit-sale-title" className="mt-2 text-xl font-semibold text-white">
+                <p className="text-xs uppercase tracking-[0.4em] text-sky-600/70">Modifier la vente</p>
+                <h3 id="edit-sale-title" className="mt-2 text-xl font-semibold text-slate-900">
                   {editingRow.displayName || editingRow.email || "Vente"}
                 </h3>
-                <p className="text-xs uppercase tracking-[0.3em] text-blue-200/70">ID : {editingRow.id}</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">ID : {editingRow.id}</p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {EDITABLE_FIELDS.map(({ key, label }) => (
-                  <label key={key} className="flex flex-col gap-1 text-xs uppercase tracking-[0.3em] text-blue-200/70">
+                  <label key={key} className="flex flex-col gap-1 text-xs uppercase tracking-[0.3em] text-slate-600">
                     {label}
-                    <input
-                      type="text"
-                      value={editData[key]}
-                      onChange={(event) => handleFieldChange(key, event.target.value)}
-                      className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                    />
+                    {key === "intituleOffre" ? (
+                      <div className="space-y-2">
+                        <select
+                          value={offerOptions.some((option) => option.label === editData[key]) ? editData[key] : ""}
+                          onChange={(event) => handleFieldChange(key, event.target.value)}
+                          className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                        >
+                          <option value="">Choisir une offre populaire</option>
+                          {offerOptions.map(({ label: optionLabel, count }) => (
+                            <option key={optionLabel} value={optionLabel}>
+                              {count > 1 ? `${optionLabel} (${count})` : optionLabel}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          list={offerListId}
+                          value={editData[key]}
+                          onChange={(event) => handleFieldChange(key, event.target.value)}
+                          className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                          placeholder="Rechercher ou saisir une offre"
+                        />
+                        <datalist id={offerListId}>
+                          {offerOptions.map(({ label: optionLabel, count }) => (
+                            <option key={optionLabel} value={optionLabel}>
+                              {count > 1 ? `${optionLabel} (${count})` : optionLabel}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+                    ) : key === "origineLead" ? (
+                      <div className="space-y-2">
+                        <input
+                          list={originListId}
+                          value={editData[key]}
+                          onChange={(event) => handleFieldChange(key, event.target.value.toUpperCase())}
+                          className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                          placeholder="Rechercher l'origine"
+                        />
+                        <datalist id={originListId}>
+                          {originOptions.map((option) => (
+                            <option key={option.value} value={option.label} />
+                          ))}
+                        </datalist>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={editData[key]}
+                        onChange={(event) => handleFieldChange(key, event.target.value)}
+                        className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                      />
+                    )}
                   </label>
                 ))}
               </div>
 
-              {modalError && <p className="text-sm text-rose-300">{modalError}</p>}
+              {modalError && <p className="text-sm text-rose-500">{modalError}</p>}
 
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
                   onClick={handleDelete}
                   disabled={saving || deleting}
-                  className={`inline-flex items-center gap-2 rounded-xl border border-rose-500/40 px-4 py-2 text-sm font-semibold uppercase tracking-[0.3em] transition ${
+                  className={`inline-flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 text-sm font-semibold uppercase tracking-[0.3em] transition ${
                     deleting
-                      ? "cursor-wait bg-rose-600/30 text-rose-100"
-                      : "bg-rose-500/10 text-rose-200 hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-white"
+                      ? "cursor-wait bg-rose-200 text-rose-700"
+                      : "bg-white text-rose-500 hover:border-rose-400 hover:bg-rose-50"
                   }`}
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -709,10 +652,10 @@ const SupervisorLeadsExportPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={saving || deleting}
-                  className={`inline-flex items-center gap-2 rounded-xl border border-blue-400/60 px-6 py-2 text-sm font-semibold uppercase tracking-[0.3em] transition ${
+                  className={`inline-flex items-center gap-2 rounded-xl border border-sky-300 px-6 py-2 text-sm font-semibold uppercase tracking-[0.3em] transition ${
                     saving
-                      ? "cursor-wait bg-blue-500/20 text-blue-100"
-                      : "bg-blue-500/10 text-blue-100 hover:border-blue-300/70 hover:bg-blue-500/20 hover:text-white"
+                      ? "cursor-wait bg-sky-200 text-sky-700"
+                      : "bg-sky-500/10 text-sky-700 hover:border-sky-400 hover:bg-sky-400/20"
                   }`}
                 >
                   {saving ? "Enregistrement…" : "Sauvegarder"}
