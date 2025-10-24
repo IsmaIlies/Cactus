@@ -210,11 +210,9 @@ const SupervisorLayout: React.FC = () => {
             </span>
             Checklist
           </NavLink>
-        </nav>
-        <div className="border-t border-white/10 px-6 py-6 mt-auto mb-6">
           <button
             onClick={logout}
-            className="group relative inline-flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl border border-orange-400/40 bg-gradient-to-r from-orange-500/20 via-red-500/15 to-transparent px-4 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-orange-200 shadow-[0_16px_38px_rgba(234,179,8,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:border-orange-300/60 hover:text-white"
+            className="group relative mt-2 inline-flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl border border-orange-400/40 bg-gradient-to-r from-orange-500/20 via-red-500/15 to-transparent px-4 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-orange-200 shadow-[0_16px_38px_rgba(234,179,8,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:border-orange-300/60 hover:text-white"
           >
             <span className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-[radial-gradient(circle_at_20%_20%,rgba(248,191,132,0.35),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(248,113,113,0.25),transparent_60%)]" />
             <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-orange-200 transition group-hover:bg-white/10 group-hover:text-white">
@@ -223,7 +221,7 @@ const SupervisorLayout: React.FC = () => {
             </span>
             <span className="relative">Déconnexion</span>
           </button>
-        </div>
+        </nav>
       </aside>
 
       {/* Main content */}
