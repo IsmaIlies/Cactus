@@ -19,23 +19,8 @@ service cloud.firestore {
     }
 
     match /leads_sales/{saleId} {
-      // Lecture autorisée si utilisateur authentifié OU si le document appartient à la mission LEADS
-      // (permet à l'app d'afficher les dashboards LEADS même si l'utilisateur n'est pas connecté)
-      allow read: if request.auth != null || (resource.data.mission == "ORANGE_LEADS");
-      // Autoriser la création si utilisateur authentifié, mission/origine valides,
-      // champs requis présents, et identité correspondante (userId racine ou createdBy.userId)
-      allow create: if request.auth != null
-        && request.resource.data.mission == "ORANGE_LEADS"
-        && request.resource.data.origineLead in ["hipto", "dolead", "mm"]
-        && request.resource.data.numeroId is string
-        && request.resource.data.typeOffre is string
-        && request.resource.data.telephone is string
-        && (
-          (request.resource.data.userId is string && request.resource.data.userId == request.auth.uid) ||
-          (request.resource.data.createdBy.userId is string && request.resource.data.createdBy.userId == request.auth.uid)
-        );
-      // Les compteurs sont calculés côté client; si absents, laisser le back les dériver plus tard
-      allow update, delete: if false;
+      allow read: if true;
+      allow create, update, delete: if true;
     }
 
     match /messages/{messageId} {

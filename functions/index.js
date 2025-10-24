@@ -7,49 +7,94 @@ const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const axios = require("axios");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { defineSecret } = require('firebase-functions/params');
 
 admin.initializeApp();
 
 const cors = require('cors')({ origin: true });
 
-// Réécriture Hosting → leadsStats (europe-west1)
-exports.leadsStats = onRequest({ region: 'europe-west1' }, async (req, res) => {
+<<<<<<< ours
+exports.leadsStats = onRequest({ region: 'europe-west1', invoker: 'public' }, async (req, res) => {
+=======
+// Migré depuis functions.config() vers Firebase Secret Manager (post-2026 compliant).
+const LEADS_API_TOKEN = defineSecret('LEADS_API_TOKEN');
+
+// In-memory cache for leads stats (30 seconds TTL)
+exports.leadsStats = onRequest({
+  region: 'europe-west1',
+  timeoutSeconds: 15,
+  memory: '256MiB',
+  secrets: [LEADS_API_TOKEN],
+}, async (req, res) => {
+  setCorsHeaders(req, res);
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Méthode non autorisée', dolead: 0, hipto: 0 });
+  }
+
+>>>>>>> theirs
   try {
-    const token = process.env.LEADS_API_TOKEN || 'b7E8g2QEBh8jz7eF57uT';
-    const { date_start, date_end } = req.query || {};
-    const url = new URL('https://orange-leads.mm.emitel.io/stats-lead.php');
-    url.searchParams.set('token', token);
-    if (typeof date_start === 'string' && date_start) {
-      url.searchParams.set('date_start', date_start);
+    const now = Date.now();
+    if (leadsStatsCache.payload && leadsStatsCache.expires > now) {
+      return res.json({ ok: true, ...leadsStatsCache.payload });
     }
+<<<<<<< ours
     if (typeof date_end === 'string' && date_end) {
       url.searchParams.set('date_end', date_end);
     }
 
-    const response = await fetch(url.toString());
-    const json = await response.json();
-
-    if (!json || json.RESPONSE !== 'OK' || !Array.isArray(json.DATA)) {
-      return res.status(502).json({ ok: false, error: 'API KO', dolead: 0, hipto: 0 });
+    const upstream = await fetch(url.toString(), { method: 'GET' });
+    let payload = null;
+    try {
+      payload = await upstream.json();
+    } catch (err) {
+      console.warn('[leadsStats] Réponse JSON invalide', err);
     }
 
     const findCount = (type) => {
-      const entry = json.DATA.find((item) => item && item.type === type);
+      if (!payload || !Array.isArray(payload.DATA)) return 0;
+      const entry = payload.DATA.find((item) => item && String(item.type).toLowerCase() === type);
       return entry && typeof entry.count === 'number' ? entry.count : 0;
     };
 
-    return res.json({
+    if (!upstream.ok || !payload || payload.RESPONSE !== 'OK' || !Array.isArray(payload.DATA)) {
+      console.warn('[leadsStats] API amont en erreur', { status: upstream.status, payload });
+      return res.status(200).json({ ok: false, error: 'Upstream KO', dolead: 0, hipto: 0 });
+    }
+
+    return res.status(200).json({
       ok: true,
-      dolead: findCount('dolead'),
-      hipto: findCount('hipto'),
+      dolead: Number(findCount('dolead')) || 0,
+      hipto: Number(findCount('hipto')) || 0,
     });
   } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      error: error && error.message ? error.message : 'Erreur inconnue',
-      dolead: 0,
-      hipto: 0,
-    });
+    console.warn('[leadsStats] Erreur interne', error);
+    return res.status(200).json({ ok: false, error: error && error.message ? error.message : 'Erreur inconnue', dolead: 0, hipto: 0 });
+=======
+
+    const { date_start, date_end } = req.query || {};
+    const params = {};
+    if (typeof date_start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_start)) {
+      params.date_start = date_start;
+    }
+    if (typeof date_end === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_end)) {
+      params.date_end = date_end;
+    }
+
+    const secretToken = LEADS_API_TOKEN.value() || process.env.LEADS_API_TOKEN || '';
+    const data = await fetchLeadStatsFromApi(params, secretToken);
+    leadsStatsCache = {
+      expires: now + 30 * 1000,
+      payload: data,
+    };
+    return res.json({ ok: true, ...data });
+  } catch (error) {
+    console.warn('[leadsStats] error', error && error.message ? error.message : error);
+    const message = error && error.message ? error.message : 'Erreur inconnue';
+    return res.status(500).json({ ok: false, error: message, dolead: 0, hipto: 0 });
+>>>>>>> theirs
   }
 });
 
