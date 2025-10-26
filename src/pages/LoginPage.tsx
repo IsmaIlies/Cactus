@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 // auth import removed (region selection is manual, no Firestore region fetch needed)
 import { useRegion } from '../contexts/RegionContext';
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Cpu, ShieldCheck, Sparkles } from "lucide-react";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -204,295 +204,324 @@ const LoginPage = () => {
       setLoading(false);
     }
   };
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start p-4 pt-10 pb-16 bg-gradient-to-b from-cactus-600 to-cactus-800">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-10 flex flex-col items-center">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute left-1/2 top-[-320px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-cactus-500/25 blur-3xl" />
+        <div className="absolute bottom-[-240px] right-[-200px] h-[680px] w-[680px] rounded-full bg-gradient-to-br from-cactus-400/30 via-transparent to-transparent blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.18),_transparent_62%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(125deg,rgba(8,145,178,0.12),rgba(15,23,42,0.85))]" />
+        <div className="pointer-events-none absolute inset-0 opacity-40 mix-blend-soft-light [background-image:linear-gradient(180deg,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)];[background-size:60px_60px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-16 px-5 py-16 sm:px-8 lg:flex-row lg:items-center lg:gap-20">
+        <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center lg:mx-0 lg:w-[48%] lg:items-start lg:text-left">
           <img
             src="/cactus-tech-logo.svg"
             alt="Logo Cactus Tech"
-            className="w-60 max-w-full h-auto mb-5 drop-shadow-lg"
+            className="mb-6 h-20 w-auto drop-shadow-[0_18px_48px_rgba(6,182,212,0.35)]"
           />
-          <p className="text-cactus-100 text-lg">
-            SaaS TMK Solution powered by IA
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow-lg w-full">
-          <div className="p-6 pt-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="space-y-2">
-                <div
-                  className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded"
-                  role="alert"
-                >
-                  <span className="block sm:inline">{error}</span>
-                </div>
-                {error.toLowerCase().includes('réseau') && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded text-xs leading-relaxed">
-                    <p className="font-medium mb-1">Dépannage réseau rapide :</p>
-                    <ul className="list-disc ml-4 space-y-0.5">
-                      <li>Vérifie si tu es connecté (Wi‑Fi / 4G)</li>
-                      <li>Désactive provisoirement VPN / Proxy / Adblock</li>
-                      <li>Essaye en navigation privée ou autre navigateur</li>
-                      <li>Teste: <button type="button" onClick={testConnectivity} className="underline text-amber-900 hover:text-amber-700 disabled:opacity-60" disabled={testing}>{testing ? 'Test...' : 'Ping internet'}</button></li>
-                    </ul>
-                    {networkOk === true && <p className="mt-1 text-green-700">Ping OK : la connexion générale fonctionne.</p>}
-                    {networkOk === false && <p className="mt-1 text-red-700">Échec du ping : problème de connexion ou blocage sortant.</p>}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span className={isOnline ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                Statut réseau : {isOnline ? 'En ligne' : 'Hors ligne'}
-              </span>
-              {networkOk !== null && (
-                <span className={networkOk ? 'text-green-600' : 'text-red-600'}>
-                  Test: {networkOk ? 'OK' : 'Échec'}
-                </span>
-              )}
-            </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-4 py-1 text-[11px] uppercase tracking-[0.35em] text-cyan-200 backdrop-blur">
+            <span>Mars Marketing SaaS</span>
+          </div>
+          <div className="mt-12 h-px w-full bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+        </section>
 
-            <div className="pt-2 border-t border-gray-200 space-y-2">
-              <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-3">
-                <p className="text-xs font-medium text-gray-700">Mission</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleMissionSelect('CANAL_PLUS')}
-                    aria-pressed={mission === 'CANAL_PLUS'}
-                    className={`w-full rounded-lg border px-4 py-3 text-left transition focus:outline-none focus:ring-2 focus:ring-offset-2 text-sm font-semibold ${
-                      mission === 'CANAL_PLUS'
-                        ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-900/30 focus:ring-gray-900'
-                        : 'bg-white text-gray-900 border-gray-300 hover:border-gray-400 hover:bg-gray-100 focus:ring-gray-400'
-                    }`}
-                  >
-                    <span className="block text-base font-semibold tracking-wide">CANAL+</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMissionSelect('ORANGE_LEADS')}
-                    aria-pressed={mission === 'ORANGE_LEADS'}
-                    className={`w-full rounded-lg border px-4 py-3 text-left transition focus:outline-none focus:ring-2 focus:ring-offset-2 text-sm font-semibold ${
-                      mission === 'ORANGE_LEADS'
-                        ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-400/40 focus:ring-orange-400'
-                        : 'bg-white text-gray-900 border-orange-200 hover:border-orange-300 hover:bg-orange-50 focus:ring-orange-300'
-                    }`}
-                  >
-                    <span className="block text-base font-semibold tracking-wide">ORANGE LEADS</span>
-                  </button>
+        <section className="relative mx-auto w-full max-w-lg">
+          <div className="absolute inset-0 -z-10 rounded-3xl bg-gradient-to-br from-white/5 via-white/0 to-transparent blur-3xl" />
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 shadow-[0_35px_60px_-25px_rgba(8,15,33,0.9)] backdrop-blur-xl">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -top-24 right-12 h-56 w-56 rounded-full bg-cactus-400/25 blur-3xl" />
+              <div className="absolute -bottom-24 left-10 h-52 w-52 rounded-full bg-emerald-500/15 blur-3xl" />
+            </div>
+            <div className="relative p-8 sm:p-10">
+              <div className="mb-8 space-y-2 text-center">
+                <div className="inline-flex items-center gap-2 rounded-full border border-cactus-400/40 bg-cactus-500/10 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-cactus-100/90">
+                  Espace agents
                 </div>
+                <p className="text-sm text-slate-400">
+                  Identifie-toi pour accéder à ton environnement personnalisé.
+                </p>
               </div>
-              <div className="bg-gray-50 border border-gray-200 rounded p-3">
-                <p className="text-xs font-medium text-gray-700 mb-2">Région</p>
-                <div className="flex items-center gap-6 text-xs">
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="region"
-                      value="FR"
-                      checked={selectedRegion === 'FR'}
-                      onChange={() => setSelectedRegion('FR')}
-                      className="accent-cactus-600"
-                    />
-                    <span className="text-gray-900">France (FR)</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="region"
-                      value="CIV"
-                      checked={selectedRegion === 'CIV'}
-                      onChange={() => setSelectedRegion('CIV')}
-                      className="accent-cactus-600"
-                    />
-                    <span className="text-gray-900">Côte d'Ivoire (CIV)</span>
-                  </label>
-                </div>
-              </div>
-              {/* Supervisor quick access (Option B - temporary whitelist) */}
-              <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-blue-900">Espace Superviseur</p>
-                  <span className="text-[10px] text-blue-700">Accès temporaire</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {([
-                    { key: 'fr', label: 'CANAL+ FR' },
-                    { key: 'civ', label: 'CANAL+ CIV' },
-                    { key: 'leads', label: 'LEADS' },
-                  ] as Array<{key: Exclude<SupervisorChoice, null>, label: string}>).map(btn => {
-                    const active = supervisorChoice === btn.key;
-                    const disabled = !isSupervisorAllowed;
-                    return (
-                      <button
-                        key={btn.key}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setSupervisorChoice(btn.key)}
-                        title={disabled ? 'Réservé — saisir un email autorisé' : 'Choisir ce tableau superviseur'}
-                        className={
-                          `w-full rounded-lg border px-3 py-2 text-center text-sm font-semibold transition ${
-                            active
-                              ? 'bg-blue-600 text-white border-blue-600 shadow'
-                              : 'bg-white text-blue-900 border-blue-300 hover:bg-blue-100'
-                          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`
-                        }
-                      >
-                        {btn.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {!isSupervisorAllowed && (
-                  <p className="mt-2 text-[11px] text-blue-900/80">
-                    Indiquez un email autorisé pour activer l'accès superviseur. Accès accordé à: {SUPERVISOR_WHITELIST.join(', ')}
-                  </p>
-                )}
-                {isSupervisorAllowed && supervisorChoice && (
-                  <p className="mt-2 text-[11px] text-blue-900/80">Cible choisie: {supervisorChoice.toUpperCase()}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => { if(!showDiag) { setShowDiag(true); runAdvancedDiagnostics(); } else setShowDiag(false); }}
-                className="text-xs text-cactus-700 hover:text-cactus-600 underline"
-              >
-                {showDiag ? 'Masquer diagnostic avancé' : 'Afficher diagnostic avancé'}
-              </button>
-              {showDiag && (
-                <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Diagnostic réseau</span>
-                    <button
-                      type="button"
-                      onClick={runAdvancedDiagnostics}
-                      disabled={advRunning}
-                      className="px-2 py-1 rounded bg-white border border-gray-300 hover:bg-gray-100 disabled:opacity-50"
-                    >{advRunning ? 'Analyse…' : 'Relancer'}</button>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <div className="space-y-2">
+                    <div
+                      className="rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200 shadow-sm shadow-red-900/20"
+                      role="alert"
+                    >
+                      <span className="block sm:inline">{error}</span>
+                    </div>
+                    {error.toLowerCase().includes('réseau') && (
+                      <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-[11px] leading-relaxed text-amber-100">
+                        <p className="mb-1 font-medium">Dépannage réseau rapide :</p>
+                        <ul className="ml-4 list-disc space-y-0.5 text-left">
+                          <li>Vérifie si tu es connecté (Wi‑Fi / 4G)</li>
+                          <li>Désactive provisoirement VPN / Proxy / Adblock</li>
+                          <li>Essaye en navigation privée ou autre navigateur</li>
+                          <li>Teste: <button type="button" onClick={testConnectivity} className="underline decoration-dotted text-amber-200 hover:text-amber-100 disabled:opacity-60" disabled={testing}>{testing ? 'Test...' : 'Ping internet'}</button></li>
+                        </ul>
+                        {networkOk === true && <p className="mt-2 text-emerald-300">Ping OK : la connexion générale fonctionne.</p>}
+                        {networkOk === false && <p className="mt-2 text-red-200">Échec du ping : problème de connexion ou blocage sortant.</p>}
+                      </div>
+                    )}
                   </div>
-                  {!advResults && <p className="text-gray-500">Collecte en cours…</p>}
-                  {advResults && (
-                    <ul className="space-y-1">
-                      {advResults.results.map((r: any, i: number) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className={`mt-0.5 inline-block w-2 h-2 rounded-full ${r.ok ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                          <div className="flex-1">
-                            <span className="font-medium">{r.name}</span>
-                            <span className="ml-1 text-[10px] text-gray-500">{r.latencyMs != null ? r.latencyMs + 'ms' : ''}</span>
-                            {r.status && <span className="ml-2 text-[10px] text-gray-500">HTTP {r.status}</span>}
-                            {r.code && <span className="ml-2 text-[10px] text-gray-500">{r.code}</span>}
-                            {r.detail && <div className="text-[11px] text-gray-600">{r.detail}</div>}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                )}
+
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className={isOnline ? 'text-emerald-300 font-medium' : 'text-red-300 font-medium'}>
+                    Statut réseau : {isOnline ? 'En ligne' : 'Hors ligne'}
+                  </span>
+                  {networkOk !== null && (
+                    <span className={networkOk ? 'text-emerald-300' : 'text-red-300'}>
+                      Test: {networkOk ? 'OK' : 'Échec'}
+                    </span>
                   )}
-                  {advResults && (
-                    <div className="pt-2 border-t border-gray-200 space-y-1 text-[11px] text-gray-600">
-                      <p><strong>Interprétation rapide :</strong></p>
-                      <ul className="list-disc ml-4 space-y-0.5">
-                        <li>Si "API IdentityToolkit" = rouge mais "Accès domaine application" = vert → blocage ciblé (pare-feu / filtrage sur *.googleapis.com).</li>
-                        <li>Si tout est rouge → perte de connexion ou DNS.</li>
-                        <li>Si seulement "Accès domaine application" est rouge → cache / service worker local à nettoyer.</li>
-                      </ul>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4 shadow-[inset_0_1px_0_0_rgba(148,163,184,0.05)]">
+                  <div className="space-y-3 rounded-xl border border-white/10 bg-slate-900/60 p-4">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-slate-400">Mission</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => handleMissionSelect('CANAL_PLUS')}
+                        aria-pressed={mission === 'CANAL_PLUS'}
+                        className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cactus-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                          mission === 'CANAL_PLUS'
+                            ? 'bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 text-white border-cactus-400/60 shadow-lg shadow-cactus-900/30'
+                            : 'bg-slate-950/40 text-slate-200 border-white/10 hover:border-cactus-400/40 hover:bg-slate-900/60'
+                        }`}
+                      >
+                        <span className="block text-base font-semibold tracking-wide">CANAL+</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMissionSelect('ORANGE_LEADS')}
+                        aria-pressed={mission === 'ORANGE_LEADS'}
+                        className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                          mission === 'ORANGE_LEADS'
+                            ? 'bg-gradient-to-r from-orange-500 to-orange-400 text-white border-orange-400/70 shadow-lg shadow-orange-500/40'
+                            : 'bg-slate-950/40 text-slate-200 border-orange-300/30 hover:border-orange-300/60 hover:bg-orange-500/10'
+                        }`}
+                      >
+                        <span className="block text-base font-semibold tracking-wide">ORANGE LEADS</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.3em] text-slate-400">Région</p>
+                    <div className="flex items-center gap-6 text-xs text-slate-200">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="radio"
+                          name="region"
+                          value="FR"
+                          checked={selectedRegion === 'FR'}
+                          onChange={() => setSelectedRegion('FR')}
+                          className="accent-cactus-500"
+                        />
+                        <span>France (FR)</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="radio"
+                          name="region"
+                          value="CIV"
+                          checked={selectedRegion === 'CIV'}
+                          onChange={() => setSelectedRegion('CIV')}
+                          className="accent-cactus-500"
+                        />
+                        <span>Côte d'Ivoire (CIV)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-400/30 bg-blue-500/10 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-100">Espace superviseur</p>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-blue-200">Accès temporaire</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {([
+                        { key: 'fr', label: 'CANAL+ FR' },
+                        { key: 'civ', label: 'CANAL+ CIV' },
+                        { key: 'leads', label: 'LEADS' },
+                      ] as Array<{key: Exclude<SupervisorChoice, null>, label: string}>).map(btn => {
+                        const active = supervisorChoice === btn.key;
+                        const disabled = !isSupervisorAllowed;
+                        return (
+                          <button
+                            key={btn.key}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => setSupervisorChoice(btn.key)}
+                            title={disabled ? 'Réservé — saisir un email autorisé' : 'Choisir ce tableau superviseur'}
+                            className={`w-full rounded-lg border px-3 py-2 text-center text-sm font-semibold transition ${
+                              active
+                                ? 'border-blue-200/70 bg-blue-400/30 text-white shadow-lg shadow-blue-900/30'
+                                : 'border-blue-200/50 bg-blue-500/10 text-blue-100 hover:border-blue-200/80 hover:bg-blue-400/20'
+                            } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                          >
+                            {btn.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {!isSupervisorAllowed && (
+                      <p className="mt-2 text-[11px] text-blue-100/80">
+                        Indiquez un email autorisé pour activer l'accès superviseur. Accès accordé à: {SUPERVISOR_WHITELIST.join(', ')}
+                      </p>
+                    )}
+                    {isSupervisorAllowed && supervisorChoice && (
+                      <p className="mt-2 text-[11px] text-blue-100/80">Cible choisie: {supervisorChoice.toUpperCase()}</p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => { if(!showDiag) { setShowDiag(true); runAdvancedDiagnostics(); } else setShowDiag(false); }}
+                    className="text-xs text-cactus-200 underline decoration-dotted hover:text-cactus-100"
+                  >
+                    {showDiag ? 'Masquer diagnostic avancé' : 'Afficher diagnostic avancé'}
+                  </button>
+
+                  {showDiag && (
+                    <div className="space-y-2 rounded-xl border border-white/10 bg-slate-900/70 p-4 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Diagnostic réseau</span>
+                        <button
+                          type="button"
+                          onClick={runAdvancedDiagnostics}
+                          disabled={advRunning}
+                          className="rounded border border-white/10 bg-white/5 px-2 py-1 text-slate-200 transition hover:border-white/30 hover:bg-white/10 disabled:opacity-50"
+                        >{advRunning ? 'Analyse…' : 'Relancer'}</button>
+                      </div>
+                      {!advResults && <p className="text-slate-500">Collecte en cours…</p>}
+                      {advResults && (
+                        <ul className="space-y-1">
+                          {advResults.results.map((r: any, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${r.ok ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
+                              <div className="flex-1">
+                                <span className="font-medium">{r.name}</span>
+                                <span className="ml-1 text-[10px] text-slate-400">{r.latencyMs != null ? r.latencyMs + 'ms' : ''}</span>
+                                {r.status && <span className="ml-2 text-[10px] text-slate-400">HTTP {r.status}</span>}
+                                {r.code && <span className="ml-2 text-[10px] text-slate-400">{r.code}</span>}
+                                {r.detail && <div className="text-[11px] text-slate-300">{r.detail}</div>}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {advResults && (
+                        <div className="space-y-1 border-t border-white/10 pt-2 text-[11px] text-slate-400">
+                          <p><strong>Interprétation rapide :</strong></p>
+                          <ul className="ml-4 list-disc space-y-0.5">
+                            <li>Si "API IdentityToolkit" = rouge mais "Accès domaine application" = vert → blocage ciblé (pare-feu / filtrage sur *.googleapis.com).</li>
+                            <li>Si tout est rouge → perte de connexion ou DNS.</li>
+                            <li>Si seulement "Accès domaine application" est rouge → cache / service worker local à nettoyer.</li>
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Email ou nom d'utilisateur
-              </label>
-              <input
-                id="email"
-                type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input-field"
-                placeholder="ex : a.hubert@mars-marketing.fr ou a.hubert"
-                required
-              />
-            </div>
+                <div className="space-y-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4 shadow-[inset_0_1px_0_0_rgba(148,163,184,0.05)]">
+                  <div>
+                    <label
+                      htmlFor="email"
+                      className="mb-1 block text-sm font-medium text-slate-200"
+                    >
+                      Email ou nom d'utilisateur
+                    </label>
+                    <input
+                      id="email"
+                      type="text"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="input-field border-white/10 bg-slate-900/70 text-slate-100 placeholder-slate-500 focus:border-cactus-400 focus:ring-cactus-400/70"
+                      placeholder="ex : a.hubert@mars-marketing.fr ou a.hubert"
+                      required
+                    />
+                  </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700"
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="password"
+                        className="block text-sm font-medium text-slate-200"
+                      >
+                        Mot de passe
+                      </label>
+                      <Link
+                        to="/forgot-password"
+                        className="text-sm text-cactus-200 hover:text-cactus-100"
+                      >
+                        Mot de passe oublié ?
+                      </Link>
+                    </div>
+                    <div className="relative">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="input-field border-white/10 bg-slate-900/70 pr-12 text-slate-100 placeholder-slate-500 focus:border-cactus-400 focus:ring-cactus-400/70"
+                        placeholder="••••••••"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-white"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary w-full overflow-hidden rounded-xl py-3 font-semibold shadow-lg shadow-cactus-900/40 transition hover:shadow-cactus-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cactus-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
                 >
-                  Mot de passe
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-cactus-600 hover:text-cactus-500"
-                >
-                  Mot de passe oublié ?
-                </Link>
-              </div>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input-field pr-10"
-                  placeholder="••••••••"
-                  required
-                />
+                  {loading ? "Connexion..." : "Se connecter"}
+                </button>
+
+                <div className="flex justify-center">
+                  <Link
+                    to="/register"
+                    className="inline-flex items-center gap-2 rounded-full border border-cactus-400/30 bg-cactus-500/10 px-4 py-2 text-sm font-medium text-cactus-100 transition hover:border-cactus-300/60 hover:bg-cactus-500/20"
+                  >
+                    Créer un compte
+                  </Link>
+                </div>
+              </form>
+
+              <div className="mt-10 flex justify-center pb-2">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={() => navigate("/admin/login")}
+                  className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/10 bg-black/70 px-7 py-3 text-sm font-semibold uppercase tracking-[0.35em] text-white shadow-[0_24px_60px_rgba(0,0,0,0.55)] transition-all duration-300 hover:scale-105 hover:border-white/30 hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
+                  <span className="pointer-events-none absolute inset-0 -translate-y-full bg-gradient-to-br from-white/40 via-white/10 to-transparent opacity-0 transition-all duration-500 ease-out group-hover:translate-y-0 group-hover:opacity-100" />
+                  <span>ADMIN</span>
+                  <span className="h-px w-8 bg-white/40" aria-hidden="true" />
+                  <span className="text-[10px] tracking-[0.2em] text-white/60 normal-case">Accès sécurisé</span>
                 </button>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full btn-primary py-3 flex items-center justify-center"
-            >
-              {loading ? "Connexion..." : "Se connecter"}
-            </button>
-
-            {/* Lien discret vers l'inscription */}
-            <div className="mt-3 flex justify-center">
-              <Link
-                to="/register"
-                className="inline-flex items-center gap-2 rounded-full border border-cactus-600/30 bg-white/90 px-4 py-2 text-sm font-medium text-cactus-700 hover:bg-cactus-50 shadow-sm"
-              >
-                Créer un compte
-              </Link>
-            </div>
-          </form>
-
-          <div className="mt-8 pb-2 flex justify-center">
-            <button
-              type="button"
-              onClick={() => navigate("/admin/login")}
-              className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-white/15 bg-black/85 px-7 py-3 text-sm font-semibold uppercase tracking-[0.35em] text-white shadow-[0_24px_60px_rgba(0,0,0,0.55)] transition-all duration-300 hover:scale-105 hover:border-white/35 hover:bg-black focus:outline-none focus:ring-2 focus:ring-white/40"
-            >
-              <span className="pointer-events-none absolute inset-0 -translate-y-full bg-gradient-to-br from-white/45 via-white/10 to-transparent opacity-0 transition-all duration-500 ease-out group-hover:translate-y-0 group-hover:opacity-100" />
-              <span>ADMIN</span>
-              <span className="h-px w-8 bg-white/40" aria-hidden="true" />
-              <span className="text-[10px] tracking-[0.2em] text-white/60 normal-case">Accès sécurisé</span>
-            </button>
           </div>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   );
