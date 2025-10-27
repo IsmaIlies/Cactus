@@ -7,12 +7,7 @@ import ProgrammePdfTopBar from '../components/ProgrammePdfTopBar';
 // Exemple: <img src="/marseille-cal.png" ... />
 // L'utilisateur pourra remplacer par les vrais noms.
 
-interface ScheduleEntry {
-  time: string;
-  title: string;
-  channels: string;
-  badge?: string;
-}
+// (Interface ScheduleEntry supprimée car non utilisée)
 
 const SectionBlock: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; icon?: string; gradient?: string; }>=({ title, subtitle, children, icon, gradient }) => {
   return (
@@ -37,84 +32,6 @@ const SectionBlock: React.FC<{ title: string; subtitle?: string; children: React
   );
 };
 
-const scheduleDay = (label: string, entries: ScheduleEntry[], highlight?: boolean) => {
-  return (
-    <div className={`rounded-2xl border ${highlight ? 'border-emerald-400/50 shadow-[0_0_0_1px_rgba(16,185,129,0.35)]' : 'border-white/10'} bg-gradient-to-br from-white/10 via-white/5 to-white/0 p-4 space-y-4 transition-colors`}>
-      <div className="flex items-center gap-2 pl-1">
-        <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.15)]" />
-        <h3 className="text-sm font-semibold text-white tracking-wide uppercase letter-spacing-wide">{label}</h3>
-      </div>
-      <ul className="space-y-2">
-        {entries.map((e,i)=> {
-          const lower = e.title.toLowerCase();
-          const isShow = lower.includes('canal champions club');
-          const isDebrief = lower.includes('debrief');
-          const isMultiplex = lower.includes('multiplex');
-          const parts = e.title.split(' - ');
-          const hasTeams = parts.length === 2 && !isShow && !isDebrief && !isMultiplex;
-          return (
-            <li key={i} className="relative group hover-glow-item">
-              {/* Séparateur délicat (sauf dernier) */}
-              {i < entries.length - 1 && (
-                <span className="pointer-events-none absolute -bottom-1 left-4 right-2 h-px bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent opacity-40 group-hover:opacity-70 transition" />
-              )}
-              <div className="absolute inset-y-0 left-0 w-1 rounded-l-md bg-gradient-to-b from-emerald-400 via-cactus-400 to-cactus-600 opacity-70 group-hover:opacity-100 transition" />
-              <div className="pl-3 pr-3 py-2.5 rounded-lg bg-white/3 hover:bg-white/8 border border-white/10 hover:border-white/20 transition-colors shadow-sm flex flex-col gap-1">
-                <div className="flex items-start gap-3">
-                  <span className="font-mono text-[11px] text-emerald-200 leading-none pt-0.5 w-11 shrink-0 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-emerald-100">{e.time}</span>
-                  <div className="flex-1 min-w-0">
-                    {hasTeams ? (
-                      <p className="text-[13px] font-semibold text-white leading-tight flex flex-wrap gap-x-1">
-                        <span className="truncate max-w-[46%]">{parts[0]}</span>
-                        <span className="text-cactus-300/60">vs</span>
-                        <span className="truncate max-w-[46%]">{parts[1]}</span>
-                      </p>
-                    ) : (
-                      <p className="text-[13px] font-semibold text-white leading-tight break-words">
-                        {e.title}
-                      </p>
-                    )}
-                    <p className="text-[10px] font-medium text-cactus-100/70 mt-0.5 flex items-center gap-1">
-                      <span className="hidden sm:inline text-cactus-300/60">•</span>
-                      <span className="truncate">{e.channels}</span>
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 w-14 shrink-0">
-                    {e.badge && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-100 border border-indigo-400/40 uppercase font-semibold tracking-wide">
-                        {e.badge}
-                      </span>
-                    )}
-                    {isMultiplex && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-fuchsia-500/25 text-fuchsia-100 border border-fuchsia-400/40 uppercase font-semibold tracking-wide">multi</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-};
-
-// Utilitaires date dynamiques
-const formatDateFR = (d: Date) => {
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }); // JJ/MM
-};
-
-const getNextWeekday = (targetWeekday: number, from = new Date()) => {
-  // targetWeekday: 0 = Dimanche ... 6 = Samedi (comme getDay)
-  const d = new Date(from);
-  const diff = (targetWeekday - d.getDay() + 7) % 7; // si aujourd'hui => 0 (on garde)
-  d.setDate(d.getDate() + diff);
-  // Normaliser heure pour comparaisons (retirer heure courante)
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const isSameDay = (a: Date, b: Date) => a.getTime() === b.getTime();
 
 const NouveautesPage: React.FC = () => {
   // Lightbox pour Visuels Clubs
@@ -145,15 +62,7 @@ const NouveautesPage: React.FC = () => {
 
   // Programme hebdomadaire retiré; conservation des utilitaires si besoin futur
 
-  // Label jour localisé
-  const dayLabel = (d: Date) => {
-    return d.toLocaleDateString('fr-FR', { weekday: 'long' }).replace(/^./, c => c.toUpperCase()) + ' ' + formatDateFR(d);
-  };
-
-  // Mettre en évidence le bloc du jour si on est exactement ce jour-là
-  const highlightMardi = false;
-  const highlightMercredi = false;
-  const highlightJeudi = false;
+  // (Anciennes aides de planning supprimées)
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

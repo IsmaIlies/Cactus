@@ -395,12 +395,12 @@ const AiAssistantPage = () => {
     addExtraSpaceForAssistant();
     scrollToBottomWithExtraSpace();
 
-    let localAbort = new AbortController();
+    const localAbort = new AbortController();
     setAbortController(localAbort);
 
     try {
       let assistantText = "";
-      let chatHistory = [...messages, userMessage].map((msg) => ({
+      const chatHistory = [...messages, userMessage].map((msg) => ({
         role: msg.sender,
         content: msg.text,
       }));
@@ -542,10 +542,10 @@ const AiAssistantPage = () => {
     addExtraSpaceForAssistant();
     scrollToBottomWithExtraSpace();
 
-    let localAbort = new AbortController();
+    const localAbort = new AbortController();
     setAbortController(localAbort);
     setIsAssistantTyping(true);
-    let cancelled = false;
+    const cancelled = false;
 
     try {
       const cards = await getPlatformHighlightsStructured(query);
@@ -626,7 +626,7 @@ const AiAssistantPage = () => {
     scrollToBottomWithExtraSpace();
 
     setIsAssistantTyping(true);
-    let localAbort = new AbortController();
+    const localAbort = new AbortController();
     setAbortController(localAbort);
     try {
       let assistantText = "";

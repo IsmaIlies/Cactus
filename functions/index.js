@@ -7,13 +7,127 @@ const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const axios = require("axios");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { defineSecret } = require('firebase-functions/params');
 
 admin.initializeApp();
 
 const cors = require('cors')({ origin: true });
 
-const ADMIN_ACTIVITY_WINDOW_DAYS = 30;
-const ADMIN_ACTIVITY_WINDOW_MS = ADMIN_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+// Migré depuis functions.config() vers Firebase Secret Manager (post-2026 compliant).
+const LEADS_API_TOKEN = defineSecret('LEADS_API_TOKEN');
+
+// Petite aide CORS pour l'endpoint leadsStats (autorise GET + préflight)
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || '*';
+  res.set('Access-Control-Allow-Origin', origin);
+  res.set('Vary', 'Origin');
+  res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Max-Age', '86400');
+}
+
+// Cache mémoire simple (30s) pour limiter les appels upstream
+let leadsStatsCache = { expires: 0, payload: null };
+
+exports.leadsStats = onRequest({
+  region: 'europe-west1',
+  timeoutSeconds: 15,
+  memory: '256MiB',
+  secrets: [LEADS_API_TOKEN],
+}, async (req, res) => {
+  setCorsHeaders(req, res);
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Méthode non autorisée', dolead: 0, hipto: 0 });
+  }
+
+  try {
+    const now = Date.now();
+    if (leadsStatsCache.payload && leadsStatsCache.expires > now) {
+      return res.json({ ok: true, ...leadsStatsCache.payload });
+    }
+
+    const { date_start, date_end } = req.query || {};
+    const params = {};
+    if (typeof date_start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_start)) {
+      params.date_start = date_start;
+    }
+    if (typeof date_end === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_end)) {
+      params.date_end = date_end;
+    }
+
+    const token = (LEADS_API_TOKEN && LEADS_API_TOKEN.value && LEADS_API_TOKEN.value()) || process.env.LEADS_API_TOKEN || '';
+
+    // Si pas de configuration, retourner des zéros « ok » pour éviter de casser l’UI
+    if (!token) {
+      const payload = { dolead: 0, hipto: 0 };
+      leadsStatsCache = { expires: now + 30 * 1000, payload };
+      return res.json({ ok: true, ...payload });
+    }
+
+    const data = await fetchLeadStatsFromApi(params, token);
+    leadsStatsCache = { expires: now + 30 * 1000, payload: data };
+    return res.json({ ok: true, ...data });
+  } catch (error) {
+    console.warn('[leadsStats] error', error && error.message ? error.message : error);
+    // En cas d’erreur, on renvoie un 200 avec zéros pour ne pas bloquer les écrans
+    return res.status(200).json({ ok: false, error: error?.message || 'Erreur inconnue', dolead: 0, hipto: 0 });
+  }
+});
+
+// Appel HTTP vers l’API amont (URL configurable via variable d’environnement LEADS_STATS_URL)
+async function fetchLeadStatsFromApi(params, token) {
+  const baseUrl = process.env.LEADS_STATS_URL || '';
+  if (!baseUrl) {
+    // Pas d’URL, on renvoie des zéros
+    return { dolead: 0, hipto: 0 };
+  }
+  const url = new URL(baseUrl);
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (typeof v === 'string' && v) url.searchParams.set(k, v);
+  });
+
+  const upstream = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    timeout: 10_000,
+  });
+
+  let payload = null;
+  try {
+    payload = await upstream.json();
+  } catch (e) {
+    console.warn('[leadsStats] Réponse non JSON (ou vide)');
+  }
+
+  // Deux formats gérés: { ok:true, dolead:x, hipto:y } ou { RESPONSE:'OK', DATA:[{type,count}...] }
+  if (payload && typeof payload === 'object') {
+    if (typeof payload.dolead === 'number' && typeof payload.hipto === 'number') {
+      return { dolead: Number(payload.dolead) || 0, hipto: Number(payload.hipto) || 0 };
+    }
+    if (payload.RESPONSE === 'OK' && Array.isArray(payload.DATA)) {
+      const findCount = (t) => {
+        const entry = payload.DATA.find((it) => it && String(it.type).toLowerCase() === t);
+        return entry && typeof entry.count === 'number' ? entry.count : 0;
+      };
+      return { dolead: Number(findCount('dolead')) || 0, hipto: Number(findCount('hipto')) || 0 };
+    }
+  }
+
+  if (!upstream.ok) {
+    throw new Error(`Upstream HTTP ${upstream.status}`);
+  }
+  // Par défaut si format inconnu mais statut OK, renvoyer 0
+  return { dolead: 0, hipto: 0 };
+}
+
+const ADMIN_ACTIVITY_WINDOW_HOURS = 1;
+const ADMIN_ACTIVITY_WINDOW_MS = ADMIN_ACTIVITY_WINDOW_HOURS * 60 * 60 * 1000;
 
 const isAdminFromToken = (token = {}) => {
   if (!token || typeof token !== "object") {
@@ -418,7 +532,7 @@ exports.getAdminUserStats = onCall({ region: "europe-west9" }, async (req) => {
     totalUsers,
     activeUsers,
     disabledUsers,
-    windowDays: ADMIN_ACTIVITY_WINDOW_DAYS,
+    windowHours: ADMIN_ACTIVITY_WINDOW_HOURS,
     updatedAt: new Date(now).toISOString(),
   };
 });

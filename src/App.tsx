@@ -33,8 +33,13 @@ import SupervisorChecklist from "./supervisor/SupervisorChecklist";
 import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
 import SupervisorArchives from "./supervisor/SupervisorArchives";
 import SupervisorImport from "./supervisor/SupervisorImport";
-import SupervisorLeadsPage from "./pages/SupervisorLeadsPage";
 import SupervisorNouveautesPdf from "./supervisor/SupervisorNouveautesPdf";
+import SupervisorLeadsPage from "./pages/SupervisorLeadsPage";
+import SupervisorLeadsDashboard2 from "./pages/SupervisorLeadsDashboard2";
+import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
+import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
+import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
+import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
 
 function App() {
   return (
@@ -92,6 +97,11 @@ function App() {
           <Route path="nouveautes" element={<SupervisorNouveautesPdf />} />
           <Route path="ventes" element={<SupervisorSales />} />
           <Route path="import" element={<SupervisorImport />} />
+          <Route path="dashboard2" element={<SupervisorLeadsDashboard2 />} />
+          <Route path="leads-plus" element={<SupervisorLeadsPlusPage />} />
+          <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
+          <Route path="ecoutes" element={<SupervisorLeadsEcoutesPage />} />
+          <Route path="export" element={<SupervisorLeadsExportPage />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />
           {/* New nested page: Supervisor LEADS page (dashboard + CSV import) */}

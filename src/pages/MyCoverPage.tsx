@@ -9,7 +9,6 @@ import {
   Eye,
   Vote,
   Trophy,
-  RefreshCw,
   UserCheck,
   Timer
 } from "lucide-react";

@@ -42,7 +42,7 @@ type LeadSaleInput = {
 };
 
 export const categorize = (typeOffre: string | undefined | null) => {
-  const type = (typeOffre || "").trim().toLowerCase();
+  const type = (typeOffre || "").trim().toLowerCase().replace(/\s+/g, "");
   const zero = { internet: 0, mobile: 0, internetSosh: 0, mobileSosh: 0 } as const;
 
   switch (type) {
@@ -306,33 +306,6 @@ export const subscribeToLeadAgentSummary = (
     orderBy("createdAt", "asc")
   );
   let unsubscribe: (() => void) | null = null;
-
-  const computeAndCallback = (snapshot: any) => {
-    const summary: LeadAgentSummary = {
-      mobiles: 0,
-      box: 0,
-      mobileSosh: 0,
-      internetSosh: 0,
-    };
-    snapshot.forEach((doc: any) => {
-      const data = doc.data() as any;
-      // When using fallback (no date filter), filter client-side
-      const createdAt: Timestamp | null = data?.createdAt ?? null;
-      if (createdAt) {
-        const d = createdAt.toDate();
-        if (d < monthStart || d >= monthEnd) return;
-      } else {
-        // Skip documents without createdAt
-        return;
-      }
-      const cat = categorize(data?.typeOffre);
-      summary.mobiles += cat.mobile;
-      summary.box += cat.internet;
-      summary.mobileSosh += cat.mobileSosh;
-      summary.internetSosh += cat.internetSosh;
-    });
-    callback(summary);
-  };
 
   const subscribePrimary = () => {
     unsubscribe = onSnapshot(

@@ -22,7 +22,7 @@ type LeadRow = {
 
 const HEADERS = [
   'ID',
-  'Heure de depart',
+  'Date de début',
   'Heure de fin',
   'Adresse de messagerie',
   'Nom',

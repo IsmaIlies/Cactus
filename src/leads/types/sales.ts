@@ -1,10 +1,9 @@
 export const OFFER_OPTIONS = [
-  "Mobile",
   "Internet",
-  "Internetsosh",
-  "Mobilesosh",
+  "Internet Sosh",
+  "Mobile",
+  "Mobile Sosh",
   "Autres",
-  "Frais de mise en service",
 ] as const;
 
 export const OFFER_LABELS = [

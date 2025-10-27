@@ -8,13 +8,92 @@ import {
   subscribeToLeadMonthlyTotalsAllSources,
   subscribeToRecentLeadSales,
   RecentLeadSale,
+  categorize,
 } from "../services/leadsSalesService";
 
-const leadSources: Array<{ key: keyof LeadKpiSnapshot; label: string }> = [
-  { key: "hipto", label: "Leads Hipto" },
-  { key: "dolead", label: "Leads Dolead" },
-  { key: "mm", label: "Leads MM" },
+const leadSources: Array<{ key: keyof LeadKpiSnapshot; label: string; accent: string; gradient: string }> = [
+  { key: "hipto", label: "Hipto", accent: "text-cyan-200", gradient: "from-[#0a152a] via-[#09172f] to-[#071326]" },
+  { key: "dolead", label: "Dolead", accent: "text-purple-200", gradient: "from-[#140f2a] via-[#1a1235] to-[#0d0a1f]" },
+  { key: "mm", label: "MM", accent: "text-emerald-200", gradient: "from-[#101b29] via-[#0a1320] to-[#050a13]" },
 ];
+
+type LeadBreakdown = {
+  internet: number;
+  internetSosh: number;
+  mobile: number;
+  mobileSosh: number;
+  total: number;
+};
+
+const createEmptyBreakdown = (): LeadBreakdown => ({
+  internet: 0,
+  internetSosh: 0,
+  mobile: 0,
+  mobileSosh: 0,
+  total: 0,
+});
+
+const addBreakdown = (target: LeadBreakdown, source: LeadBreakdown) => {
+  target.internet += source.internet;
+  target.internetSosh += source.internetSosh;
+  target.mobile += source.mobile;
+  target.mobileSosh += source.mobileSosh;
+  target.total += source.total;
+};
+
+const breakdownFromKpi = (kpi: LeadKpiSnapshot[keyof LeadKpiSnapshot]): LeadBreakdown => ({
+  internet: kpi.box,
+  internetSosh: kpi.internetSosh,
+  mobile: kpi.mobiles,
+  mobileSosh: kpi.mobileSosh,
+  total: kpi.box + kpi.internetSosh + kpi.mobiles + kpi.mobileSosh,
+});
+
+const breakdownFromOffer = (typeOffre: string): LeadBreakdown => {
+  const cat = categorize(typeOffre);
+  return {
+    internet: cat.internet,
+    internetSosh: cat.internetSosh,
+    mobile: cat.mobile,
+    mobileSosh: cat.mobileSosh,
+    total: cat.internet + cat.internetSosh + cat.mobile + cat.mobileSosh,
+  };
+};
+
+const LeadSourceCard: React.FC<{ label: string; breakdown: LeadBreakdown; loading: boolean; accent: string; gradient: string }>
+  = ({ label, breakdown, loading, accent, gradient }) => {
+    const metrics = [
+      { key: "internet", label: "Internet", value: breakdown.internet },
+      { key: "internetSosh", label: "Internet Sosh", value: breakdown.internetSosh },
+      { key: "mobile", label: "Mobile", value: breakdown.mobile },
+      { key: "mobileSosh", label: "Mobile Sosh", value: breakdown.mobileSosh },
+    ];
+    const formatValue = (value: number) => (loading ? "--" : value.toLocaleString("fr-FR"));
+
+    return (
+      <article className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br ${gradient} p-5 shadow-[0_18px_45px_rgba(8,20,60,0.45)]`}>
+        <div className="absolute inset-0 opacity-35 bg-[radial-gradient(circle_at_20%_20%,rgba(96,165,250,0.28),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(59,130,246,0.22),transparent_60%)]" />
+        <div className="relative flex h-full flex-col gap-5">
+          <div className="flex items-baseline justify-between">
+            <h2 className={`text-lg font-semibold ${accent}`}>{label}</h2>
+            <span className="text-xs font-semibold uppercase tracking-[0.45em] text-blue-100/70">Jour</span>
+          </div>
+          <div>
+            <p className="text-4xl font-bold text-white">{formatValue(breakdown.total)}</p>
+            <p className="text-xs text-blue-100/60">Total ventes</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm text-blue-100/80">
+            {metrics.map((metric) => (
+              <div key={metric.key} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-blue-200/60">{metric.label}</p>
+                <p className="text-lg font-semibold text-white">{formatValue(metric.value)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </article>
+    );
+  };
 
 const initialSnapshot: LeadKpiSnapshot = {
   hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
@@ -73,27 +152,12 @@ const LeadsDashboardPage: React.FC = () => {
 
   React.useEffect(() => {
     const un1 = subscribeToLeadMonthlyTotalsAllSources((tot) => setMonthlyTotals(tot));
-    const un2 = subscribeToRecentLeadSales(10, (items) => setRecentSales(items));
+    const un2 = subscribeToRecentLeadSales(200, (items) => setRecentSales(items));
     return () => {
       try { (un1 as any)?.(); } catch {}
       try { (un2 as any)?.(); } catch {}
     };
   }, []);
-
-  const totals = React.useMemo(() => {
-    return leadSources.reduce(
-      (acc, source) => {
-        const metrics = data[source.key];
-        return {
-          mobiles: acc.mobiles + metrics.mobiles,
-          box: acc.box + metrics.box,
-          mobileSosh: (acc as any).mobileSosh + metrics.mobileSosh,
-          internetSosh: (acc as any).internetSosh + metrics.internetSosh,
-        } as any;
-      },
-      { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 } as any
-    );
-  }, [data]);
 
   const chartData = React.useMemo(() => {
     const labels = series.map((entry) => entry.date.slice(5));
@@ -124,6 +188,34 @@ const LeadsDashboardPage: React.FC = () => {
     };
   }, [series]);
 
+  const sourceBreakdowns = React.useMemo(() => ({
+    hipto: breakdownFromKpi(data.hipto),
+    dolead: breakdownFromKpi(data.dolead),
+    mm: breakdownFromKpi(data.mm),
+  }), [data]);
+
+  const agentDailyBreakdown = React.useMemo(() => {
+    if (recentSales.length === 0) {
+      return [] as Array<{ agent: string; counts: LeadBreakdown }>;
+    }
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const map = new Map<string, LeadBreakdown>();
+
+    recentSales.forEach((sale) => {
+      if (!sale.createdAt || sale.createdAt < startOfDay) return;
+      const agentLabel = (sale.agent || "Agent inconnu").trim() || "Agent inconnu";
+      const breakdown = breakdownFromOffer(String(sale.typeOffre || ""));
+      const current = map.get(agentLabel) ?? createEmptyBreakdown();
+      addBreakdown(current, breakdown);
+      map.set(agentLabel, current);
+    });
+
+    return Array.from(map.entries())
+      .map(([agent, counts]) => ({ agent, counts }))
+      .sort((a, b) => b.counts.total - a.counts.total);
+  }, [recentSales]);
+
   return (
     <div className="space-y-6 text-white">
       <div className="flex items-center gap-3">
@@ -136,82 +228,23 @@ const LeadsDashboardPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Ventes du jour</h2>
-        <div className="grid grid-cols-2 gap-3 text-center">
-          <div className="rounded-2xl bg-white/10 px-4 py-2">
-            <p className="text-xs text-blue-100/80">Total Mobiles</p>
-            <p className="text-xl font-semibold text-white">{loading ? "--" : totals.mobiles}</p>
-          </div>
-          <div className="rounded-2xl bg-white/10 px-4 py-2">
-            <p className="text-xs text-blue-100/80">Total Box</p>
-            <p className="text-xl font-semibold text-white">{loading ? "--" : totals.box}</p>
-          </div>
+      <section className="space-y-4">
+        <div className="flex flex-col gap-1 text-white">
+          <h2 className="text-lg font-semibold">Ventes du jour</h2>
+          <p className="text-sm text-blue-100/80">Répartition temps réel par origine de leads.</p>
         </div>
-      </div>
-
-      <section className="grid gap-6 md:grid-cols-3">
-        {leadSources.map((source) => {
-          const metrics = data[source.key];
-          const mobileOrange = Math.max(0, (metrics?.mobiles || 0) - (metrics?.mobileSosh || 0));
-          const internetOrange = Math.max(0, (metrics?.box || 0) - (metrics?.internetSosh || 0));
-          return (
-            <article
+        <div className="grid gap-6 md:grid-cols-3">
+          {leadSources.map((source) => (
+            <LeadSourceCard
               key={source.key}
-              className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-md p-6 shadow-xl shadow-black/20 transition-colors hover:bg-white/15"
-            >
-              <header className="flex items-center justify-between">
-                <h2
-                  className={`text-lg font-semibold ${
-                    source.key === "hipto"
-                      ? "text-[#7dd3fc]"
-                      : source.key === "dolead"
-                      ? "text-[#c4b5fd]"
-                      : "text-[#93c5fd]"
-                  }`}
-                >
-                  {source.label}
-                </h2>
-              </header>
-              <div className="mt-6 space-y-4">
-                {/* Mobiles total + split */}
-                <div className="rounded-2xl bg-[#002FA7]/80 p-4 shadow-inner">
-                  <p className="text-white/70 text-sm">Mobiles vendus</p>
-                  <p className="mt-1 text-3xl font-semibold text-white">
-                    {loading ? "--" : metrics.mobiles}
-                  </p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-white/10 p-2 text-center">
-                      <p className="text-[11px] text-blue-100/80">Sosh</p>
-                      <p className="text-lg font-semibold text-white">{loading ? "--" : metrics.mobileSosh}</p>
-                    </div>
-                    <div className="rounded-xl bg-white/10 p-2 text-center">
-                      <p className="text-[11px] text-blue-100/80">Orange</p>
-                      <p className="text-lg font-semibold text-white">{loading ? "--" : mobileOrange}</p>
-                    </div>
-                  </div>
-                </div>
-                {/* Box total + split */}
-                <div className="rounded-2xl bg-blue-900/70 p-4 shadow-inner">
-                  <p className="text-blue-100/80 text-sm">Box vendues</p>
-                  <p className="mt-1 text-3xl font-semibold text-blue-50">
-                    {loading ? "--" : metrics.box}
-                  </p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-white/10 p-2 text-center">
-                      <p className="text-[11px] text-blue-100/80">Sosh</p>
-                      <p className="text-lg font-semibold text-white">{loading ? "--" : metrics.internetSosh}</p>
-                    </div>
-                    <div className="rounded-xl bg-white/10 p-2 text-center">
-                      <p className="text-[11px] text-blue-100/80">Orange</p>
-                      <p className="text-lg font-semibold text-white">{loading ? "--" : internetOrange}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </article>
-          );
-        })}
+              label={source.label}
+              breakdown={sourceBreakdowns[source.key]}
+              loading={loading}
+              accent={source.accent}
+              gradient={source.gradient}
+            />
+          ))}
+        </div>
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md text-white shadow-xl">
@@ -232,7 +265,7 @@ const LeadsDashboardPage: React.FC = () => {
                     : "text-blue-100 hover:bg-white/10"
                 }`}
               >
-                {source.label.split(" ")[1] || source.label}
+                {source.label}
               </button>
             ))}
           </div>
@@ -293,35 +326,47 @@ const LeadsDashboardPage: React.FC = () => {
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md text-white shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Ventes récentes</h2>
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Ventes du jour par agent</h2>
+            <p className="text-sm text-blue-100/70">Synthèse des conversions d'aujourd'hui (Internet & Mobile).</p>
+          </div>
+          <span className="text-xs text-blue-200/60">Actualisation automatique</span>
         </div>
-        {recentSales.length === 0 ? (
-          <p className="text-sm text-blue-100/70">{loading ? "Chargement..." : "Aucune vente récente."}</p>
-        ) : (
-          <ul className="divide-y divide-white/10">
-            {recentSales.map((s) => (
-              <li key={s.id} className="py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-sm text-blue-100/80 shrink-0">
-                    {s.createdAt ? s.createdAt.toLocaleString() : "--"}
-                  </span>
-                  <span className="text-sm truncate">
-                    {s.intituleOffre || s.typeOffre || "Offre"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs rounded-full px-2 py-0.5 border border-white/20 text-blue-100/90">
-                    {s.origineLead || "n/a"}
-                  </span>
-                  {s.agent ? (
-                    <span className="text-xs text-blue-100/80">{s.agent}</span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full divide-y divide-white/10 text-sm text-blue-50">
+            <thead className="bg-white/5 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Agent</th>
+                <th className="px-4 py-3 text-right font-semibold">Internet</th>
+                <th className="px-4 py-3 text-right font-semibold">Internet Sosh</th>
+                <th className="px-4 py-3 text-right font-semibold">Mobile</th>
+                <th className="px-4 py-3 text-right font-semibold">Mobile Sosh</th>
+                <th className="px-4 py-3 text-right font-semibold">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {agentDailyBreakdown.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-blue-200/70">
+                    {loading ? "Chargement des ventes..." : "Aucune vente enregistrée aujourd'hui."}
+                  </td>
+                </tr>
+              ) : (
+                agentDailyBreakdown.map((entry) => (
+                  <tr key={entry.agent} className="hover:bg-white/5">
+                    <td className="px-4 py-3 whitespace-nowrap font-semibold text-white">{entry.agent}</td>
+                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.internet}</td>
+                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.internetSosh}</td>
+                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.mobile}</td>
+                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.mobileSosh}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-white">{entry.counts.total}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

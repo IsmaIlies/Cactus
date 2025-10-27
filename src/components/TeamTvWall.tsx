@@ -44,7 +44,7 @@ const TeamTvWall: React.FC<TeamTvWallProps> = ({ onClose }) => {
 
   useEffect(() => {
     const col = collection(db, 'sales');
-    let qRef = query(col, orderBy('date', 'desc'), limit(150));
+    const qRef = query(col, orderBy('date', 'desc'), limit(150));
     const unsubscribe = onSnapshot(qRef, snap => {
       const todaySales = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
         .filter(rec => isToday(rec.date) && (rec.consent === 'yes' || rec.consent === undefined))
