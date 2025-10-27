@@ -74,12 +74,12 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
     const buckets: Group[] = [];
     const internet = all.filter((s) => /(internet|fibre|adsl|vdsl|livebox|decodeur|tv orange)/i.test(s));
     const mobile = all.filter((s) => /(mobile|sosh|forfait|sim|go)/i.test(s));
-    const top = all.filter((s) => /(\+\s?vendus|top|meilleur|best)/i.test(s));
+    const top = all.filter((s) => /(\+\s?vendu|\+\s?vendues|les\s*\+\s*vendues|top|meilleur|best)/i.test(s));
     const used = new Set<string>([...internet, ...mobile, ...top]);
     const autres = all.filter((s) => !used.has(s));
     if (internet.length) buckets.push({ name: 'Internet', items: internet });
     if (mobile.length) buckets.push({ name: 'Mobile', items: mobile });
-    if (top.length) buckets.push({ name: 'Les + vendus', items: top });
+    if (top.length) buckets.push({ name: 'Les + vendues', items: top });
     if (autres.length) buckets.push({ name: 'Autres', items: autres });
 
     if (!buckets.length) return undefined;
@@ -133,13 +133,13 @@ export const Autocomplete: React.FC<AutocompleteProps> = ({
     if (!open) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlight((h) => Math.min(h + 1, Math.max(filteredSuggestions.length - 1, 0)));
+      setHighlight((h) => Math.min(h + 1, Math.max(visibleList.length - 1, 0)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlight((h) => Math.max(h - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const v = filteredSuggestions[highlight];
+      const v = visibleList[highlight];
       if (v) onSelect(v);
     } else if (e.key === 'Escape') {
       e.preventDefault();

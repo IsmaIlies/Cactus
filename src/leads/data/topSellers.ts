@@ -1,0 +1,28 @@
+// Curated list for the "Les + vendues" category
+export const TOP_SELLING_OFFERS: string[] = [
+  'FMR Série Spéciale 20 Go SIM (acq)',
+  'FM Série Spéciale 20 Go SIM (acq)',
+  'Offre Série Spéciale Livebox Lite Fibre (mig)',
+  'Offre Série Spéciale Livebox Lite Fibre (acq)',
+  'Série Spéciale La Boîte Sosh Fibre (acq)',
+  'FMR Série 120 Go 5G SIM (acq)',
+  'Offre Livebox Max Fibre (acq)',
+  'FM Sosh 10 Go (10 Go RLH) 6,99 eur (acq)',
+  'FM Sosh 30 Go (15 Go RLH) 8,99 eur (acq)',
+  'FM Sosh 20 Go Extra 5G 9,99 eur (acq)',
+  'FM Sosh 30 Go (15 Go RLH) 8,99 eur (acq)',
+  'Remise frais de Mise en Service 39 eur sur SS Sosh Fibre 24,99 eur (acq) (MD)',
+  'Remise frais de Mise en Service 49 eur sur offres LB Fibre (acq) (MD)',
+  'Offre Livebox Fibre (acq)',
+  'FM Sosh 200 Go 5G (30 Go RLH) 14,99 eur (acq)',
+  'FM Sosh 300 Go 5G (50 Go RLH) 20,99 eur (acq)',
+  'FM Spécial Sosh 100 Go (20 Go RLH) 9,99 eur (acq) (MD)',
+  'FM Sosh 5 Go (5 Go RLH) 6,99 eur (acq)',
+  'FM Sosh 80 Go (20 Go RLH) 9,99 eur (acq)',
+  'FMR 2h 100 Mo bloqué SIM (acq)',
+  'FM Spécial Sosh 100 Go (20 Go RLH) 9,99 eur (acq) (MD)',
+  'FM Série 120 Go 5G SIM (acq)',
+  'FM Sosh 200 Go 5G (30 Go RLH) 14,99 eur (acq)',
+  'FM Sosh 300 Go 5G (50 Go RLH) 20,99 eur (acq)',
+  'Offre 5G+ Home Illimitée 42,99 eur (acq)'
+];

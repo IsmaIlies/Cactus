@@ -5,6 +5,8 @@ import { db } from '../../firebase';
 type LeadRow = {
   id: string;
   createdAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
   email: string | null;
   displayName: string | null;
   numeroId: string | null;
@@ -20,7 +22,7 @@ type LeadRow = {
 
 const HEADERS = [
   'ID',
-  'Heure de début',
+  'Heure de depart',
   'Heure de fin',
   'Adresse de messagerie',
   'Nom',
@@ -35,20 +37,30 @@ const HEADERS = [
   'Numéro de téléphone de la fiche',
 ] as const;
 
-const formatTime = (d: Date | null) => {
+const formatDateTime = (d: Date | null) => {
   if (!d) return '';
   const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const day = pad(d.getDate());
+  const month = pad(d.getMonth() + 1);
+  const year = d.getFullYear();
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  const seconds = pad(d.getSeconds());
+  // Format: DD/MM/YYYY HH:mm:ss
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 };
 
 const toCsv = (rows: LeadRow[]) => {
   const lines: string[] = [];
   lines.push(HEADERS.join(';'));
   for (const r of rows) {
+    const originUpper = (r.origineLead || '').toString().toUpperCase();
+    const start = r.startedAt || r.createdAt;
+    const end = r.completedAt || r.createdAt;
     const values = [
       r.id,
-      formatTime(r.createdAt),
-      '',
+      formatDateTime(start),
+      formatDateTime(end),
       r.email || '',
       r.displayName || '',
       r.numeroId || '',
@@ -57,11 +69,11 @@ const toCsv = (rows: LeadRow[]) => {
       r.referencePanier || '',
       r.codeAlf || '',
       r.ficheDuJour || '',
-      r.origineLead || '',
+      originUpper,
       r.dateTechnicien || '',
       r.telephone || '',
     ];
-    const escaped = values.map((v) => /[;"\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}` : v);
+    const escaped = values.map((v) => /[;"\n\r]/.test(v) ? `"${v.replace(/\"/g, '""')}"` : v);
     lines.push(escaped.join(';'));
   }
   return '\uFEFF' + lines.join('\r\n');
@@ -76,9 +88,23 @@ const LeadsSalesTable: React.FC = () => {
     const data = doc.data() as any;
     const createdAtTs: Timestamp | null = data?.createdAt ?? null;
     const createdAt = createdAtTs ? createdAtTs.toDate() : null;
+    const startedRaw: any = (data as any)?.startedAt ?? null;
+    const completedRaw: any = (data as any)?.completedAt ?? null;
+    const toDateSafe = (v: any): Date | null => {
+      try {
+        if (!v) return null;
+        if (typeof v?.toDate === 'function') return v.toDate();
+        if (typeof v === 'number') return isNaN(v) ? null : new Date(v);
+        if (typeof v === 'string') { const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+        if (v instanceof Date) return v;
+      } catch {}
+      return null;
+    };
     return {
       id: doc.id,
       createdAt,
+      startedAt: toDateSafe(startedRaw),
+      completedAt: toDateSafe(completedRaw),
       email: data?.createdBy?.email ?? null,
       displayName: data?.createdBy?.displayName ?? null,
       numeroId: data?.numeroId ?? null,
@@ -197,8 +223,8 @@ const LeadsSalesTable: React.FC = () => {
               rows.map((r) => (
                 <tr key={r.id} className="border-t border-gray-100">
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.id}</td>
-                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatTime(r.createdAt)}</td>
-                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap"></td>
+                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(r.startedAt || r.createdAt)}</td>
+                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(r.completedAt || r.createdAt)}</td>
                   <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{r.email || '—'}</td>
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.displayName || '—'}</td>
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.numeroId || '—'}</td>
@@ -209,7 +235,7 @@ const LeadsSalesTable: React.FC = () => {
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.referencePanier || '—'}</td>
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.codeAlf || '—'}</td>
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.ficheDuJour || '—'}</td>
-                  <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.origineLead || '—'}</td>
+                  <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{(r.origineLead || '—').toString().toUpperCase()}</td>
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.dateTechnicien || '—'}</td>
                   <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{r.telephone || '—'}</td>
                 </tr>

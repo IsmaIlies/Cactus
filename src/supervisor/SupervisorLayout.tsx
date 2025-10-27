@@ -50,6 +50,18 @@ const SupervisorLayout: React.FC = () => {
               Présence TA
             </NavLink>
           )}
+          {String(area).toLowerCase() === 'civ' && (
+            <NavLink
+              to={`${base}/nouveautes`}
+              className={({ isActive }) =>
+                `block px-3 py-2 rounded-md text-sm font-semibold ${
+                  isActive ? 'bg-blue-600 text-white' : 'text-blue-100 hover:bg-white/10'
+                }`
+              }
+            >
+              Nouveautés PDF
+            </NavLink>
+          )}
           <NavLink
             to={`${base}/ventes`}
             className={({ isActive }) =>

@@ -434,76 +434,62 @@ const CallScriptPage = () => {
                   <div className="font-medium text-green-800 mb-1">
                     Script de conclusion
                   </div>
-                  <p className="text-gray-700">
-                    Très bien M./Mme{" "}
-                    <span className="bg-yellow-200 px-1 rounded">[Nom]</span>,
-                    je prends note de votre accord pour votre abonnement CANAL
-                    PLUS avec l’offre{" "}
-                    <span className="bg-yellow-200 px-1 rounded">
-                      [Nom de l’offre]
-                    </span>{" "}
-                    à{" "}
-                    <span className="bg-yellow-200 px-1 rounded">
-                      [Montant]
-                    </span>{" "}
-                    Euros/mois.
-                    <br />
-                    Je vous précise que les dispositions du code de la
-                    consommation vous permettent d’exercer votre droit de
-                    rétractation de 14 jours à compter de la date de votre
-                    commande.
-                    <br />
-                    Afin de finaliser la commande, pouvez-vous me confirmer
-                    votre adresse EMAIL{" "}
-                    <span className="bg-yellow-200 px-1 rounded">
-                      [Adresse email]
-                    </span>{" "}
-                    ?<br />
-                    Celle-ci sera l’adresse de référence de votre contrat Canal
-                    Plus.
-                    <br />
-                    Vous recevrez plusieurs informations de Canal Plus par mail
-                    et SMS, notamment un SMS pour signer votre contrat.
-                    <br />
-                    Vous me confirmez bien être en prélèvement automatique
-                    actuellement ?<br />
-                    Si oui, pour simplifier vos démarches, Orange communiquera
-                    au Groupe Canal Plus vos coordonnées personnelles et
-                    bancaires et le prélèvement interviendra le 4 de chaque
-                    mois.
-                    <br />
-                    Je vous envoie l'offre, et je vous rappelle dans les 48
-                    heures. Une fois accepté, j'active l'offre sur votre box.
-                    <br />
-                    Dernier point, afin de pouvoir assurer le suivi de la
-                    validation de votre commande et d'être en conformité avec le
-                    décret, me permettez-vous de vous contacter au-delà de 4
-                    tentatives d'appels ?<br />
-                    VOUS POUVEZ ME RECONTACTER AU{" "}
-                    <span className="bg-yellow-200 px-1 rounded">
-                      04 65 33 08 05
-                    </span>{" "}
-                    pour toutes questions.
-                    <br />
-                    Si non, un collaborateur vous recontactera pour récupérer
-                    votre IBAN.
-                    <br />
-                    Vous pouvez toutefois contacter notre service au{" "}
-                    <span className="bg-yellow-200 px-1 rounded">
-                      0800 005 768
-                    </span>{" "}
-                    en leur indiquant votre référence commande :{" "}
-                    <span className="bg-yellow-200 px-1 rounded">
-                      [Référence]
-                    </span>
-                    .<br />
-                    Votre offre se mettra en place sous 24 heures après
-                    validation de votre accord.
-                    <br />
-                    Est-ce que tout est clair pour vous ?<br />
-                    Profitez bien de votre offre, Orange vous remercie pour
-                    votre accueil et je vous souhaite une excellente journée.
-                  </p>
+                  <div className="text-gray-700 space-y-3">
+                    <h4 className="text-center font-semibold uppercase">MENTIONS LEGALES</h4>
+                    <p>Très bien Mr/Mme</p>
+                    <p>
+                      Je prends note de votre accord pour votre abonnement CANAL PLUS avec l’offre...à....Euros/mois
+                    </p>
+                    <p>
+                      Comme vu ensemble citer les éventuelles suppressions de bouquet  / pub sur netflix …
+                    </p>
+                    <p className="font-semibold">Process création Compte Canal+</p>
+                    <p>
+                      Je vous informe que votre nouvelle offre Canal + souscrit auprès du Groupe Canal+ se mettra en place sous 24h00 après validation de votre accord
+                    </p>
+                    <p>Vous recevrez plusieurs informations de Canal plus par Mail et SMS.</p>
+                    <p>Vous recevrez notamment un sms pour signer votre contrat Canal plus</p>
+                    <p>
+                      Dans le 1er mail que vous allez recevoir de Canal+, vous aurez un lien vous permettant de créer votre Espace Client. Il ne vous restera plus qu’à créer votre mot de passe et profiter du service
+                    </p>
+                    <p className="font-semibold">Message CC : Si vente Canal+ Ciné Séries et client équipé Netflix</p>
+                    <p>
+                      Depuis le mail d’activation de votre compte Canal+ vous pourrez activer Netflix, vous gardez les mêmes identifiants et vous n’avez aucune autre démarche à effectuer.
+                    </p>
+                    <p>Et je vous rappelle que vous aurez 2 écrans Netflix</p>
+                    <p className="font-semibold">Vous me confirmez être actuellement en prélèvement automatique ?</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="border border-gray-300 rounded-md p-3">
+                        <div className="font-semibold uppercase text-sm mb-2">SI OUI</div>
+                        <p>
+                          Pour simplifier vos démarches et dans le cadre de l’exécution de ce nouveau contrat d’abonnement Canal+, Orange communiquera au Groupe Canal + vos coordonnées personnelles, ainsi que vos coordonnées bancaires et vous serez prélevé le 4 de chaque mois. Sur la première facture vous verrez apparaître le prorata du mois en cours et le mois suivant.
+                        </p>
+                      </div>
+                      <div className="border border-gray-300 rounded-md p-3">
+                        <div className="font-semibold uppercase text-sm mb-2">SI NON</div>
+                        <p>
+                          Pour simplifier vos démarches, un collaborateur vous recontactera pour récupérer votre IBAN. Vous pouvez toutefois contacter notre service au 0800 005 768 en leur indiquant votre référence commande : ------------
+                        </p>
+                        <p>
+                          Il vous faudra pour cela vous équiper de votre IBAN. Ainsi vous serez prélevé le 4 de chaque mois, sur la 1ère facture vous verrez apparaitre le prorata du mois en cours et le mois suivant
+                        </p>
+                        <p>
+                          Pour ce qui est du prélèvement, je vous informe que dans certains cas un de mes collègues peut être amené à vous recontacter pour confirmer votre IBAN.
+                        </p>
+                      </div>
+                    </div>
+                    <p>
+                      Je vous précise que les dispositions du code de la consommation vous permettent d’exercer votre droit de rétractation de 14 jours à compter de la date de votre commande.
+                    </p>
+                    <p>
+                      Afin de finaliser la commande pouvez-vous me confirmer votre adresse EMAIL……………… et je vous précise que celle-ci sera l'adresse de référence de votre contrat Canal Plus.
+                    </p>
+                    <p>Je vous envoie l'offre, et je vous rappelle dans les  48  heures</p>
+                    <p>Une fois accepté, j'active l'offre sur votre box. 😊</p>
+                    <p>
+                      Dernier point, afin de pouvoir assurer le suivi de la validation de votre commande et d'être en conformité avec le décret me permettez-vous de vous contacter au-delà de 4 tentatives d'appels ?  VOUS POUVEZ ME RECONTACTER AU <span className="font-semibold">01 62 22 00 31</span> pour toutes questions
+                    </p>
+                  </div>
                 </div>
               </div>
             </button>

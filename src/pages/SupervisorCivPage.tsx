@@ -1,5 +1,7 @@
 import React from 'react';
 import PresenceTAStandalone from '../supervisor/PresenceTAStandalone';
+import NouveautesPdfTopBar from '../components/NouveautesPdfTopBar';
+import NouveautesPdfBanner from '../components/NouveautesPdfBanner';
 
 const SupervisorCivPage: React.FC = () => {
   return (
@@ -31,6 +33,15 @@ const SupervisorCivPage: React.FC = () => {
             <p className="text-blue-200 text-sm">Top vendeur</p>
             <p className="text-3xl font-extrabold">—</p>
           </div>
+        </div>
+        {/* Nouveautés PDF (upload + activation + aperçu) */}
+        <div className="mt-6 bg-white/10 rounded-lg border border-white/10 p-4">
+          <h2 className="text-lg font-semibold mb-2">Nouveautés • PDF</h2>
+          <p className="text-blue-200 text-sm mb-3">Publie le PDF des nouveautés pour les agents CIV et active/désactive sa visibilité.</p>
+          <div className="mb-4">
+            <NouveautesPdfTopBar />
+          </div>
+          <NouveautesPdfBanner />
         </div>
         <div className="mt-6 bg-white/10 rounded-lg border border-white/10 p-4">
           <p className="text-blue-200 text-sm mb-2">Chronologie dernières 24h</p>

@@ -6,8 +6,8 @@ import {
   deleteDoc,
   onSnapshot,
   query,
-  where,
   orderBy,
+  limit,
   Timestamp,
   serverTimestamp,
   getDoc,
@@ -642,7 +642,8 @@ class MyCoverService {
   subscribeToEvents(callback: (events: MyCoverGameEvent[]) => void): () => void {
     const q = query(
       this.eventsCollection,
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
+      limit(20)
     );
 
     return onSnapshot(q, (snapshot) => {

@@ -2,6 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function hasAdminRole() { return request.auth != null && (request.auth.token.admin == true); }
+    // Rôles autorisés à publier/mettre à jour les PDFs (programme & nouveautés)
+    function isPdfPublisher() {
+      return hasAdminRole() || (
+        request.auth != null && (
+          request.auth.token.email == 'i.boultame@mars-marketing.fr' ||
+          request.auth.token.email == 'j.allione@mars-marketing.fr' ||
+          request.auth.token.email == 'i.brai@mars-marketing.fr'
+        )
+      );
+    }
 
     match /users/{userId} {
       allow read: if request.auth != null;
@@ -60,15 +70,19 @@ service cloud.firestore {
     // Programme PDF partagé : lecture ouverte à tous (même non connectés), écriture restreinte
     match /shared/programmePdf {
       allow read: if true; // accessible publiquement
-      function isPdfPublisher() {
-        return hasAdminRole() || (
-          request.auth != null && (
-            request.auth.token.email == 'i.boultame@mars-marketing.fr' ||
-            request.auth.token.email == 'j.allione@mars-marketing.fr' ||
-            request.auth.token.email == 'i.brai@mars-marketing.fr'
-          )
-        );
-      }
+      allow create, update, delete: if isPdfPublisher();
+    }
+
+    // Nouveautés PDF partagé : lecture publique, écriture restreinte (mêmes éditeurs que programme)
+    match /shared/noveltiesPdf {
+      allow read: if true;
+      allow create, update, delete: if isPdfPublisher();
+    }
+
+    // Nouvelle collection multi-docs pour les Nouveautés PDF
+    // Chaque doc correspond à un PDF (name,size,storagePath,url,active,createdAt,updatedAt,updatedBy,version)
+    match /novelties/{docId} {
+      allow read: if true;
       allow create, update, delete: if isPdfPublisher();
     }
 

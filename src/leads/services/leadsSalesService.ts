@@ -31,6 +31,9 @@ type LeadSaleInput = {
   ficheDuJour: string;
   origineLead: "hipto" | "dolead" | "mm";
   telephone: string;
+  // Horodatages formulaire
+  startedAt?: Date | string | number; // début de saisie (client)
+  completedAt?: Date | string | number; // fin de saisie (optionnel - si fourni on l'utilise, sinon serverTimestamp())
   createdBy?: {
     userId?: string;
     displayName?: string;
@@ -74,6 +77,9 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
       ficheDuJour: payload.ficheDuJour,
       origineLead: payload.origineLead,
       telephone: payload.telephone,
+      // transmettre startedAt/completedAt si la fonction les accepte; sinon ignorés côté serveur
+      startedAt: payload.startedAt ? (typeof payload.startedAt === 'number' ? payload.startedAt : (typeof payload.startedAt === 'string' ? payload.startedAt : (payload.startedAt as Date).toISOString())) : undefined,
+      completedAt: payload.completedAt ? (typeof payload.completedAt === 'number' ? payload.completedAt : (typeof payload.completedAt === 'string' ? payload.completedAt : (payload.completedAt as Date).toISOString())) : undefined,
     });
     return;
   } catch (err: any) {
@@ -106,6 +112,29 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
       mobileSoshCount: cat.mobileSosh,
       internetSoshCount: cat.internetSosh,
       createdAt: serverTimestamp(),
+      // Horodatages
+      startedAt: ((): any => {
+        const v = payload.startedAt;
+        if (!v) return null;
+        try {
+          if (v instanceof Date) return Timestamp.fromDate(v);
+          if (typeof v === 'number') return Timestamp.fromDate(new Date(v));
+          if (typeof v === 'string') {
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? null : Timestamp.fromDate(d);
+          }
+        } catch {}
+        return null;
+      })(),
+      completedAt: payload.completedAt ? ((): any => {
+        const v = payload.completedAt;
+        try {
+          if (v instanceof Date) return Timestamp.fromDate(v);
+          if (typeof v === 'number') return Timestamp.fromDate(new Date(v));
+          if (typeof v === 'string') { const d = new Date(v); return isNaN(d.getTime()) ? serverTimestamp() : Timestamp.fromDate(d); }
+        } catch {}
+        return serverTimestamp();
+      })() : serverTimestamp(),
     };
     if (payload.createdBy?.userId) {
       doc.createdBy = {

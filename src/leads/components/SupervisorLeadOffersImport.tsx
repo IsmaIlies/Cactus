@@ -1,5 +1,5 @@
 import React from 'react';
-import { getLeadOffersCatalog, parseCsvOffers, parseCsvOffersAdvanced, parseXlsxOffers, setLeadOffersCatalog, type XlsxSheetOffers, type CatalogGroup } from '../services/leadOffersCatalog';
+import { getLeadOffersCatalog, parseCsvOffers, parseCsvOffersAdvanced, parseXlsxOffers, setLeadOffersCatalog, buildStandardOfferGroups, type XlsxSheetOffers } from '../services/leadOffersCatalog';
 import { PlusCircle, MinusCircle, Equal, UploadCloud, CheckCircle2, ChevronDown } from 'lucide-react';
 
 const box = 'rounded-2xl border border-gray-200 bg-white p-4 shadow-sm';
@@ -8,8 +8,6 @@ const SupervisorLeadOffersImport: React.FC = () => {
   const [current, setCurrent] = React.useState<string[]>([]);
   const [preview, setPreview] = React.useState<string[]>([]);
   const [sheets, setSheets] = React.useState<XlsxSheetOffers[]>([]);
-  const [types, setTypes] = React.useState<CatalogGroup[] | undefined>(undefined);
-  const [sourceType, setSourceType] = React.useState<'xlsx' | 'csv' | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,11 +64,10 @@ const SupervisorLeadOffersImport: React.FC = () => {
       const name = file.name.toLowerCase();
       if (name.endsWith('.xlsx')) {
         const buf = await file.arrayBuffer();
-        const { flat, sheets, types } = await parseXlsxOffers(buf);
+  const { flat, sheets } = await parseXlsxOffers(buf);
         setPreview(flat);
         setSheets(sheets);
-        setTypes(types);
-        setSourceType('xlsx');
+  // source type no longer needed for publish since we standardize groups
         setDiff(computeDiff(current, flat));
       } else {
   // Smart-decode CSV: try UTF-8 first, then windows-1252 if replacement chars or mojibake detected
@@ -92,8 +89,8 @@ const SupervisorLeadOffersImport: React.FC = () => {
   const items = adv.flat.length ? adv.flat : parseCsvOffers(text);
   setPreview(items);
   setSheets(adv.sheets); // si pas de groupe, tableau vide
-  setTypes(adv.types);
-  setSourceType('csv');
+  // keep any csv sheet grouping only for preview section
+  // source type no longer needed for publish since we standardize groups
   setDiff(computeDiff(current, items));
       }
     } catch (e: any) {
@@ -107,10 +104,10 @@ const SupervisorLeadOffersImport: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      // Priorité aux groupes par "Type de produit" (Informations, Produits, Options) si présents ; sinon Famille ; sinon groupes par feuille
-      const groups = sheets.length
-        ? sheets.map((sh) => ({ name: sh.name, items: sh.items }))
-        : (types && types.length ? types : null);
+      // Toujours fournir les catégories demandées: Total, Internet, Mobile, Les + vendues, Autres
+      // On conserve toutes les offres du fichier (preview) dans Total, et on remplit les autres par heuristique.
+        // Total now also includes a curated baseline list to guarantee presence of key entries
+        const groups = buildStandardOfferGroups(preview);
       await setLeadOffersCatalog(preview, groups);
       setCurrent(preview);
       setPreview([]);

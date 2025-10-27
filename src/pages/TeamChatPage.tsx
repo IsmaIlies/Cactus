@@ -223,7 +223,8 @@ const TeamChatPage: React.FC = () => {
     const userDoc = doc(db,'users', currentUser.id);
     const touch = () => setDoc(userDoc, { lastActive: serverTimestamp() }, {merge:true}).catch(()=>{});
     touch();
-    const interval = setInterval(touch, 30000);
+    // Reduce heartbeat frequency to 60s to limit network traffic
+    const interval = setInterval(touch, 60000);
     const onVis = () => { if(document.visibilityState==='visible') touch(); };
     window.addEventListener('visibilitychange', onVis);
     return ()=>{ clearInterval(interval); window.removeEventListener('visibilitychange', onVis); };

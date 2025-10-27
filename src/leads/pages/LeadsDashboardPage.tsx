@@ -153,6 +153,8 @@ const LeadsDashboardPage: React.FC = () => {
       <section className="grid gap-6 md:grid-cols-3">
         {leadSources.map((source) => {
           const metrics = data[source.key];
+          const mobileOrange = Math.max(0, (metrics?.mobiles || 0) - (metrics?.mobileSosh || 0));
+          const internetOrange = Math.max(0, (metrics?.box || 0) - (metrics?.internetSosh || 0));
           return (
             <article
               key={source.key}
@@ -172,19 +174,39 @@ const LeadsDashboardPage: React.FC = () => {
                 </h2>
               </header>
               <div className="mt-6 space-y-4">
+                {/* Mobiles total + split */}
                 <div className="rounded-2xl bg-[#002FA7]/80 p-4 shadow-inner">
                   <p className="text-white/70 text-sm">Mobiles vendus</p>
                   <p className="mt-1 text-3xl font-semibold text-white">
                     {loading ? "--" : metrics.mobiles}
                   </p>
-                  <p className="mt-1 text-xs text-blue-100/80">dont Sosh: {loading ? "--" : metrics.mobileSosh}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-white/10 p-2 text-center">
+                      <p className="text-[11px] text-blue-100/80">Sosh</p>
+                      <p className="text-lg font-semibold text-white">{loading ? "--" : metrics.mobileSosh}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/10 p-2 text-center">
+                      <p className="text-[11px] text-blue-100/80">Orange</p>
+                      <p className="text-lg font-semibold text-white">{loading ? "--" : mobileOrange}</p>
+                    </div>
+                  </div>
                 </div>
+                {/* Box total + split */}
                 <div className="rounded-2xl bg-blue-900/70 p-4 shadow-inner">
                   <p className="text-blue-100/80 text-sm">Box vendues</p>
                   <p className="mt-1 text-3xl font-semibold text-blue-50">
                     {loading ? "--" : metrics.box}
                   </p>
-                  <p className="mt-1 text-xs text-blue-100/80">dont Sosh: {loading ? "--" : metrics.internetSosh}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-white/10 p-2 text-center">
+                      <p className="text-[11px] text-blue-100/80">Sosh</p>
+                      <p className="text-lg font-semibold text-white">{loading ? "--" : metrics.internetSosh}</p>
+                    </div>
+                    <div className="rounded-xl bg-white/10 p-2 text-center">
+                      <p className="text-[11px] text-blue-100/80">Orange</p>
+                      <p className="text-lg font-semibold text-white">{loading ? "--" : internetOrange}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </article>
@@ -238,12 +260,30 @@ const LeadsDashboardPage: React.FC = () => {
             <div className="rounded-2xl bg-[#002FA7]/80 px-4 py-3">
               <p className="text-xs text-blue-100/80">Mobiles</p>
               <p className="text-2xl font-semibold">{loading ? "--" : monthlyTotals.mobiles}</p>
-              <p className="text-xs mt-1 text-blue-100/80">dont Sosh: {loading ? "--" : monthlyTotals.mobileSosh}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-white/10 p-2">
+                  <p className="text-[11px] text-blue-100/80">Sosh</p>
+                  <p className="text-lg font-semibold">{loading ? "--" : monthlyTotals.mobileSosh}</p>
+                </div>
+                <div className="rounded-xl bg-white/10 p-2">
+                  <p className="text-[11px] text-blue-100/80">Orange</p>
+                  <p className="text-lg font-semibold">{loading ? "--" : Math.max(0, monthlyTotals.mobiles - monthlyTotals.mobileSosh)}</p>
+                </div>
+              </div>
             </div>
             <div className="rounded-2xl bg-blue-900/80 px-4 py-3">
               <p className="text-xs text-blue-100/80">Box</p>
               <p className="text-2xl font-semibold">{loading ? "--" : monthlyTotals.box}</p>
-              <p className="text-xs mt-1 text-blue-100/80">dont Sosh: {loading ? "--" : monthlyTotals.internetSosh}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-white/10 p-2">
+                  <p className="text-[11px] text-blue-100/80">Sosh</p>
+                  <p className="text-lg font-semibold">{loading ? "--" : monthlyTotals.internetSosh}</p>
+                </div>
+                <div className="rounded-xl bg-white/10 p-2">
+                  <p className="text-[11px] text-blue-100/80">Orange</p>
+                  <p className="text-lg font-semibold">{loading ? "--" : Math.max(0, monthlyTotals.box - monthlyTotals.internetSosh)}</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

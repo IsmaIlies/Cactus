@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { 
   Users, 
@@ -11,9 +11,7 @@ import {
   Trophy,
   RefreshCw,
   UserCheck,
-  UserX,
-  Timer,
-  Target
+  Timer
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import MyCoverService, { MyCoverGame, MyCoverPlayer } from "../services/mycoverService";
@@ -31,13 +29,23 @@ const MyCoverPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [gameName, setGameName] = useState("");
   const [loading, setLoading] = useState(false);
+  // Hold active Firestore listeners to avoid leaks when joining multiple games
+  const gameUnsubRef = useRef<null | (() => void)>(null);
+  const playersUnsubRef = useRef<null | (() => void)>(null);
 
   // Auto-join si un gameId est dans l'URL
   const joinGameId = searchParams.get("join");
 
   useEffect(() => {
     const unsubscribe = MyCoverService.subscribeToGames(setGames);
-    return unsubscribe;
+    return () => {
+      try { unsubscribe?.(); } catch {}
+      // Safety: ensure we stop any per-game listeners when leaving the page
+      try { gameUnsubRef.current?.(); } catch {}
+      try { playersUnsubRef.current?.(); } catch {}
+      gameUnsubRef.current = null;
+      playersUnsubRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -75,6 +83,9 @@ const MyCoverPage: React.FC = () => {
       await MyCoverService.joinGame(gameId, user.id, user.displayName || "Joueur", asSpectator);
       
       // S'abonner à cette partie spécifique
+      // Stop previous listeners if any to avoid duplicates
+      try { gameUnsubRef.current?.(); } catch {}
+      try { playersUnsubRef.current?.(); } catch {}
       const gameUnsub = MyCoverService.subscribeToGame(gameId, (game) => {
         if (!game) {
           setCurrentGame(null);
@@ -83,7 +94,6 @@ const MyCoverPage: React.FC = () => {
         }
         setCurrentGame(game);
       });
-
       const playersUnsub = MyCoverService.subscribeToPlayers(gameId, (players) => {
         setCurrentPlayers(players);
         
@@ -92,10 +102,14 @@ const MyCoverPage: React.FC = () => {
         if (!userPlayer || !userPlayer.isConnected) {
           setCurrentGame(null);
           setCurrentPlayers([]);
-          gameUnsub();
-          playersUnsub();
+          try { gameUnsub(); } catch {}
+          try { playersUnsub(); } catch {}
+          gameUnsubRef.current = null;
+          playersUnsubRef.current = null;
         }
       });
+      gameUnsubRef.current = gameUnsub;
+      playersUnsubRef.current = playersUnsub;
 
       // Nettoyer l'URL
       navigate("/dashboard/mycover", { replace: true });
@@ -111,6 +125,10 @@ const MyCoverPage: React.FC = () => {
       await MyCoverService.leaveGame(currentGame.id, user.id);
       setCurrentGame(null);
       setCurrentPlayers([]);
+      try { gameUnsubRef.current?.(); } catch {}
+      try { playersUnsubRef.current?.(); } catch {}
+      gameUnsubRef.current = null;
+      playersUnsubRef.current = null;
     } catch (error) {
       console.error("Erreur quitter partie:", error);
     }
@@ -128,38 +146,7 @@ const MyCoverPage: React.FC = () => {
     }
   };
 
-  const getPhaseIcon = (phase: MyCoverGame["phase"]) => {
-    switch (phase) {
-      case "lobby": return <Users className="w-4 h-4" />;
-      case "started": return <Play className="w-4 h-4" />;
-      case "voting": return <Vote className="w-4 h-4" />;
-      case "revealed": return <Eye className="w-4 h-4" />;
-      case "ended": return <Trophy className="w-4 h-4" />;
-      default: return <Clock className="w-4 h-4" />;
-    }
-  };
-
-  const getPhaseLabel = (phase: MyCoverGame["phase"]) => {
-    switch (phase) {
-      case "lobby": return "En attente";
-      case "started": return "En cours";
-      case "voting": return "Vote";
-      case "revealed": return "Révélation";
-      case "ended": return "Terminé";
-      default: return "Inconnu";
-    }
-  };
-
-  const getPhaseColor = (phase: MyCoverGame["phase"]) => {
-    switch (phase) {
-      case "lobby": return "bg-blue-100 text-blue-800";
-      case "started": return "bg-green-100 text-green-800";
-      case "voting": return "bg-yellow-100 text-yellow-800";
-      case "revealed": return "bg-purple-100 text-purple-800";
-      case "ended": return "bg-gray-100 text-gray-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
-  };
+  // helpers non utilisés supprimés
 
 
   // Ajout d'un bot (host uniquement, phase lobby)
@@ -347,8 +334,8 @@ const GameCard: React.FC<{
     };
     loadStats();
     
-    // Recharger les stats toutes les 5 secondes
-    const interval = setInterval(loadStats, 5000);
+    // Recharger les stats toutes les 60s pour minimiser le trafic
+    const interval = setInterval(loadStats, 60000);
     return () => clearInterval(interval);
   }, [game.id]);
 

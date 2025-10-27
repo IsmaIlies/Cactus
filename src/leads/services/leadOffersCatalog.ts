@@ -1,5 +1,7 @@
 import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { TOP_SELLING_OFFERS } from '../data/topSellers';
+import { BASELINE_OFFERS } from '../data/baselineOffers';
 import * as XLSX from 'xlsx';
 
 export type CatalogGroup = { name: string; items: string[] };
@@ -59,7 +61,19 @@ export async function getLeadOffersCatalog(): Promise<LeadOfferCatalog | null> {
         }))
         .filter((g: CatalogGroup) => g.items.length > 0)
     : undefined;
-  return { updatedAt: Number(data?.updatedAt) || Date.now(), items, groups };
+  // Guarantee 'Total' includes baseline + top sellers at read time (non-destructive, not persisted)
+  let finalGroups = groups;
+  if (finalGroups && finalGroups.length) {
+    const totalIdx = finalGroups.findIndex((g) => g.name.toLowerCase() === 'total');
+    if (totalIdx >= 0) {
+      const baseline = BASELINE_OFFERS.map((s) => normalizeLabel(s));
+      const curated = TOP_SELLING_OFFERS.map((s) => normalizeLabel(s));
+      const merged = Array.from(new Set([...(finalGroups[totalIdx].items || []), ...baseline, ...curated]));
+      finalGroups = finalGroups.slice();
+      finalGroups[totalIdx] = { ...finalGroups[totalIdx], items: merged };
+    }
+  }
+  return { updatedAt: Number(data?.updatedAt) || Date.now(), items, groups: finalGroups };
 }
 
 export async function setLeadOffersCatalog(items: string[], groups?: CatalogGroup[] | null) {
@@ -332,4 +346,27 @@ export function parseCsvOffersAdvanced(csvText: string): { flat: string[]; sheet
         .map((t) => ({ name: t, items: typeMap.get(t)! }))
     : (familyOrder.length ? familyOrder.map((f) => ({ name: f, items: familyMap.get(f)! })) : undefined);
   return { flat, sheets, types };
+}
+
+// Build standard groups from a flat offers list: Total, Internet, Mobile, Les + vendues, Autres
+export function buildStandardOfferGroups(items: string[]): CatalogGroup[] {
+  const unique = Array.from(new Set((items || []).map((s) => normalizeLabel(String(s))).filter(Boolean)));
+  const internet = unique.filter((s) => /(internet|fibre|adsl|vdsl|livebox|d[ée]codeur|tv\s*orange)/i.test(s));
+  const mobile = unique.filter((s) => /(mobile|sosh|forfait|\bsim\b|\b(\d+\s*)?go\b|\b(\d+\s*)?gb\b)/i.test(s));
+  // curated 'Les + vendues' list + heuristic fallback
+  const curated = TOP_SELLING_OFFERS.map((s) => normalizeLabel(s));
+  const baseline = BASELINE_OFFERS.map((s) => normalizeLabel(s));
+  // include any curated entries even if not present in items
+  const top = Array.from(new Set([...curated, ...unique.filter((s) => /(\+\s*vendu|\+\s*vendues|les\s*\+\s*vendues|top|meilleur|best)/i.test(s))]));
+  const used = new Set<string>([...internet, ...mobile, ...top]);
+  const autres = unique.filter((s) => !used.has(s));
+  const groups: CatalogGroup[] = [];
+  // Total must include all offers including curated top that might not be in the file yet
+  const total = Array.from(new Set([...unique, ...baseline, ...top]));
+  groups.push({ name: 'Total', items: total });
+  if (internet.length) groups.push({ name: 'Internet', items: internet });
+  if (mobile.length) groups.push({ name: 'Mobile', items: mobile });
+  if (top.length) groups.push({ name: 'Les + vendues', items: top });
+  if (autres.length) groups.push({ name: 'Autres', items: autres });
+  return groups;
 }

@@ -14,7 +14,7 @@ const PokerDuelPage: React.FC = () => {
   const opp = duel?.players.find(p=> p.uid !== user?.uid);
 
   useEffect(()=>{ const unsub = listenPokerDuel(setDuel); ensureDuelDoc(); return () => unsub(); },[]);
-  useEffect(()=>{ const unsub = listenSpectators(setSpectators); enterSpectator(); const id = setInterval(()=> heartbeatPresence(), 15000); return ()=> { clearInterval(id); unsub(); }; },[]);
+  useEffect(()=>{ const unsub = listenSpectators(setSpectators); enterSpectator(); const id = setInterval(()=> heartbeatPresence(), 60000); return ()=> { clearInterval(id); unsub(); }; },[]);
 
   const seated = !!me;
   const canStart = duel && duel.players.length===2 && ['waiting','finished'].includes(duel.phase);

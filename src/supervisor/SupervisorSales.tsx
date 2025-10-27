@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, onSnapshot, orderBy, query as fsQuery, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query as fsQuery, where, Timestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 type Sale = {
@@ -101,6 +101,8 @@ const SupervisorSales: React.FC = () => {
   type LeadRow = {
     id: string;
     createdAt: Date | null;
+    startedAt?: Date | null;
+    completedAt?: Date | null;
     email: string | null;
     displayName: string | null;
     numeroId: string | null;
@@ -117,6 +119,8 @@ const SupervisorSales: React.FC = () => {
   // Colonnes CSV (uniquement pour l'export) — ne pas confondre avec l'UI
   const LEADS_CSV_HEADERS = [
     'Id',
+    'Heure de depart',
+    'Heure de fin',
     'Adresse de messagerie',
     'Nom',
     'DID',
@@ -138,28 +142,56 @@ const SupervisorSales: React.FC = () => {
     if (!d) return '—';
     return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
   };
+  const canonicalLeadType = (raw: string | null | undefined): string => {
+    const s = String(raw || '').trim().toLowerCase().replace(/\s+/g,'');
+    if (s === 'internet') return 'Internet';
+    if (s === 'internetsosh') return 'Internet Sosh';
+    if (s === 'mobile') return 'Mobile';
+    if (s === 'mobilesosh') return 'Mobile Sosh';
+    // Combined legacy values: pick Internet variant as primary if present
+    if (s.includes('internetsosh') && s.includes('mobilesosh')) return 'Internet Sosh';
+    if (s.includes('internet') && s.includes('mobile')) return 'Internet';
+    // Fallbacks on partial matches
+    if (/internetsosh/.test(s)) return 'Internet Sosh';
+    if (/mobilesosh/.test(s)) return 'Mobile Sosh';
+    if (/internet/.test(s)) return 'Internet';
+    if (/mobile/.test(s)) return 'Mobile';
+    return String(raw || '');
+  };
+  const formatDateTime = (d: Date | null) => {
+    if (!d) return '';
+    const dd = pad2(d.getDate());
+    const mm = pad2(d.getMonth() + 1);
+    const yyyy = d.getFullYear();
+    const HH = pad2(d.getHours());
+    const MM = pad2(d.getMinutes());
+    const SS = pad2(d.getSeconds());
+    return `${dd}/${mm}/${yyyy} ${HH}:${MM}:${SS}`;
+  };
   // Génère un classeur Excel soigné avec largeurs, auto-filter, header stylé, et freeze top row
   const toXlsxBlob = (rows: LeadRow[]) => {
     const data = [LEADS_CSV_HEADERS as unknown as string[]];
     rows.forEach((r, i) => {
       data.push([
         String(i + 1),
+        formatDateTime(r.startedAt || r.createdAt),
+        formatDateTime(r.completedAt || r.createdAt),
         r.email || '',
         r.displayName || '',
         r.numeroId || '',
-        r.typeOffre || '',
+        canonicalLeadType(r.typeOffre),
         r.intituleOffre || '',
         r.referencePanier || '',
         r.codeAlf || '',
         r.ficheDuJour || '',
-        r.origineLead || '',
+        (r.origineLead || '').toString().toUpperCase(),
         r.dateTechnicien || '',
         r.telephone || ''
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(data);
     // Largeur de colonnes
-    const colWidths = [5, 28, 22, 14, 16, 42, 18, 12, 14, 14, 16, 20].map(w => ({ wch: w }));
+    const colWidths = [5, 20, 20, 28, 22, 14, 16, 42, 18, 12, 14, 14, 16, 20].map(w => ({ wch: w }));
     (ws as any)['!cols'] = colWidths;
     // Freeze first row and add autofilter
     (ws as any)['!freeze'] = { rows: 1, columns: 0 };
@@ -178,8 +210,8 @@ const SupervisorSales: React.FC = () => {
     }
     // Hauteur de la première ligne
     (ws as any)['!rows'] = [{ hpt: 22 }];
-    // Alignements sélectifs par colonne (ID, DID, CODE ALF, Date tech, Téléphone)
-    const centerCols = new Set([0, 3, 7, 10, 11]);
+  // Alignements sélectifs par colonne (ID, DID, CODE ALF, Date tech, Téléphone)
+  const centerCols = new Set([0, 5, 9, 12, 13]);
     for (let r = 1; r <= rows.length; r++) {
       centerCols.forEach((c) => {
         const addr = XLSX.utils.encode_cell({ r, c });
@@ -267,7 +299,7 @@ const SupervisorSales: React.FC = () => {
   }, [isLeads, start, end, selectedLeadOrigins, selectedLeadSellers]);
 
   // Si on est en mode LEADS, on ne branche pas l'abonnement Canal+
-  // Abonnement temps réel aux ventes de la région sélectionnée (FR par défaut côté superviseur Canal+)
+  // Polling (60s) des ventes Canal+ de la région sélectionnée (FR/CIV) avec fallback si index manquant
   React.useEffect(() => {
     if (!region) return; // LEADS: on sort, rendu géré plus bas
     setLoading(true); setError(null); setUsingFallback(false);
@@ -276,10 +308,22 @@ const SupervisorSales: React.FC = () => {
     const endExclusive = addDays(endDateBase, 1);
 
     let cancelled = false;
-    let unsubPrimary: (() => void) | null = null;
-    let unsubFallback: (() => void) | null = null;
+    let inFlight = false;
+    let timer: number | null = null;
 
-    const startFallback = () => {
+    const fetchPrimary = async () => {
+      const qPrimary = fsQuery(
+        collection(db, 'sales'),
+        where('region', '==', region),
+        where('date', '>=', Timestamp.fromDate(startDate)),
+        where('date', '<', Timestamp.fromDate(endExclusive)),
+        orderBy('date', sortOrder)
+      );
+      const snap = await getDocs(qPrimary);
+      return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Sale));
+    };
+
+    const fetchFallback = async () => {
       // Fallback: date-only + orderBy, filtrage région en mémoire
       setUsingFallback(true);
       const qDateOnly = fsQuery(
@@ -288,52 +332,55 @@ const SupervisorSales: React.FC = () => {
         where('date', '<', Timestamp.fromDate(endExclusive)),
         orderBy('date', sortOrder)
       );
-      unsubFallback = onSnapshot(qDateOnly, {
-        next: (snap) => {
-          if (cancelled) return;
-          const items: Sale[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-          const reg = String(region).toUpperCase();
-          const filtered = items.filter(s => String((s as any).region || '').toUpperCase() === reg || String((s as any).region || '').toLowerCase() === reg.toLowerCase());
-          setSales(filtered);
-          setLoading(false);
-        },
-        error: (e) => { if (cancelled) return; setError(e?.message || 'Erreur chargement ventes'); setLoading(false); }
-      });
+      const snap = await getDocs(qDateOnly);
+      const items: Sale[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const reg = String(region).toUpperCase();
+      return items.filter(s => String((s as any).region || '').toUpperCase() === reg || String((s as any).region || '').toLowerCase() === reg.toLowerCase());
     };
 
-    const qPrimary = fsQuery(
-      collection(db, 'sales'),
-      where('region', '==', region),
-      where('date', '>=', Timestamp.fromDate(startDate)),
-      where('date', '<', Timestamp.fromDate(endExclusive)),
-      orderBy('date', sortOrder)
-    );
-    unsubPrimary = onSnapshot(qPrimary, {
-      next: (snap) => {
-        if (cancelled) return;
-        const items: Sale[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-        setSales(items);
-        setLoading(false);
-      },
-      error: (e) => {
-        if (cancelled) return;
-        const msg = String(e?.message || '');
-        const isIndexErr = msg.toLowerCase().includes('requires an index') || msg.toLowerCase().includes('index');
-        if (isIndexErr) {
-          // Ne pas afficher l'erreur; passer en fallback
-          if (unsubPrimary) { try { unsubPrimary(); } catch {} }
-          startFallback();
-        } else {
-          setError(e?.message || 'Erreur chargement ventes');
-          setLoading(false);
+    const tick = async () => {
+      if (cancelled || inFlight) return;
+      if (typeof document !== 'undefined' && document.hidden) return; // pause onglet caché
+      inFlight = true;
+      try {
+        setError(null);
+        let list: Sale[] = [];
+        try {
+          setUsingFallback(false);
+          list = await fetchPrimary();
+        } catch (e: any) {
+          const msg = String(e?.message || '');
+          const isIndexErr = msg.toLowerCase().includes('requires an index') || msg.toLowerCase().includes('index');
+          if (isIndexErr) {
+            list = await fetchFallback();
+          } else {
+            throw e;
+          }
         }
+        if (!cancelled) { setSales(list); setLoading(false); }
+      } catch (e: any) {
+        if (!cancelled) { setError(e?.message || 'Erreur chargement ventes'); setLoading(false); }
+      } finally {
+        inFlight = false;
       }
-    });
+    };
 
-    return () => { cancelled = true; if (unsubPrimary) unsubPrimary(); if (unsubFallback) unsubFallback(); };
+    // Première récupération immédiate
+    tick();
+    // Démarrer l'intervalle 60s
+    timer = window.setInterval(tick, 60_000);
+
+    const onVis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      cancelled = true;
+      if (timer) { clearInterval(timer); }
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [region, start, end, sortOrder]);
 
-  // Abonnement LEADS (leads_sales)
+  // Polling LEADS (leads_sales) toutes 60s avec fallback si index manquant
   React.useEffect(() => {
     if (!isLeads) return;
     setLeadsLoading(true); setLeadsError(null); setLeadsUsingFallback(false);
@@ -342,16 +389,19 @@ const SupervisorSales: React.FC = () => {
     const endExclusive = addDays(endDateBase, 1);
 
     let cancelled = false;
-    let unsubPrimary: (() => void) | null = null;
-    let unsubFallback: (() => void) | null = null;
+    let inFlight = false;
+    let timer: number | null = null;
 
-    const mapDoc = (d: any): LeadRow => {
+    const mapSnapDoc = (d: any): LeadRow => {
       const data = d.data() as any;
-      const ts: Timestamp | null = data?.createdAt ?? null;
-      const createdAt = ts ? ts.toDate() : null;
+      const createdAt = toDate(data?.createdAt);
+      const startedAt = toDate(data?.startedAt);
+      const completedAt = toDate(data?.completedAt);
       return {
         id: d.id,
         createdAt,
+        startedAt,
+        completedAt,
         email: data?.createdBy?.email ?? null,
         displayName: data?.createdBy?.displayName ?? null,
         numeroId: data?.numeroId ?? null,
@@ -366,49 +416,63 @@ const SupervisorSales: React.FC = () => {
       };
     };
 
-    const startFallback = () => {
-      setLeadsUsingFallback(true);
-      const fb = fsQuery(collection(db, 'leads_sales'), where('mission','==','ORANGE_LEADS'));
-      unsubFallback = onSnapshot(fb, {
-        next: (snap) => {
-          if (cancelled) return;
-          const list = snap.docs.map(mapDoc)
-            .filter(r => {
-              if (!r.createdAt) return false;
-              return r.createdAt >= startDate && r.createdAt < endExclusive;
-            })
-            .sort((a,b) => (b.createdAt?.getTime()||0) - (a.createdAt?.getTime()||0));
-          setLeadsRows(list);
-          setLeadsLoading(false);
-        },
-        error: (e) => { if (cancelled) return; setLeadsError(e?.message || 'Erreur chargement LEADS'); setLeadsLoading(false); }
-      });
+    const fetchPrimary = async (): Promise<LeadRow[]> => {
+      const qPrimary = fsQuery(
+        collection(db, 'leads_sales'),
+        where('mission','==','ORANGE_LEADS'),
+        where('createdAt','>=', Timestamp.fromDate(startDate)),
+        where('createdAt','<', Timestamp.fromDate(endExclusive)),
+        orderBy('createdAt','desc')
+      );
+      const snap = await getDocs(qPrimary);
+      return snap.docs.map(mapSnapDoc);
     };
 
-    const qPrimary = fsQuery(
-      collection(db, 'leads_sales'),
-      where('mission','==','ORANGE_LEADS'),
-      where('createdAt','>=', Timestamp.fromDate(startDate)),
-      where('createdAt','<', Timestamp.fromDate(endExclusive)),
-      orderBy('createdAt','desc')
-    );
-    unsubPrimary = onSnapshot(qPrimary, {
-      next: (snap) => {
-        if (cancelled) return;
-        const list = snap.docs.map(mapDoc);
-        setLeadsRows(list);
-        setLeadsLoading(false);
-      },
-      error: (e) => {
-        if (cancelled) return;
-        const msg = String(e?.message || '');
-        const isIndexErr = msg.toLowerCase().includes('requires an index') || msg.toLowerCase().includes('index');
-        if (isIndexErr) { try { unsubPrimary && unsubPrimary(); } catch {} startFallback(); }
-        else { setLeadsError(e?.message || 'Erreur chargement LEADS'); setLeadsLoading(false); }
-      }
-    });
+    const fetchFallback = async (): Promise<LeadRow[]> => {
+      setLeadsUsingFallback(true);
+      const fb = fsQuery(collection(db, 'leads_sales'), where('mission','==','ORANGE_LEADS'));
+      const snap = await getDocs(fb);
+      return snap.docs.map(mapSnapDoc)
+        .filter(r => r.createdAt && r.createdAt >= startDate && r.createdAt < endExclusive)
+        .sort((a,b) => (b.createdAt?.getTime()||0) - (a.createdAt?.getTime()||0));
+    };
 
-    return () => { cancelled = true; if (unsubPrimary) unsubPrimary(); if (unsubFallback) unsubFallback(); };
+    const tick = async () => {
+      if (cancelled || inFlight) return;
+      if (typeof document !== 'undefined' && document.hidden) return; // pause onglet caché
+      inFlight = true;
+      try {
+        setLeadsError(null);
+        let list: LeadRow[] = [];
+        try {
+          setLeadsUsingFallback(false);
+          list = await fetchPrimary();
+        } catch (e: any) {
+          const msg = String(e?.message || '');
+          const isIndexErr = msg.toLowerCase().includes('requires an index') || msg.toLowerCase().includes('index');
+          if (isIndexErr) list = await fetchFallback(); else throw e;
+        }
+        if (!cancelled) { setLeadsRows(list); setLeadsLoading(false); }
+      } catch (e: any) {
+        if (!cancelled) { setLeadsError(e?.message || 'Erreur chargement LEADS'); setLeadsLoading(false); }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    // Première récupération immédiate
+    tick();
+    // Démarrer l'intervalle 60s
+    timer = window.setInterval(tick, 60_000);
+
+    const onVis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      cancelled = true;
+      if (timer) { clearInterval(timer); }
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [isLeads, start, end]);
 
   // Dériver les vendeurs disponibles
@@ -530,7 +594,7 @@ const SupervisorSales: React.FC = () => {
     return (
       <div className="relative">
         <div className="space-y-4 animate-fade-in">
-          <p className="text-slate-300">Ventes Leads (leads_sales) — temps réel</p>
+          <p className="text-slate-300">Ventes Leads (leads_sales) — mise à jour toutes 60s</p>
 
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -639,12 +703,12 @@ const SupervisorSales: React.FC = () => {
                         <td className="p-3 text-white whitespace-nowrap">{r.email || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.displayName || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.numeroId || '—'}</td>
-                        <td className="p-3 text-white whitespace-nowrap">{r.typeOffre || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{canonicalLeadType(r.typeOffre) || '—'}</td>
                         <td className="p-3 whitespace-nowrap"><span className="bg-yellow-200/30 text-yellow-100 px-2 py-0.5 rounded text-[13px]">{r.intituleOffre || '—'}</span></td>
                         <td className="p-3 text-white whitespace-nowrap">{r.referencePanier || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.codeAlf || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.ficheDuJour || '—'}</td>
-                        <td className="p-3 text-white whitespace-nowrap">{r.origineLead || '—'}</td>
+                        <td className="p-3 text-white whitespace-nowrap">{(r.origineLead || '—').toString().toUpperCase()}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.dateTechnicien || '—'}</td>
                         <td className="p-3 text-white whitespace-nowrap">{r.telephone || '—'}</td>
                       </tr>
@@ -667,7 +731,7 @@ const SupervisorSales: React.FC = () => {
   return (
     <div className="relative">
       <div className="space-y-4 animate-fade-in">
-        <p className="text-slate-300">{`Ventes Canal+ (${region || ''})`} — temps réel</p>
+  <p className="text-slate-300">{`Ventes Canal+ (${region || ''})`} — mise à jour toutes 60s</p>
 
       {/* KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

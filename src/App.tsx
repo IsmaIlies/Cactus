@@ -34,6 +34,7 @@ import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
 import SupervisorArchives from "./supervisor/SupervisorArchives";
 import SupervisorImport from "./supervisor/SupervisorImport";
 import SupervisorLeadsPage from "./pages/SupervisorLeadsPage";
+import SupervisorNouveautesPdf from "./supervisor/SupervisorNouveautesPdf";
 
 function App() {
   return (
@@ -88,6 +89,7 @@ function App() {
         <Route path="/dashboard/superviseur/:area/*" element={<ProtectedRoute><SupervisorLayout /></ProtectedRoute>}>
           <Route index element={<SupervisorDashboard />} />
           <Route path="presence" element={<SupervisorPresencePage />} />
+          <Route path="nouveautes" element={<SupervisorNouveautesPdf />} />
           <Route path="ventes" element={<SupervisorSales />} />
           <Route path="import" element={<SupervisorImport />} />
           <Route path="checklist" element={<SupervisorChecklist />} />

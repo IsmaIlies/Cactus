@@ -46,6 +46,7 @@ const generateId = () => {
 
 const SalesEntry: React.FC = () => {
   const { user } = useAuth();
+  const startedAtRef = React.useRef<Date>(new Date());
   const [form, setForm] = React.useState<FormState>({ ...defaultState });
   const [errors, setErrors] = React.useState<Errors>({});
   const [touched, setTouched] = React.useState<TouchedState>({ ...emptyTouched });
@@ -76,8 +77,17 @@ const SalesEntry: React.FC = () => {
     (async () => {
       try {
         const cat = await getLeadOffersCatalog();
-        if (cat && Array.isArray(cat.items)) setOfferSuggestions(cat.items);
-        if (cat?.groups && Array.isArray(cat.groups)) setOfferGroups(cat.groups);
+        if (cat?.groups && Array.isArray(cat.groups)) {
+          setOfferGroups(cat.groups);
+          const total = cat.groups.find((g) => g.name.toLowerCase() === 'total');
+          if (total && Array.isArray(total.items) && total.items.length > 0) {
+            setOfferSuggestions(total.items);
+          } else if (cat && Array.isArray(cat.items)) {
+            setOfferSuggestions(cat.items);
+          }
+        } else if (cat && Array.isArray(cat.items)) {
+          setOfferSuggestions(cat.items);
+        }
       } catch (e) {
         // non bloquant
       }
@@ -369,6 +379,7 @@ const SalesEntry: React.FC = () => {
       ficheDuJour: form.ficheDuJour,
       origineLead: form.origineLead,
       telephone: form.telephone.replace(/\s+/g, "").trim(),
+      startedAt: startedAtRef.current,
     };
   }, [form, additionalOffers]);
 
@@ -442,6 +453,7 @@ const SalesEntry: React.FC = () => {
           displayName: user.displayName,
           email: user.email,
         },
+        completedAt: new Date(), // fin de saisie côté client; côté serveur fallback utilise serverTimestamp()
       };
       // Debug léger pour vérifier conformité aux règles
       // eslint-disable-next-line no-console
@@ -467,6 +479,8 @@ const SalesEntry: React.FC = () => {
           ficheDuJour: payload.ficheDuJour,
           origineLead: payload.origineLead as "hipto" | "dolead" | "mm",
           telephone: payload.telephone,
+          startedAt: startedAtRef.current,
+          completedAt: new Date(),
           createdBy: {
             userId: user.id,
             displayName: user.displayName,
