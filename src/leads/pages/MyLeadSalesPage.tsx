@@ -28,6 +28,8 @@ const MyLeadSalesPage: React.FC = () => {
   const { user } = useAuth();
   const [summary, setSummary] = React.useState<LeadAgentSummary | null>(null);
   const [sales, setSales] = React.useState<LeadAgentSaleEntry[]>([]);
+  const [phoneFilter, setPhoneFilter] = React.useState<string>('');
+  const [didFilter, setDidFilter] = React.useState<string>('');
   const [loadingSummary, setLoadingSummary] = React.useState(true);
   const [loadingSales, setLoadingSales] = React.useState(true);
   const [selectedMonthIso, setSelectedMonthIso] = React.useState<string>(MONTH_OPTIONS[0]?.value || new Date().toISOString());
@@ -74,8 +76,19 @@ const MyLeadSalesPage: React.FC = () => {
   const mobileSosh = summary?.mobileSosh ?? 0;
   const internetSosh = summary?.internetSosh ?? 0;
 
+  const normalizedPhoneFilter = React.useMemo(() => phoneFilter.replace(/\s+/g, ''), [phoneFilter]);
+  const filteredSales = React.useMemo(() => {
+    return sales.filter((sale) => {
+      const phone = (sale.telephone || '').replace(/\s+/g, '');
+      const did = (sale.numeroId || '').toLowerCase();
+      const phoneOk = normalizedPhoneFilter === '' || phone.includes(normalizedPhoneFilter);
+      const didOk = didFilter.trim() === '' || did.includes(didFilter.trim().toLowerCase());
+      return phoneOk && didOk;
+    });
+  }, [sales, normalizedPhoneFilter, didFilter]);
+
   const flattenedSales = React.useMemo(() => {
-    return sales.flatMap((sale) => {
+    return filteredSales.flatMap((sale) => {
       const rows: Array<{
         id: string;
         offer: string;
@@ -83,6 +96,8 @@ const MyLeadSalesPage: React.FC = () => {
         origin: string;
         saleId: string;
         isMain: boolean;
+        telephone?: string;
+        numeroId?: string;
       }> = [
         {
           id: `${sale.id}-main`,
@@ -91,6 +106,8 @@ const MyLeadSalesPage: React.FC = () => {
           origin: sale.origineLead || "",
           saleId: sale.id,
           isMain: true,
+          telephone: sale.telephone,
+          numeroId: sale.numeroId,
         },
       ];
       sale.additionalOffers.forEach((offer, index) => {
@@ -102,12 +119,14 @@ const MyLeadSalesPage: React.FC = () => {
             origin: sale.origineLead || "",
             saleId: sale.id,
             isMain: false,
+            telephone: sale.telephone,
+            numeroId: sale.numeroId,
           });
         }
       });
       return rows;
     });
-  }, [sales]);
+  }, [filteredSales]);
 
   const openEditModal = React.useCallback(async (saleId: string) => {
     setEditModal({ saleId, loading: true, error: null, saving: false, form: null });
@@ -222,6 +241,28 @@ const MyLeadSalesPage: React.FC = () => {
 
       <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md shadow-xl">
         <h2 className="text-lg font-semibold mb-4">Historique des ventes</h2>
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <label className="flex flex-col text-xs uppercase tracking-[0.3em] text-blue-100/60">
+            Téléphone
+            <input
+              type="text"
+              value={phoneFilter}
+              onChange={(e) => setPhoneFilter(e.target.value)}
+              placeholder="Rechercher par numéro"
+              className="mt-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-blue-100/40 focus:border-white/40 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col text-xs uppercase tracking-[0.3em] text-blue-100/60">
+            DID
+            <input
+              type="text"
+              value={didFilter}
+              onChange={(e) => setDidFilter(e.target.value)}
+              placeholder="Rechercher par DID"
+              className="mt-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-blue-100/40 focus:border-white/40 focus:outline-none"
+            />
+          </label>
+        </div>
         {loadingSales ? (
           <p className="text-sm text-blue-100/70">Chargement des ventes…</p>
         ) : flattenedSales.length === 0 ? (
@@ -233,6 +274,8 @@ const MyLeadSalesPage: React.FC = () => {
                 <tr>
                   <th className="px-4 py-2">Date & heure</th>
                   <th className="px-4 py-2">Offre</th>
+                  <th className="px-4 py-2">Téléphone</th>
+                  <th className="px-4 py-2">DID</th>
                   <th className="px-4 py-2">Lead</th>
                   <th className="px-4 py-2 text-right">Actions</th>
                 </tr>
@@ -252,6 +295,8 @@ const MyLeadSalesPage: React.FC = () => {
                     <tr key={row.id} className="border-t border-white/10">
                       <td className="px-4 py-2 whitespace-nowrap">{formatted}</td>
                       <td className="px-4 py-2">{row.offer || "—"}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{row.telephone || '—'}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{row.numeroId || '—'}</td>
                       <td className="px-4 py-2">
                         {row.origin === "hipto" || row.origin === "dolead" || row.origin === "mm" ? row.origin : "—"}
                       </td>
