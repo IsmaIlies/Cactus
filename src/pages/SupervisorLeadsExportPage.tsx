@@ -38,7 +38,7 @@ const HEADERS = [
   "Numéro de téléphone de la fiche",
 ] as const;
 
-const TABLE_COLUMNS = "grid grid-cols-[110px_110px_1.4fr_0.8fr_1.4fr_120px_100px]";
+const TABLE_COLUMNS = "grid grid-cols-[110px_110px_1.4fr_1.1fr_1.1fr_0.8fr_1.4fr_120px_100px]";
 
 const pad2 = (value: number) => value.toString().padStart(2, "0");
 
@@ -158,6 +158,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
   const [modalError, setModalError] = React.useState<string | null>(null);
   const offerListId = React.useId();
   const originListId = React.useId();
+  const [phoneFilter, setPhoneFilter] = React.useState<string>('');
+  const [didFilter, setDidFilter] = React.useState<string>('');
 
   const renderDateTimeCell = React.useCallback(
     (date: Date | null) => (
@@ -251,6 +253,7 @@ const SupervisorLeadsExportPage: React.FC = () => {
       .sort((a, b) => a.label.localeCompare(b.label, "fr", { sensitivity: "base" }));
   }, [rows]);
 
+  const normalizedPhoneFilter = React.useMemo(() => phoneFilter.replace(/\s+/g, ''), [phoneFilter]);
   const filteredRows = React.useMemo(() => {
     if (rows.length === 0) return [] as LeadRow[];
     const startBoundary = startDate ? new Date(`${startDate}T00:00:00`) : null;
@@ -287,9 +290,23 @@ const SupervisorLeadsExportPage: React.FC = () => {
         }
       }
 
+      if (normalizedPhoneFilter) {
+        const phone = (row.telephone || '').replace(/\s+/g, '');
+        if (!phone.includes(normalizedPhoneFilter)) {
+          return false;
+        }
+      }
+
+      if (didFilter.trim()) {
+        const did = (row.numeroId || '').toLowerCase();
+        if (!did.includes(didFilter.trim().toLowerCase())) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [rows, startDate, endDate, agentFilter, originFilter, offerFilter]);
+  }, [rows, startDate, endDate, agentFilter, originFilter, offerFilter, normalizedPhoneFilter, didFilter]);
 
   const disabled = loading || filteredRows.length === 0;
 
@@ -411,6 +428,44 @@ const SupervisorLeadsExportPage: React.FC = () => {
             </label>
 
             <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Origine
+              <select
+                value={originFilter}
+                onChange={(event) => setOriginFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+              >
+                <option value="all">Toutes les origines</option>
+                {originOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              Téléphone
+              <input
+                type="text"
+                value={phoneFilter}
+                onChange={(event) => setPhoneFilter(event.target.value)}
+                placeholder="Rechercher par numéro"
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white placeholder:text-blue-200/40 shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+              />
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
+              DID
+              <input
+                type="text"
+                value={didFilter}
+                onChange={(event) => setDidFilter(event.target.value)}
+                placeholder="Rechercher par DID"
+                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white placeholder:text-blue-200/40 shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+              />
+            </label>
+
+            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
               Date de début
               <input
                 type="date"
@@ -437,7 +492,7 @@ const SupervisorLeadsExportPage: React.FC = () => {
               </select>
             </label>
 
-            {(startDate || endDate || agentFilter !== "all" || originFilter !== "all" || offerFilter !== "all") && (
+            {(startDate || endDate || agentFilter !== "all" || originFilter !== "all" || offerFilter !== "all" || phoneFilter || didFilter) && (
               <button
                 type="button"
                 onClick={() => {
@@ -446,6 +501,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
                   setOfferFilter("all");
                   setStartDate("");
                   setEndDate("");
+                  setPhoneFilter("");
+                  setDidFilter("");
                 }}
                 className="mt-2 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100 transition-colors duration-200 hover:bg-slate-800/60"
               >
@@ -489,6 +546,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
               <span>Début</span>
               <span>Fin</span>
               <span>Agent</span>
+              <span>Téléphone</span>
+              <span>DID</span>
               <span>Origine</span>
               <span>Offre</span>
               <span className="text-right">ID</span>
@@ -501,7 +560,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
             ) : (
               filteredRows.map((row) => {
                 const agentLabel = row.displayName || row.email || "—";
-                const secondaryAgentInfo = row.numeroId || row.email || "DID —";
+                const phoneDisplay = row.telephone || '—';
+                const didDisplay = row.numeroId || '—';
                 const origin = (row.origineLead || "—").toUpperCase();
                 const trimmedId = row.id.length > 6 ? `${row.id.slice(0, 6)}…` : row.id;
                 return (
@@ -513,8 +573,12 @@ const SupervisorLeadsExportPage: React.FC = () => {
                     <div>{renderDateTimeCell(row.completedAt)}</div>
                     <div className="flex flex-col">
                       <span className="font-semibold text-blue-50">{agentLabel}</span>
-                      <span className="break-all text-xs text-blue-200/70 leading-snug">{secondaryAgentInfo}</span>
+                      {row.email ? (
+                        <span className="break-all text-xs text-blue-200/70 leading-snug">{row.email}</span>
+                      ) : null}
                     </div>
+                    <div className="text-sm text-blue-100/80 break-all">{phoneDisplay}</div>
+                    <div className="text-sm text-blue-100/80 break-all">{didDisplay}</div>
                     <div className="inline-flex min-h-[32px] items-center">
                       <span className="inline-flex min-w-[72px] justify-center rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold tracking-[0.3em] text-blue-200">
                         {origin}
