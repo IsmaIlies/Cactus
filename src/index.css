@@ -1,3 +1,29 @@
+@keyframes glow {
+  0%, 100% { opacity: 0.7; filter: blur(16px); }
+  50% { opacity: 1; filter: blur(24px); }
+}
+.animate-glow {
+  animation: glow 2.8s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.18), 0 0 0 0 rgba(16,185,129,0.12); }
+  50% { box-shadow: 0 0 16px 4px rgba(34,211,238,0.22), 0 0 24px 8px rgba(16,185,129,0.18); }
+}
+.animate-badge-pulse {
+  animation: badge-pulse 2.2s cubic-bezier(.4,0,.2,1) infinite;
+}
+@keyframes shimmer-move {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-shimmer-move {
+  animation: shimmer-move 2.2s linear infinite;
+}
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
 @keyframes fadeInSlide {
   0% { opacity: 0; transform: translateY(20px); }
   100% { opacity: 1; transform: translateY(0); }
@@ -9,6 +35,32 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* --- Advanced Hero Effects --- */
+.floating-logo {
+  animation: floating-logo-bounce 3.2s ease-in-out infinite;
+}
+@keyframes floating-logo-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px) scale(1.04); }
+}
+
+.animate-gradient-move {
+  background-size: 200% 200%;
+  animation: gradient-move 2.5s linear infinite;
+}
+@keyframes gradient-move {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.glassmorphism-card {
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.18);
+  backdrop-filter: blur(18px) saturate(1.2);
+  background: rgba(30, 41, 59, 0.65);
+  border: 1.5px solid rgba(255,255,255,0.08);
+}
 
 body {
   @apply font-sans;

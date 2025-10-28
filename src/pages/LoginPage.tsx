@@ -216,21 +216,28 @@ const LoginPage = () => {
       </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-16 px-5 py-16 sm:px-8 lg:flex-row lg:items-center lg:gap-20">
-        <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center lg:mx-0 lg:w-[48%] lg:items-start lg:text-left">
-          <img
-            src="/cactus-tech-logo.svg"
-            alt="Logo Cactus Tech"
-            className="mb-6 h-20 w-auto drop-shadow-[0_18px_48px_rgba(6,182,212,0.35)]"
-          />
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-4 py-1 text-[11px] uppercase tracking-[0.35em] text-cyan-200 backdrop-blur">
-            <span>Mars Marketing SaaS</span>
+  <section className="mx-auto flex w-full max-w-2xl flex-col items-center text-center lg:mx-auto lg:w-[48%] lg:items-center lg:text-center">
+          <div className="relative flex items-center justify-center mb-8">
+            <div className="relative z-10 flex flex-col items-center">
+              <img
+                src="/cactus-tech-logo.svg"
+                alt="Logo Cactus Tech"
+                className="h-24 w-auto lg:h-28 drop-shadow-[0_18px_48px_rgba(6,182,212,0.35)]"
+              />
+            </div>
           </div>
-          <div className="mt-12 h-px w-full bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-4 py-1 text-[11px] uppercase tracking-[0.35em] text-cyan-200 backdrop-blur animate-badge-pulse shadow-[0_0_16px_2px_rgba(34,211,238,0.15)] transition-all duration-300 hover:scale-105 hover:shadow-cyan-400/40 hover:bg-cyan-400/20 cursor-pointer">
+            <span className="transition-colors duration-300 group-hover:text-cyan-100">Mars Marketing SaaS</span>
+          </div>
+          <div className="mt-14 h-1 w-3/4 self-center mx-auto bg-gradient-to-r from-transparent via-cyan-400/60 via-30% via-green-400/60 via-70% to-transparent sm:w-2/3 lg:w-1/2 rounded-full relative overflow-hidden animate-shimmer shadow-[0_0_24px_2px_rgba(34,211,238,0.10)]">
+            <span className="absolute left-0 top-0 h-full w-full bg-gradient-to-r from-transparent via-cyan-200/80 via-30% via-green-200/80 via-70% to-transparent opacity-70 blur-[3px] animate-shimmer-move" />
+          </div>
+
         </section>
 
         <section className="relative mx-auto w-full max-w-lg">
-          <div className="absolute inset-0 -z-10 rounded-3xl bg-gradient-to-br from-white/5 via-white/0 to-transparent blur-3xl" />
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 shadow-[0_35px_60px_-25px_rgba(8,15,33,0.9)] backdrop-blur-xl">
+          <div className="absolute inset-0 -z-10 rounded-3xl bg-gradient-to-br from-white/10 via-white/0 to-transparent blur-2xl" />
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 shadow-[0_35px_60px_-25px_rgba(8,15,33,0.9)] backdrop-blur-xl glassmorphism-card">
             <div className="pointer-events-none absolute inset-0">
               <div className="absolute -top-24 right-12 h-56 w-56 rounded-full bg-cactus-400/25 blur-3xl" />
               <div className="absolute -bottom-24 left-10 h-52 w-52 rounded-full bg-emerald-500/15 blur-3xl" />
@@ -370,64 +377,13 @@ const LoginPage = () => {
                         );
                       })}
                     </div>
-                    {!isSupervisorAllowed && (
-                      <p className="mt-2 text-[11px] text-blue-100/80">
-                        Indiquez un email autorisé pour activer l'accès superviseur. Accès accordé à: {SUPERVISOR_WHITELIST.join(', ')}
-                      </p>
-                    )}
+                    {/* Rien à afficher si !isSupervisorAllowed, bloc supprimé */}
                     {isSupervisorAllowed && supervisorChoice && (
                       <p className="mt-2 text-[11px] text-blue-100/80">Cible choisie: {supervisorChoice.toUpperCase()}</p>
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => { if(!showDiag) { setShowDiag(true); runAdvancedDiagnostics(); } else setShowDiag(false); }}
-                    className="text-xs text-cactus-200 underline decoration-dotted hover:text-cactus-100"
-                  >
-                    {showDiag ? 'Masquer diagnostic avancé' : 'Afficher diagnostic avancé'}
-                  </button>
-
-                  {showDiag && (
-                    <div className="space-y-2 rounded-xl border border-white/10 bg-slate-900/70 p-4 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">Diagnostic réseau</span>
-                        <button
-                          type="button"
-                          onClick={runAdvancedDiagnostics}
-                          disabled={advRunning}
-                          className="rounded border border-white/10 bg-white/5 px-2 py-1 text-slate-200 transition hover:border-white/30 hover:bg-white/10 disabled:opacity-50"
-                        >{advRunning ? 'Analyse…' : 'Relancer'}</button>
-                      </div>
-                      {!advResults && <p className="text-slate-500">Collecte en cours…</p>}
-                      {advResults && (
-                        <ul className="space-y-1">
-                          {advResults.results.map((r: any, i: number) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${r.ok ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-                              <div className="flex-1">
-                                <span className="font-medium">{r.name}</span>
-                                <span className="ml-1 text-[10px] text-slate-400">{r.latencyMs != null ? r.latencyMs + 'ms' : ''}</span>
-                                {r.status && <span className="ml-2 text-[10px] text-slate-400">HTTP {r.status}</span>}
-                                {r.code && <span className="ml-2 text-[10px] text-slate-400">{r.code}</span>}
-                                {r.detail && <div className="text-[11px] text-slate-300">{r.detail}</div>}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {advResults && (
-                        <div className="space-y-1 border-t border-white/10 pt-2 text-[11px] text-slate-400">
-                          <p><strong>Interprétation rapide :</strong></p>
-                          <ul className="ml-4 list-disc space-y-0.5">
-                            <li>Si "API IdentityToolkit" = rouge mais "Accès domaine application" = vert → blocage ciblé (pare-feu / filtrage sur *.googleapis.com).</li>
-                            <li>Si tout est rouge → perte de connexion ou DNS.</li>
-                            <li>Si seulement "Accès domaine application" est rouge → cache / service worker local à nettoyer.</li>
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Diagnostic avancé retiré */}
                 </div>
 
                 <div className="space-y-6 rounded-2xl border border-white/10 bg-slate-950/40 p-4 shadow-[inset_0_1px_0_0_rgba(148,163,184,0.05)]">

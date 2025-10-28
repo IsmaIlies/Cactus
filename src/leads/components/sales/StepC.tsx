@@ -68,10 +68,9 @@ const StepC: React.FC<StepCProps> = ({ form, errors, touched, onChange, onBlur, 
             className={`${inputClass} mt-1`}
           >
             <option value="">Sélectionner l'origine</option>
-            <option value="hipto">HIPTO</option>
+            <option value="opportunity">OPPORTUNITY</option>
             <option value="dolead">DOLEAD</option>
             <option value="mm">MM</option>
-            <option value="opportunity">OPPORTUNITY</option>
           </select>
           {touched.origineLead && errors.origineLead && (
             <p className="mt-1 text-sm text-red-600">{errors.origineLead}</p>

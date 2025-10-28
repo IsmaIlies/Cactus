@@ -7,9 +7,14 @@ import {
   subscribeToLeadAgentSummary,
   subscribeToLeadAgentSales,
   LeadAgentSummary,
-  LeadAgentSaleEntry,
   categorize,
 } from "../services/leadsSalesService";
+
+// Extend the imported type locally to add missing fields for this page
+type LeadAgentSaleEntry = import("../services/leadsSalesService").LeadAgentSaleEntry & {
+  telephone?: string;
+  numeroId?: string;
+};
 
 const monthOptions = (count = 6) => {
   const options: Array<{ label: string; value: string }> = [];
@@ -298,7 +303,7 @@ const MyLeadSalesPage: React.FC = () => {
                       <td className="px-4 py-2 whitespace-nowrap">{row.telephone || '—'}</td>
                       <td className="px-4 py-2 whitespace-nowrap">{row.numeroId || '—'}</td>
                       <td className="px-4 py-2">
-                        {row.origin === "hipto" || row.origin === "dolead" || row.origin === "mm" ? row.origin : "—"}
+                        {row.origin === "opportunity" || row.origin === "dolead" || row.origin === "mm" ? row.origin : "—"}
                       </td>
                       <td className="px-4 py-2">
                         {row.isMain ? (
@@ -438,7 +443,7 @@ const MyLeadSalesPage: React.FC = () => {
                       className="w-full rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
                     >
                       <option value="">—</option>
-                      <option value="hipto">Hipto</option>
+                      <option value="opportunity">Opportunity</option>
                       <option value="dolead">Dolead</option>
                       <option value="mm">Mars Marketing</option>
                     </select>

@@ -201,55 +201,59 @@ const SupervisorImport: React.FC = () => {
   };
 
   return (
-    <div className="relative">
-      <div className="space-y-4 animate-fade-in">
-        <h2 className="text-white text-lg font-semibold">Import ventes historiques {isLeads ? 'LEADS' : ''}</h2>
-
-        <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-          <p className="text-blue-200 text-sm mb-2">Fichier CSV (.csv, séparateur ; ou ,)</p>
-          <input type="file" accept=".csv,text/csv" onChange={e => e.target.files && onFile(e.target.files[0])} className="text-slate-100" />
-          {fileName && <div className="text-blue-200 text-sm mt-1">Fichier: {fileName}</div>}
-          <div className="mt-3 flex items-center gap-3">
-            <label className="text-blue-100 text-sm inline-flex items-center gap-2">
-              <input type="checkbox" checked={skipExisting} onChange={e => setSkipExisting(e.target.checked)} className="accent-cactus-600" />
-              Ne pas écraser les documents existants (même ID)
-            </label>
+    <div className="max-w-4xl mx-auto px-4 py-8 bg-slate-950 min-h-screen">
+      <div className="bg-slate-900/90 rounded-xl shadow-lg border border-slate-800">
+        <div className="rounded-t-xl bg-[#25377b] px-6 py-4 flex flex-col gap-1">
+          <h2 className="text-lg font-semibold text-black flex items-center gap-2">
+            <span className="inline-block bg-cactus-100 text-cactus-700 rounded-full px-2 py-0.5 text-xs font-bold">{isLeads ? 'LEADS' : 'IMPORT'}</span>
+            Catalogue des intitulés d'offres {isLeads ? 'LEADS' : ''}
+          </h2>
+          <p className="text-black text-sm">Importe un fichier .xlsx (recommandé) ou .csv. Nous détectons automatiquement la colonne « Libellé ALF » dans chaque feuille et agrégeons toutes les offres.</p>
+        </div>
+        <div className="px-6 pt-6 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+            <input type="file" accept=".csv,text/csv" onChange={e => e.target.files && onFile(e.target.files[0])} className="text-black bg-slate-800 border border-slate-700 rounded px-2 py-1" />
             <button disabled={!rows.length || loading}
               onClick={importLeads}
-              className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20 disabled:opacity-50">
-              {loading ? 'Import…' : `Importer ${rows.length} lignes`}
+              className="px-4 py-2 text-sm font-semibold rounded-md bg-cactus-500 text-black shadow hover:bg-cactus-600 transition disabled:opacity-50">
+              {loading ? 'Import…' : `Publier`}
             </button>
+            {fileName && <span className="text-xs text-black">{fileName}</span>}
           </div>
-          {message && <div className="text-blue-200 text-sm mt-2">{message}</div>}
+          <p className="text-xs text-black mb-2">La publication remplace le catalogue actuel par le contenu importé.</p>
+          <label className="text-black text-sm inline-flex items-center gap-2 mb-2">
+            <input type="checkbox" checked={skipExisting} onChange={e => setSkipExisting(e.target.checked)} className="accent-cactus-600" />
+            Ne pas écraser les documents existants (même ID)
+          </label>
+          {message && <div className="text-cactus-100 bg-cactus-700/80 rounded px-3 py-2 text-sm mt-2">{message}</div>}
         </div>
-
         {rows.length > 0 && (
-          <div className="rounded-lg border border-white/10 bg-white/5 p-0">
-            <div className="px-4 py-3 text-blue-200 text-sm">Aperçu (10 premières lignes)</div>
+          <div className="bg-slate-800 border-t border-slate-700 rounded-b-xl">
+            <div className="px-6 py-3 text-black text-sm font-semibold">Aperçu (10 premières lignes)</div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-slate-900/70 border-b border-white/10">
-                  <tr className="text-blue-200">
+                <thead className="bg-slate-900 border-b border-slate-800">
+                  <tr className="text-black">
                     {['ID','createdAt','email','displayName','numeroId','typeOffre','intituleOffre','referencePanier','codeAlf','ficheDuJour','origineLead','dateTechnicien','telephone']
-                      .map(h => <th key={h} className="text-left p-3 whitespace-nowrap">{h}</th>)}
+                      .map(h => <th key={h} className="text-left p-3 whitespace-nowrap font-semibold">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.slice(0,10).map((r,i) => (
-                    <tr key={i} className="border-t border-white/10 hover:bg-white/5">
-                      <td className="p-3 text-white whitespace-nowrap">{r.id || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.createdAt ? r.createdAt.toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' }) : '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.email || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.displayName || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.numeroId || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.typeOffre || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.intituleOffre || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.referencePanier || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.codeAlf || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.ficheDuJour || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.origineLead || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.dateTechnicien || '—'}</td>
-                      <td className="p-3 text-white whitespace-nowrap">{r.telephone || '—'}</td>
+                    <tr key={i} className="border-t border-slate-800 hover:bg-slate-900/60">
+                      <td className="p-3 text-black whitespace-nowrap">{r.id || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.createdAt ? r.createdAt.toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' }) : '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.email || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.displayName || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.numeroId || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.typeOffre || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.intituleOffre || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.referencePanier || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.codeAlf || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.ficheDuJour || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.origineLead || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.dateTechnicien || '—'}</td>
+                      <td className="p-3 text-black whitespace-nowrap">{r.telephone || '—'}</td>
                     </tr>
                   ))}
                 </tbody>

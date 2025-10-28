@@ -117,18 +117,18 @@ const SuggestionItem: React.FC<SuggestionItemProps> = ({ suggestion, userId, onD
               <button type="button" className="bg-gray-300 px-2 py-1 rounded" onClick={() => setIsEditing(false)}>Annuler</button>
             </form>
           ) : (
-            <div className="text-gray-800 mb-2">{suggestion.text}</div>
+            <div className="text-black mb-2">{suggestion.text}</div>
           )}
-          <div className="text-xs text-gray-500">Le {suggestion.createdAt.toDate().toLocaleString()}</div>
+          <div className="text-xs text-black">Le {suggestion.createdAt.toDate().toLocaleString()}</div>
           {typeof suggestion === "object" && suggestion.category && (
             <div className="text-xs text-cactus-600 mt-1">Catégorie : {suggestion.category}</div>
           )}
           {/* Affichage des commentaires */}
           <div className="mt-2">
             <div className="text-xs font-semibold text-cactus-600 mb-1">Commentaires :</div>
-            {comments.length === 0 && <div className="text-xs text-gray-400">Aucun commentaire.</div>}
+            {comments.length === 0 && <div className="text-xs text-black">Aucun commentaire.</div>}
             {comments.map((c, idx) => (
-              <div key={idx} className="text-xs text-gray-700 mb-1 flex items-center gap-2">
+              <div key={idx} className="text-xs text-black mb-1 flex items-center gap-2">
                 {/* Affiche photo si disponible, sinon initiales */}
                 {user?.photoURL && c.author === (user.displayName || user.email || user.id) ? (
                   <img src={user.photoURL} alt={c.author} className="w-6 h-6 rounded-full border" />
@@ -138,7 +138,7 @@ const SuggestionItem: React.FC<SuggestionItemProps> = ({ suggestion, userId, onD
                   </div>
                 )}
                 <span className="font-semibold text-cactus-600">{c.author}</span> : {c.text}
-                <span className="ml-2 text-gray-400">{c.createdAt.toDate().toLocaleString()}</span>
+                <span className="ml-2 text-black">{c.createdAt.toDate().toLocaleString()}</span>
               </div>
             ))}
             <form onSubmit={handleAddComment} className="flex gap-2 mt-2">
@@ -259,14 +259,14 @@ const FaqPage = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-xl font-bold mb-4">FAQ & Suggestions</h1>
+  <h1 className="text-xl font-bold mb-4 text-black">FAQ & Suggestions</h1>
       {/* Statistiques globales */}
-      <div className="mb-4 p-3 bg-gray-50 rounded border flex flex-col gap-2">
-        <div><span className="font-semibold">Nombre total d’idées proposées :</span> {totalIdeas}</div>
-        <div>
-          <span className="font-semibold">Idée la plus populaire :</span> {mostPopular ? (
-            <span className="ml-1">“{mostPopular.text}” <span className="text-green-700">({mostPopular.likes?.length || 0} 👍)</span></span>
-          ) : "Aucune idée"}
+      <div className="mb-4 p-3 bg-white rounded border flex flex-col gap-2">
+        <div className="text-black"><span className="font-semibold text-black">Nombre total d’idées proposées :</span> {totalIdeas}</div>
+        <div className="text-black">
+          <span className="font-semibold text-black">Idée la plus populaire :</span> {mostPopular ? (
+            <span className="ml-1 text-black">“{mostPopular.text}” <span className="text-green-700">({mostPopular.likes?.length || 0} 👍)</span></span>
+          ) : <span className="text-black">Aucune idée</span>}
         </div>
       </div>
       {/* Classement compact des contributeurs - version animée */}
@@ -283,7 +283,7 @@ const FaqPage = () => {
       <div className="mb-2 text-xs flex flex-wrap gap-2 items-center">
         <span className="font-semibold text-yellow-700">🏆 Top :</span>
         {topContributors.length === 0 ? (
-          <span className="text-gray-400">Aucun</span>
+          <span className="text-black">Aucun</span>
         ) : (
           topContributors.map((c, idx) => (
             <span key={c.name} className="contrib-anim flex items-center gap-1 px-2 py-1 rounded bg-yellow-50 border border-yellow-100 shadow-sm" style={{animationDelay: `${idx * 0.12}s`}}>
@@ -291,7 +291,7 @@ const FaqPage = () => {
                 {c.name.split(" ").map(p => p[0]).join("").toUpperCase().slice(0,2)}
               </span>
               <span className="font-bold text-cactus-700">{c.name}</span>
-              <span className="text-gray-600">{c.count} idées</span>
+              <span className="text-black">{c.count} idées</span>
               <span className="text-green-700">{c.likes}👍</span>
               {idx === 0 && <span className="text-yellow-600">⭐</span>}
             </span>
@@ -300,17 +300,17 @@ const FaqPage = () => {
       </div>
       <form onSubmit={handleSubmit} className="mb-4 flex gap-2">
         <select
-          className="border rounded px-2 py-1"
+          className="border rounded px-2 py-1 text-black"
           value={category}
           onChange={e => setCategory(e.target.value)}
           required
         >
-          <option value="" disabled>Choisir une catégorie</option>
-          <option value="Dashboard">📊 Dashboard</option>
-          <option value="Offres">🧾 Offres</option>
-          <option value="Interface Appel">📞 Interface Appel</option>
-          <option value="Fonctionnalités d’équipe">🧑‍🤝‍🧑 Fonctionnalités d’équipe</option>
-          <option value="Autres">🗂️ Autres</option>
+          <option value="" disabled className="text-black">Choisir une catégorie</option>
+          <option value="Dashboard" className="text-black">📊 Dashboard</option>
+          <option value="Offres" className="text-black">🧾 Offres</option>
+          <option value="Interface Appel" className="text-black">📞 Interface Appel</option>
+          <option value="Fonctionnalités d’équipe" className="text-black">🧑‍🤝‍🧑 Fonctionnalités d’équipe</option>
+          <option value="Autres" className="text-black">🗂️ Autres</option>
         </select>
         <input
           type="text"
@@ -323,9 +323,9 @@ const FaqPage = () => {
       </form>
       {error && <div className="text-red-600 mb-2">{error}</div>}
       {successMsg && <div className="text-green-600 mb-2">{successMsg}</div>}
-      <h2 className="text-lg font-semibold mb-2">Historique des suggestions</h2>
+  <h2 className="text-lg font-semibold mb-2 text-black">Historique des suggestions</h2>
       <div className="space-y-4">
-        {suggestions.length === 0 && <div className="text-gray-500">Aucune suggestion pour le moment.</div>}
+  {suggestions.length === 0 && <div className="text-black">Aucune suggestion pour le moment.</div>}
         {suggestions.map(s => (
           <SuggestionItem
             key={s.id}

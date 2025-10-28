@@ -432,8 +432,8 @@ const SalesEntry: React.FC = () => {
         return;
       }
       // Vérifier contraintes des règles Firestore avant write
-      if (!payload.origineLead || !["hipto", "dolead", "mm"].includes(payload.origineLead)) {
-        setSubmissionError("Origine du lead invalide. Choisis hipto, dolead ou mm.");
+      if (!payload.origineLead || !["opportunity", "dolead", "mm"].includes(payload.origineLead)) {
+        setSubmissionError("Origine du lead invalide. Choisis opportunity, dolead ou mm.");
         return;
       }
       if (!payload.numeroId || !payload.typeOffre || !payload.telephone) {
@@ -447,7 +447,7 @@ const SalesEntry: React.FC = () => {
         // Nous enregistrons les offres supplémentaires en tant que ventes séparées.
         // On vide donc additionalOffers du document principal pour éviter les doublons d'affichage.
         additionalOffers: [],
-        origineLead: payload.origineLead as "hipto" | "dolead" | "mm",
+  origineLead: payload.origineLead as "opportunity" | "dolead" | "mm",
         createdBy: {
           userId: user.id,
           displayName: user.displayName,
@@ -477,7 +477,7 @@ const SalesEntry: React.FC = () => {
           referencePanier: off.referencePanier.trim(),
           additionalOffers: [],
           ficheDuJour: payload.ficheDuJour,
-          origineLead: payload.origineLead as "hipto" | "dolead" | "mm",
+          origineLead: payload.origineLead as "opportunity" | "dolead" | "mm",
           telephone: payload.telephone,
           startedAt: startedAtRef.current,
           completedAt: new Date(),
@@ -501,7 +501,7 @@ const SalesEntry: React.FC = () => {
       const message = error?.message || '';
       if (code === "permission-denied") {
         setSubmissionError(
-          "Accès refusé par les règles Firestore. Vérifie que tu es bien connecté et que l'origine du lead est hipto/dolead/mm."
+          "Accès refusé par les règles Firestore. Vérifie que tu es bien connecté et que l'origine du lead est opportunity/dolead/mm."
         );
       } else if (code === 'unauthenticated') {
         setSubmissionError("Session expirée. Merci de vous reconnecter et de réessayer.");

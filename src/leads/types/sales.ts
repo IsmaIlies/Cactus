@@ -32,7 +32,7 @@ export const OFFER_LABELS = [
 
 export type OfferType = (typeof OFFER_OPTIONS)[number] | "";
 export type FicheValue = "oui" | "non" | "campagne tiède" | "";
-export type OrigineLead = "hipto" | "dolead" | "mm" | "";
+export type OrigineLead = "opportunity" | "dolead" | "mm" | "";
 
 export type AdditionalOffer = {
   id: string;

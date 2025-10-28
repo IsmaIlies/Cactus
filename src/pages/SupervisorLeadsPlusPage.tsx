@@ -2,15 +2,15 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { subscribeToLeadKpis, type LeadKpiSnapshot } from '../leads/services/leadsSalesService';
 
+
 type LeadsStats = {
   dolead: number;
-  hipto: number;
+  opportunity: number;
 };
 
-const INITIAL_STATS: LeadsStats = { dolead: 0, hipto: 0 };
+const INITIAL_STATS: LeadsStats = { dolead: 0, opportunity: 0 };
 
 const SupervisorLeadsPlusPage: React.FC = () => {
-  const [apiRaw, setApiRaw] = React.useState<any>(null);
   const [leadCount, setLeadCount] = React.useState<number | null>(null);
   const [leadType, setLeadType] = React.useState<string | null>(null);
 
@@ -22,7 +22,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     fetch(url)
       .then((res) => res.json())
       .then((data) => {
-        setApiRaw(data);
+  // setApiRaw(data); // removed unused
         if (Array.isArray(data.DATA) && data.DATA.length > 0) {
           setLeadCount(data.DATA[0].count);
           setLeadType(data.DATA[0].type);
@@ -32,7 +32,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
         }
       })
       .catch(() => {
-        setApiRaw(null);
+  // setApiRaw(null); // removed unused
         setLeadCount(null);
         setLeadType(null);
       });
@@ -42,9 +42,9 @@ const SupervisorLeadsPlusPage: React.FC = () => {
 
   const [stats, setStats] = React.useState<LeadsStats>(INITIAL_STATS);
   const [kpiSnapshot, setKpiSnapshot] = React.useState<LeadKpiSnapshot | null>(null);
-  const [caDraft, setCaDraft] = React.useState<Record<'dolead' | 'hipto', string>>({
+  const [caDraft, setCaDraft] = React.useState<Record<'dolead' | 'opportunity', string>>({
     dolead: '',
-    hipto: '',
+    opportunity: '',
   });
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string>('');
@@ -59,23 +59,23 @@ const SupervisorLeadsPlusPage: React.FC = () => {
         : 'https://orange-leads.mm.emitel.io/stats-lead.php?token=b7E8g2QEBh8jz7eF57uT';
       const response = await fetch(url);
       const json = await response.json();
-      setApiRaw(json);
+  // setApiRaw(json); // removed unused
       let dolead = 0;
-      let hipto = 0;
-      if (typeof json?.dolead === 'number' && typeof json?.hipto === 'number') {
+      let opportunity = 0;
+      if (typeof json?.dolead === 'number' && typeof json?.opportunity === 'number') {
         dolead = Number(json.dolead) || 0;
-        hipto = Number(json.hipto) || 0;
+        opportunity = Number(json.opportunity) || 0;
       } else if (json?.RESPONSE === 'OK' && Array.isArray(json?.DATA)) {
         const findCount = (t: string) => {
           const it = json.DATA.find((x: any) => String(x?.type).toLowerCase() === t);
           return it && typeof it.count === 'number' ? it.count : 0;
         };
         dolead = Number(findCount('dolead')) || 0;
-        hipto = Number(findCount('hipto')) || 0;
+        opportunity = Number(findCount('opportunity')) || 0;
       } else {
         throw new Error('Format de réponse inattendu');
       }
-      setStats({ dolead, hipto });
+      setStats({ dolead, opportunity });
       if (Array.isArray(json?.DATA) && json.DATA.length > 0) {
         setLeadCount(json.DATA[0].count ?? null);
         setLeadType(json.DATA[0].type ?? null);
@@ -84,7 +84,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
       const message = e?.message ? String(e.message) : 'Erreur inconnue (CORS ?)';
       setError(message);
       setStats(INITIAL_STATS);
-      setApiRaw(null);
+  // setApiRaw(null); // removed unused
       setLeadCount(null);
       setLeadType(null);
     } finally {
@@ -119,22 +119,24 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     );
   }
 
-  const safeSnapshot: LeadKpiSnapshot = kpiSnapshot || {
-    hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-    dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-    mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-  };
+  const safeSnapshot: LeadKpiSnapshot = kpiSnapshot && typeof kpiSnapshot === 'object' && kpiSnapshot.opportunity && kpiSnapshot.dolead && kpiSnapshot.mm
+    ? kpiSnapshot
+    : {
+        opportunity: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+      };
 
-  const totalLeads = stats.dolead + stats.hipto;
+  const totalLeads = stats.dolead + stats.opportunity;
 
   const originCards = [
     { key: 'dolead' as const, label: 'Dolead', leads: stats.dolead, kpi: safeSnapshot.dolead },
-    { key: 'hipto' as const, label: 'Hipto', leads: stats.hipto, kpi: safeSnapshot.hipto },
+    { key: 'opportunity' as const, label: 'Opportunity', leads: stats.opportunity, kpi: safeSnapshot.opportunity },
   ];
 
   const handleExport = React.useCallback(
     async (
-      origin: 'dolead' | 'hipto',
+  origin: 'dolead' | 'opportunity',
       label: string,
       leads: number,
       internetSales: number,
@@ -289,14 +291,14 @@ const SupervisorLeadsPlusPage: React.FC = () => {
                     type="button"
                     onClick={() =>
                       handleExport(
-                        key,
-                        label,
-                        leads,
-                        internetSales,
-                        mobileSales,
-                        internetRate,
-                        caValue,
-                        caRate
+                  key,
+                  label,
+                  leads,
+                  internetSales,
+                  mobileSales,
+                  internetRate,
+                  caValue,
+                  caRate
                       )
                     }
                     className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-500/20"

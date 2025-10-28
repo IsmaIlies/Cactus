@@ -34,7 +34,7 @@ const SupervisorDashboard: React.FC = () => {
   const [topSellers, setTopSellers] = React.useState<Array<[string, number]>>([]);
   const [chartMonth, setChartMonth] = React.useState<{ data: any; options: any } | null>(null);
   // LEADS per-origin KPIs (du jour)
-  const [leadDayByOrigin, setLeadDayByOrigin] = React.useState<{ hipto: number; doleadd: number; mm: number }>({ hipto: 0, doleadd: 0, mm: 0 });
+  const [leadDayByOrigin, setLeadDayByOrigin] = React.useState<{ opportunity: number; doleadd: number; mm: number }>({ opportunity: 0, doleadd: 0, mm: 0 });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -48,12 +48,12 @@ const SupervisorDashboard: React.FC = () => {
           const un1 = subscribeToLeadKpis((snap) => {
             if (cancelled) return;
             // Additionne uniquement Internet + Internet Sosh (PAS mobile ni mobile sosh)
-            const hip = (snap?.hipto?.internetSosh || 0) + (snap?.hipto?.box || 0 - (snap?.hipto?.internetSosh || 0));
+            const opportunity = (snap?.opportunity?.internetSosh || 0) + (snap?.opportunity?.box || 0 - (snap?.opportunity?.internetSosh || 0));
             const dol = (snap?.dolead?.internetSosh || 0) + (snap?.dolead?.box || 0 - (snap?.dolead?.internetSosh || 0));
             const mm = (snap?.mm?.internetSosh || 0) + (snap?.mm?.box || 0 - (snap?.mm?.internetSosh || 0));
-            const day = hip + dol + mm;
+            const day = opportunity + dol + mm;
             setKpi((prev) => ({ ...prev, daySales: day }));
-            setLeadDayByOrigin({ hipto: hip, doleadd: dol, mm });
+            setLeadDayByOrigin({ opportunity, doleadd: dol, mm });
           });
           unsubs.push(() => { try { (un1 as any)?.(); } catch {} });
 
@@ -268,8 +268,8 @@ const SupervisorDashboard: React.FC = () => {
       {effectiveArea === 'LEADS' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white/10 rounded-lg p-4 border border-white/10">
-            <p className="text-blue-200 text-sm">Hipto (jour)</p>
-            <p className="text-3xl font-extrabold">{loading ? '…' : leadDayByOrigin.hipto}</p>
+            <p className="text-blue-200 text-sm">Opportunity (jour)</p>
+            <p className="text-3xl font-extrabold">{loading ? '…' : leadDayByOrigin.opportunity}</p>
           </div>
           <div className="bg-white/10 rounded-lg p-4 border border-white/10">
             <p className="text-blue-200 text-sm">Dolead (jour)</p>

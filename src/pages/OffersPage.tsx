@@ -32,7 +32,7 @@ const OffersPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {offers.map((offer, idx) => (
           <div key={idx} className="bg-white rounded-lg shadow p-4 flex flex-col items-center">
-            <h2 className="text-xl font-bold mb-4 text-center">{offer.title}</h2>
+            <h2 className="text-xl font-bold mb-4 text-center text-black !text-black">{offer.title}</h2>
             <img
               src={offer.img}
               alt={offer.alt}

@@ -12,10 +12,9 @@ import {
 } from "../services/leadsSalesService";
 
 const leadSources: Array<{ key: keyof LeadKpiSnapshot; label: string; accent: string; gradient: string }> = [
-  { key: "hipto", label: "Hipto", accent: "text-cyan-200", gradient: "from-[#0a152a] via-[#09172f] to-[#071326]" },
+  { key: "opportunity", label: "Opportunity", accent: "text-cyan-200", gradient: "from-[#0a152a] via-[#09172f] to-[#071326]" },
   { key: "dolead", label: "Dolead", accent: "text-purple-200", gradient: "from-[#140f2a] via-[#1a1235] to-[#0d0a1f]" },
   { key: "mm", label: "MM", accent: "text-emerald-200", gradient: "from-[#101b29] via-[#0a1320] to-[#050a13]" },
-  { key: "opportunity", label: "Opportunity", accent: "text-amber-200", gradient: "from-[#25120a] via-[#321a11] to-[#160d07]" },
 ];
 
 type LeadBreakdown = {
@@ -97,10 +96,9 @@ const LeadSourceCard: React.FC<{ label: string; breakdown: LeadBreakdown; loadin
   };
 
 const initialSnapshot: LeadKpiSnapshot = {
-  hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-  dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-  mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
-  opportunity: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+    opportunity: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+    dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+    mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
 };
 
 const lineChartOptions = {
@@ -131,7 +129,7 @@ const lineChartOptions = {
 const LeadsDashboardPage: React.FC = () => {
   const [data, setData] = React.useState<LeadKpiSnapshot>(initialSnapshot);
   const [loading, setLoading] = React.useState(true);
-  const [selectedOrigin, setSelectedOrigin] = React.useState<"hipto" | "dolead" | "mm" | "opportunity">("hipto");
+  const [selectedOrigin, setSelectedOrigin] = React.useState<"opportunity" | "dolead" | "mm">("opportunity");
   const [series, setSeries] = React.useState<LeadDailySeriesEntry[]>([]);
   const [monthlyTotals, setMonthlyTotals] = React.useState({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
   const [recentSales, setRecentSales] = React.useState<RecentLeadSale[]>([]);
@@ -146,6 +144,7 @@ const LeadsDashboardPage: React.FC = () => {
 
   React.useEffect(() => {
     setSeries([]);
+    if (selectedOrigin === 'opportunity') return;
     const unsubscribe = subscribeToLeadMonthlySeries(selectedOrigin, (entries) => {
       setSeries(entries);
     });
@@ -191,10 +190,9 @@ const LeadsDashboardPage: React.FC = () => {
   }, [series]);
 
   const sourceBreakdowns = React.useMemo(() => ({
-    hipto: breakdownFromKpi(data.hipto),
+    opportunity: breakdownFromKpi(data.opportunity),
     dolead: breakdownFromKpi(data.dolead),
     mm: breakdownFromKpi(data.mm),
-    opportunity: breakdownFromKpi(data.opportunity),
   }), [data]);
 
   const agentDailyBreakdown = React.useMemo(() => {
@@ -257,7 +255,18 @@ const LeadsDashboardPage: React.FC = () => {
             <p className="text-sm text-blue-100/80">Nombre de ventes mobiles et box réalisées ce mois-ci.</p>
           </div>
           <div className="flex rounded-full border border-white/20 p-1 bg-white/5">
-            {leadSources.map((source) => (
+            <button
+              type="button"
+              onClick={() => setSelectedOrigin('opportunity')}
+              className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                selectedOrigin === 'opportunity'
+                  ? "bg-white text-[#002FA7]"
+                  : "text-blue-100 hover:bg-white/10"
+              }`}
+            >
+              Opportunity
+            </button>
+            {leadSources.filter(s => s.key !== 'opportunity').map((source) => (
               <button
                 key={source.key}
                 type="button"

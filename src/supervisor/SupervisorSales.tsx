@@ -241,7 +241,7 @@ const SupervisorSales: React.FC = () => {
       if (v) set.add(v);
     }
     // Garder l'ordre connu si présents
-    const known = ['hipto','dolead','mm'];
+  const known = ['opportunity','dolead','mm'];
     const list = Array.from(set);
     return list.sort((a,b) => {
       const ia = known.indexOf(a); const ib = known.indexOf(b);

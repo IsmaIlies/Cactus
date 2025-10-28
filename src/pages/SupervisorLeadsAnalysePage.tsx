@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { categorize } from '../leads/services/leadsSalesService';
 import ChartComponent from '../components/ChartComponent';
 
-type LeadSourceKey = 'hipto' | 'dolead' | 'mm';
+type LeadSourceKey = 'hipto' | 'opportunity' | 'dolead' | 'mm';
 
 type LeadBreakdown = {
   internet: number;
@@ -74,6 +74,7 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [sourceBreakdown, setSourceBreakdown] = React.useState<Record<LeadSourceKey, LeadBreakdown>>({
     hipto: createEmptyBreakdown(),
+    opportunity: createEmptyBreakdown(),
     dolead: createEmptyBreakdown(),
     mm: createEmptyBreakdown(),
   });
@@ -107,6 +108,7 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
       (snapshot) => {
         const originTotals: Record<LeadSourceKey, LeadBreakdown> = {
           hipto: createEmptyBreakdown(),
+          opportunity: createEmptyBreakdown(),
           dolead: createEmptyBreakdown(),
           mm: createEmptyBreakdown(),
         };
@@ -129,7 +131,7 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
         snapshot.forEach((doc) => {
           const data = doc.data() as Record<string, any>;
           const originRaw = String(data?.origineLead || '').toLowerCase();
-          if (originRaw !== 'hipto' && originRaw !== 'dolead' && originRaw !== 'mm') {
+          if (originRaw !== 'hipto' && originRaw !== 'opportunity' && originRaw !== 'dolead' && originRaw !== 'mm') {
             return;
           }
           const breakdown = breakdownFromOffer(data?.typeOffre);
@@ -164,6 +166,7 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
         setAggregates(aggregatesResult);
         setSourceBreakdown({
           hipto: { ...originTotals.hipto },
+          opportunity: { ...originTotals.opportunity },
           dolead: { ...originTotals.dolead },
           mm: { ...originTotals.mm },
         });
@@ -183,6 +186,7 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
         setAgentBreakdown([]);
         setSourceBreakdown({
           hipto: createEmptyBreakdown(),
+          opportunity: createEmptyBreakdown(),
           dolead: createEmptyBreakdown(),
           mm: createEmptyBreakdown(),
         });
@@ -366,11 +370,17 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
           <h2 className="text-lg font-semibold">Répartition par origine</h2>
           <p className="text-sm text-blue-100/70">Détail des offres vendues aujourd'hui (Internet / Sosh / Mobile).</p>
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <article className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#081225]/70 via-[#091a31]/70 to-[#0b1530]/70 p-5 shadow-[0_22px_60px_rgba(8,20,40,0.5)]">
             <h3 className="text-lg font-semibold text-cyan-200 mb-3">Hipto</h3>
             <div className="h-64">
               <ChartComponent type="pie" data={pieDataForSource(sourceBreakdown.hipto)} options={pieOptions} />
+            </div>
+          </article>
+          <article className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a]/70 via-[#09172f]/70 to-[#071326]/70 p-5 shadow-[0_22px_60px_rgba(8,20,40,0.5)]">
+            <h3 className="text-lg font-semibold text-cyan-200 mb-3">Opportunity</h3>
+            <div className="h-64">
+              <ChartComponent type="pie" data={pieDataForSource(sourceBreakdown.opportunity)} options={pieOptions} />
             </div>
           </article>
           <article className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0c1a3a]/70 via-[#11284b]/70 to-[#0a1938]/70 p-5 shadow-[0_22px_60px_rgba(8,20,40,0.5)]">

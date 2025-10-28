@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { categorize } from '../leads/services/leadsSalesService';
 import ChartComponent from '../components/ChartComponent';
 
-type LeadSourceKey = 'hipto' | 'dolead' | 'mm';
+type LeadSourceKey = 'opportunity' | 'dolead' | 'mm';
 
 type LeadBreakdown = {
   internet: number;
@@ -121,7 +121,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
   const normalizedArea = (area || '').toLowerCase();
 
   const [sourceBreakdown, setSourceBreakdown] = React.useState<Record<LeadSourceKey, LeadBreakdown>>({
-    hipto: createEmptyBreakdown(),
+    opportunity: createEmptyBreakdown(),
     dolead: createEmptyBreakdown(),
     mm: createEmptyBreakdown(),
   });
@@ -150,7 +150,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
       q,
       (snapshot) => {
         const totals: Record<LeadSourceKey, LeadBreakdown> = {
-          hipto: createEmptyBreakdown(),
+          opportunity: createEmptyBreakdown(),
           dolead: createEmptyBreakdown(),
           mm: createEmptyBreakdown(),
         };
@@ -159,7 +159,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
         snapshot.forEach((doc) => {
           const data = doc.data() as Record<string, any>;
           const originRaw = String(data?.origineLead || '').toLowerCase();
-          if (originRaw !== 'hipto' && originRaw !== 'dolead' && originRaw !== 'mm') {
+          if (originRaw !== 'opportunity' && originRaw !== 'dolead' && originRaw !== 'mm') {
             return;
           }
           const breakdown = breakdownFromOffer(data?.typeOffre);
@@ -171,7 +171,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
           agentMap.set(agentLabel, current);
         });
 
-        setSourceBreakdown(totals);
+  setSourceBreakdown(totals);
         const agents = Array.from(agentMap.entries())
           .map(([agent, counts]) => ({ agent, counts }))
           .sort((a, b) => b.counts.total - a.counts.total);
@@ -326,10 +326,10 @@ const SupervisorLeadsDashboard2: React.FC = () => {
         </div>
         <div className="grid gap-6 md:grid-cols-3">
           <LeadSourceCard
-            label="Hipto"
+            label="Opportunity"
             gradient="from-[#081225] via-[#091a31] to-[#0b1530]"
             accent="text-cyan-200"
-            breakdown={sourceBreakdown.hipto}
+            breakdown={sourceBreakdown.opportunity}
             loading={loading}
           />
           <LeadSourceCard
