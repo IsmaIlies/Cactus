@@ -112,6 +112,7 @@ const OFFER_FILTERS = [
 ] as const;
 
 const EDITABLE_FIELDS = [
+  { key: "displayName", label: "Téléacteur" },
   { key: "numeroId", label: "DID" },
   { key: "typeOffre", label: "Type d'offre" },
   { key: "intituleOffre", label: "Intitulé de l'offre" },
@@ -347,10 +348,18 @@ const SupervisorLeadsExportPage: React.FC = () => {
     try {
       const updates: Record<string, string | null> = {};
       EDITABLE_FIELDS.forEach(({ key }) => {
-        const raw = editData[key].trim();
-        updates[key] = raw.length > 0 ? raw : null;
+        if (key !== "displayName") {
+          const raw = editData[key].trim();
+          updates[key] = raw.length > 0 ? raw : null;
+        }
       });
-      await updateDoc(doc(db, "leads_sales", editingRow.id), updates);
+      // Mise à jour du displayName dans le sous-champ createdBy.displayName
+      const updatePayload: Record<string, any> = { ...updates };
+      const newDisplayName = (editData.displayName || "").trim();
+      if (newDisplayName) {
+        updatePayload["createdBy.displayName"] = newDisplayName;
+      }
+      await updateDoc(doc(db, "leads_sales", editingRow.id), updatePayload);
       closeEditModal();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Enregistrement impossible";
@@ -578,7 +587,20 @@ const SupervisorLeadsExportPage: React.FC = () => {
                 {EDITABLE_FIELDS.map(({ key, label }) => (
                   <label key={key} className="flex flex-col gap-1 text-xs uppercase tracking-[0.3em] text-slate-600">
                     {label}
-                    {key === "intituleOffre" ? (
+                    {key === "displayName" ? (
+                      <select
+                        value={editData.displayName}
+                        onChange={(e) => handleFieldChange("displayName", e.target.value)}
+                        className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                      >
+                        <option value="">Sélectionner un téléacteur</option>
+                        {agentOptions.map((agent) => (
+                          <option key={agent} value={agent}>
+                            {agent}
+                          </option>
+                        ))}
+                      </select>
+                    ) : key === "intituleOffre" ? (
                       <div className="space-y-2">
                         <select
                           value={offerOptions.some((option) => option.label === editData[key]) ? editData[key] : ""}
