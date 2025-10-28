@@ -19,6 +19,7 @@
         "firebase": "^11.8.1",
         "firebase-admin": "^12.7.0",
         "firebase-functions": "^6.6.0",
+        "jspdf": "^3.0.3",
         "justwatch-api": "^1.0.7",
         "lucide-react": "^0.344.0",
         "marked": "^15.0.12",
