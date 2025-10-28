@@ -15,6 +15,7 @@ const leadSources: Array<{ key: keyof LeadKpiSnapshot; label: string; accent: st
   { key: "hipto", label: "Hipto", accent: "text-cyan-200", gradient: "from-[#0a152a] via-[#09172f] to-[#071326]" },
   { key: "dolead", label: "Dolead", accent: "text-purple-200", gradient: "from-[#140f2a] via-[#1a1235] to-[#0d0a1f]" },
   { key: "mm", label: "MM", accent: "text-emerald-200", gradient: "from-[#101b29] via-[#0a1320] to-[#050a13]" },
+  { key: "opportunity", label: "Opportunity", accent: "text-amber-200", gradient: "from-[#25120a] via-[#321a11] to-[#160d07]" },
 ];
 
 type LeadBreakdown = {
@@ -99,6 +100,7 @@ const initialSnapshot: LeadKpiSnapshot = {
   hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
   dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
   mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+  opportunity: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
 };
 
 const lineChartOptions = {
@@ -129,7 +131,7 @@ const lineChartOptions = {
 const LeadsDashboardPage: React.FC = () => {
   const [data, setData] = React.useState<LeadKpiSnapshot>(initialSnapshot);
   const [loading, setLoading] = React.useState(true);
-  const [selectedOrigin, setSelectedOrigin] = React.useState<"hipto" | "dolead" | "mm">("hipto");
+  const [selectedOrigin, setSelectedOrigin] = React.useState<"hipto" | "dolead" | "mm" | "opportunity">("hipto");
   const [series, setSeries] = React.useState<LeadDailySeriesEntry[]>([]);
   const [monthlyTotals, setMonthlyTotals] = React.useState({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
   const [recentSales, setRecentSales] = React.useState<RecentLeadSale[]>([]);
@@ -192,6 +194,7 @@ const LeadsDashboardPage: React.FC = () => {
     hipto: breakdownFromKpi(data.hipto),
     dolead: breakdownFromKpi(data.dolead),
     mm: breakdownFromKpi(data.mm),
+    opportunity: breakdownFromKpi(data.opportunity),
   }), [data]);
 
   const agentDailyBreakdown = React.useMemo(() => {

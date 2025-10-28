@@ -151,6 +151,7 @@ export type LeadKpiSnapshot = {
   hipto: { mobiles: number; box: number; mobileSosh: number; internetSosh: number };
   dolead: { mobiles: number; box: number; mobileSosh: number; internetSosh: number };
   mm: { mobiles: number; box: number; mobileSosh: number; internetSosh: number };
+  opportunity: { mobiles: number; box: number; mobileSosh: number; internetSosh: number };
 };
 
 export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) => {
@@ -168,13 +169,14 @@ export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) =
         hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
         dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
         mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        opportunity: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
       };
 
       snapshot.forEach((doc) => {
         const data = doc.data() as any;
         // plus besoin de filtrer côté client: le where(createdAt >= todayStart) réduit la fenêtre
         const originRaw = (data?.origineLead || "").toLowerCase();
-        if (originRaw === "hipto" || originRaw === "dolead" || originRaw === "mm") {
+        if (originRaw === 'hipto' || originRaw === 'dolead' || originRaw === 'mm' || originRaw === 'opportunity') {
           const origin = originRaw as keyof LeadKpiSnapshot;
           const cat = categorize(data?.typeOffre);
           aggregated[origin].mobiles += cat.mobile + cat.mobileSosh;
@@ -196,6 +198,7 @@ export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) =
         hipto: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
         dolead: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
         mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
+        opportunity: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
       });
     }
   );
