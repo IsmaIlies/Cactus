@@ -9,6 +9,33 @@ type LeadsStats = {
 const INITIAL_STATS: LeadsStats = { dolead: 0, hipto: 0 };
 
 const SupervisorLeadsPlusPage: React.FC = () => {
+  const [apiRaw, setApiRaw] = React.useState<any>(null);
+  const [leadCount, setLeadCount] = React.useState<number | null>(null);
+  const [leadType, setLeadType] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const isLocal = typeof window !== 'undefined' && (window.location.origin.includes('localhost:5173') || window.location.hostname === '127.0.0.1');
+    const url = isLocal
+      ? '/vendor/leads-stats?token=b7E8g2QEBh8jz7eF57uT'
+      : 'https://orange-leads.mm.emitel.io/stats-lead.php?token=b7E8g2QEBh8jz7eF57uT';
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => {
+        setApiRaw(data);
+        if (Array.isArray(data.DATA) && data.DATA.length > 0) {
+          setLeadCount(data.DATA[0].count);
+          setLeadType(data.DATA[0].type);
+        } else {
+          setLeadCount(null);
+          setLeadType(null);
+        }
+      })
+      .catch(() => {
+        setApiRaw(null);
+        setLeadCount(null);
+        setLeadType(null);
+      });
+  }, []);
   const { area } = useParams<{ area: string }>();
   const normalizedArea = (area || '').toLowerCase();
 
@@ -20,19 +47,40 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/leads-stats');
+      const isLocal = typeof window !== 'undefined' && (window.location.origin.includes('localhost:5173') || window.location.hostname === '127.0.0.1');
+      const url = isLocal
+        ? '/vendor/leads-stats?token=b7E8g2QEBh8jz7eF57uT'
+        : 'https://orange-leads.mm.emitel.io/stats-lead.php?token=b7E8g2QEBh8jz7eF57uT';
+      const response = await fetch(url);
       const json = await response.json();
-      if (!response.ok || !json?.ok) {
-        throw new Error(json?.error || 'Erreur API (IP non autorisée ?)');
+      setApiRaw(json);
+      let dolead = 0;
+      let hipto = 0;
+      if (typeof json?.dolead === 'number' && typeof json?.hipto === 'number') {
+        dolead = Number(json.dolead) || 0;
+        hipto = Number(json.hipto) || 0;
+      } else if (json?.RESPONSE === 'OK' && Array.isArray(json?.DATA)) {
+        const findCount = (t: string) => {
+          const it = json.DATA.find((x: any) => String(x?.type).toLowerCase() === t);
+          return it && typeof it.count === 'number' ? it.count : 0;
+        };
+        dolead = Number(findCount('dolead')) || 0;
+        hipto = Number(findCount('hipto')) || 0;
+      } else {
+        throw new Error('Format de réponse inattendu');
       }
-      setStats({
-        dolead: Number(json.dolead) || 0,
-        hipto: Number(json.hipto) || 0,
-      });
+      setStats({ dolead, hipto });
+      if (Array.isArray(json?.DATA) && json.DATA.length > 0) {
+        setLeadCount(json.DATA[0].count ?? null);
+        setLeadType(json.DATA[0].type ?? null);
+      }
     } catch (e: any) {
-      const message = e?.message ? String(e.message) : 'Erreur inconnue';
+      const message = e?.message ? String(e.message) : 'Erreur inconnue (CORS ?)';
       setError(message);
       setStats(INITIAL_STATS);
+      setApiRaw(null);
+      setLeadCount(null);
+      setLeadType(null);
     } finally {
       setLoading(false);
     }
@@ -54,13 +102,14 @@ const SupervisorLeadsPlusPage: React.FC = () => {
   ] as const;
 
   return (
-    <div className="space-y-6 p-6 text-white">
+  <div className="space-y-6 p-6 text-white">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Leads+</h1>
           <p className="text-blue-200/80 text-sm">
-            Suivi des volumes Leads par origine. Clique sur « Mettre à jour » pour récupérer les derniers chiffres.
+            Suivi des volumes Leads par origine. Les chiffres sont affichés ci-dessous.
           </p>
+          {/* ...infos Count, Type et JSON supprimées comme demandé... */}
         </div>
         <button
           type="button"

@@ -1383,7 +1383,7 @@ const AiAssistantPage = () => {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder="Demandez-moi les nouveautés d'une plateforme ou posez votre question..."
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cactus-400 focus:border-cactus-400 transition-all duration-150 bg-white"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cactus-400 focus:border-cactus-400 transition-all duration-150 bg-white placeholder-black text-black"
               disabled={isAssistantTyping || loadingHistory}
               style={{ minHeight: 36, maxHeight: 60 }}
             />

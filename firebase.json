@@ -23,6 +23,11 @@
       "functionRegion": "europe-west9"
       },
       {
+        "source": "/api/leads-stats-forward",
+        "function": "leadsStatsForward",
+        "functionRegion": "europe-west1"
+      },
+      {
         "source": "/api/leads-stats",
         "function": "leadsStats",
         "functionRegion": "europe-west1"

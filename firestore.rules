@@ -1,6 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Historique et messages de l'assistant IA : chaque utilisateur peut lire/écrire ses propres conversations et messages
+    match /users/{userId}/chatHistories/{historyId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /users/{userId}/chatHistories/{historyId}/messages/{messageId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
     function hasAdminRole() { return request.auth != null && (request.auth.token.admin == true); }
     // Rôles autorisés à publier/mettre à jour les PDFs (programme & nouveautés)
     function isPdfPublisher() {

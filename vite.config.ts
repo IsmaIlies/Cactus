@@ -3,9 +3,10 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 
-// Dev helper: proxy /api/justwatch -> deployed Cloud Function to avoid 404 in local dev
+// Dev helper: proxy some /api/* -> deployed Cloud Functions to avoid 404 in local dev
 // Alternative (if using emulator): change target to your local emulator URL.
 const JUSTWATCH_FN_BASE = 'https://europe-west9-cactus-mm.cloudfunctions.net';
+const LEADS_FN_BASE = 'https://europe-west1-cactus-mm.cloudfunctions.net';
 
 export default defineConfig({
   plugins: [react()],
@@ -27,6 +28,19 @@ export default defineConfig({
         target: JUSTWATCH_FN_BASE,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/justwatch$/, '/justwatchProxy'),
+      },
+      // Forward /api/leads-stats to the leadsStats Cloud Function (prevents DOCTYPE HTML from SPA fallback)
+      '/api/leads-stats': {
+        target: LEADS_FN_BASE,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/leads-stats$/, '/leadsStats'),
+      },
+      // Dev-only proxy to call the vendor API without CORS from the browser
+      '/vendor/leads-stats': {
+        target: 'https://orange-leads.mm.emitel.io',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/vendor\/leads-stats/, '/stats-lead.php'),
       },
     },
   },

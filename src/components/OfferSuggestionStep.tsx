@@ -176,7 +176,7 @@ const OfferSuggestionStep: React.FC<Props> = ({ callData, setCallData }) => {
                   <button
                     key={idx}
                     onClick={() => handleObjection(obj)}
-                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 shadow-sm"
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 shadow-sm text-black"
                   >
                     {obj}
                   </button>

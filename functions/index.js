@@ -31,7 +31,7 @@ let leadsStatsCache = { expires: 0, payload: null };
 
 exports.leadsStats = onRequest({
   region: 'europe-west1',
-  timeoutSeconds: 15,
+  timeoutSeconds: 30,
   memory: '256MiB',
   secrets: [LEADS_API_TOKEN],
 }, async (req, res) => {
@@ -44,6 +44,12 @@ exports.leadsStats = onRequest({
   }
 
   try {
+    // Mode diagnostic: renvoyer l'IP de sortie pour whitelist chez le fournisseur
+    if (req.query && (req.query.diagnostic === '1' || req.query.diagnostic === 'true')) {
+      const ip = await getEgressIp();
+      return res.json({ ok: true, diagnostic: true, egressIp: ip || null });
+    }
+
     const now = Date.now();
     if (leadsStatsCache.payload && leadsStatsCache.expires > now) {
       return res.json({ ok: true, ...leadsStatsCache.payload });
@@ -77,25 +83,85 @@ exports.leadsStats = onRequest({
   }
 });
 
+// Proxy sécurisé qui relaie l'appel vers l'API Emitel en propageant l'IP client via X-Forwarded-For/X-Real-IP
+// Usage côté front: fetch('/api/leads-stats-forward?date_start=YYYY-MM-DD&date_end=YYYY-MM-DD')
+exports.leadsStatsForward = onRequest({
+  region: 'europe-west1',
+  timeoutSeconds: 30,
+  memory: '256MiB',
+  secrets: [LEADS_API_TOKEN],
+}, async (req, res) => {
+  setCorsHeaders(req, res);
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
+
+  try {
+    const baseUrl = process.env.LEADS_STATS_URL || 'https://orange-leads.mm.emitel.io/stats-lead.php';
+    const url = new URL(baseUrl);
+    const { date_start, date_end } = req.query || {};
+    if (typeof date_start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_start)) {
+      url.searchParams.set('date_start', date_start);
+    }
+    if (typeof date_end === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date_end)) {
+      url.searchParams.set('date_end', date_end);
+    }
+
+    const token = (LEADS_API_TOKEN && LEADS_API_TOKEN.value && LEADS_API_TOKEN.value()) || process.env.LEADS_API_TOKEN || '';
+    if (token) url.searchParams.set('token', token);
+
+    // Récupère la vraie IP du client (dernière du header X-Forwarded-For peut contenir une chaîne d'IPs)
+    const xff = (req.headers['x-forwarded-for'] || '').toString();
+    const clientIp = xff ? xff.split(',')[0].trim() : (req.headers['x-real-ip'] || req.ip || '').toString();
+
+    const upstream = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Cactus/LeadsProxy (+https://cactus-labs.fr)',
+        'X-Forwarded-For': clientIp,
+        'X-Real-IP': clientIp,
+      },
+      timeout: 20_000,
+    });
+
+    const text = await upstream.text();
+    res.set('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    // Retourne aussi l'IP client pour debug (en-tête non sensible)
+    res.set('X-Cactus-Client-IP', clientIp || '');
+    return res.status(upstream.status).send(text);
+  } catch (e) {
+    console.error('[leadsStatsForward] Error', e && e.stack ? e.stack : e);
+    return res.status(502).json({ error: e && e.message ? e.message : 'Proxy failure' });
+  }
+});
+
 // Appel HTTP vers l’API amont (URL configurable via variable d’environnement LEADS_STATS_URL)
+// Spécification (mail): GET https://orange-leads.mm.emitel.io/stats-lead.php?token=...&date_start=YYYY-MM-DD&date_end=YYYY-MM-DD
 async function fetchLeadStatsFromApi(params, token) {
-  const baseUrl = process.env.LEADS_STATS_URL || '';
+  const baseUrl = process.env.LEADS_STATS_URL || 'https://orange-leads.mm.emitel.io/stats-lead.php';
   if (!baseUrl) {
     // Pas d’URL, on renvoie des zéros
     return { dolead: 0, hipto: 0 };
   }
   const url = new URL(baseUrl);
+  // Paramètres de date optionnels
   Object.entries(params || {}).forEach(([k, v]) => {
     if (typeof v === 'string' && v) url.searchParams.set(k, v);
   });
+  // Le token est requis par la spec en query string
+  if (token) url.searchParams.set('token', token);
 
   const upstream = await fetch(url.toString(), {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      // Ne pas envoyer Authorization: Bearer ici, l'API attend le token en query
     },
-    timeout: 10_000,
+    timeout: 20_000,
   });
 
   let payload = null;
@@ -124,6 +190,23 @@ async function fetchLeadStatsFromApi(params, token) {
   }
   // Par défaut si format inconnu mais statut OK, renvoyer 0
   return { dolead: 0, hipto: 0 };
+}
+
+// Récupère l'IP publique de sortie des Cloud Functions (utile pour whitelist côté fournisseur)
+async function getEgressIp() {
+  try {
+    const r = await fetch('https://api.ipify.org?format=json', { timeout: 5000, headers: { 'Accept': 'application/json' } });
+    const j = await r.json().catch(() => null);
+    return j && j.ip ? j.ip : null;
+  } catch (e) {
+    try {
+      const r2 = await fetch('https://ifconfig.me/ip', { timeout: 5000 });
+      const t = await r2.text();
+      return (t || '').trim() || null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 const ADMIN_ACTIVITY_WINDOW_HOURS = 1;

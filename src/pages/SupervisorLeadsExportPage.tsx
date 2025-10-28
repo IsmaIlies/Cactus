@@ -22,6 +22,7 @@ type LeadRow = {
 };
 
 const HEADERS = [
+  "ID",
   "Heure de début",
   "Heure de fin",
   "Adresse de messagerie",
@@ -50,6 +51,7 @@ const buildWorksheetData = (rows: LeadRow[]) => {
   const headerRow = Array.from(HEADERS);
 
   const dataRows = rows.map((row) => [
+    row.id,
     formatDateTime(row.startedAt),
     formatDateTime(row.completedAt),
     row.email || "",
@@ -71,6 +73,7 @@ const buildWorksheetData = (rows: LeadRow[]) => {
 const createWorkbook = (rows: LeadRow[]) => {
   const worksheet = XLSXUtils.aoa_to_sheet(buildWorksheetData(rows));
   worksheet["!cols"] = [
+    { wch: 36 }, // ID
     { wch: 20 },
     { wch: 20 },
     { wch: 32 },
@@ -121,6 +124,16 @@ const EDITABLE_FIELDS = [
 ] as const;
 
 type EditableField = (typeof EDITABLE_FIELDS)[number]["key"];
+
+// Présentation plus soignée de l'intitulé d'offre
+// - Supprime le préfixe redondant "Offre " s'il est présent
+// - Nettoie espaces superflus
+const formatOfferTitle = (value: string | null): string => {
+  if (!value) return "—";
+  let v = value.trim();
+  v = v.replace(/^offre\s+/i, "");
+  return v;
+};
 
 const SupervisorLeadsExportPage: React.FC = () => {
   const [rows, setRows] = React.useState<LeadRow[]>([]);
@@ -364,7 +377,7 @@ const SupervisorLeadsExportPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-1 flex-col min-h-screen w-full px-10 py-10 bg-slate-950 text-white">
+    <div className="flex flex-1 flex-col min-h-screen w-full px-4 lg:px-6 py-8 bg-transparent text-white">
       <div className="grid w-full items-start gap-8 lg:grid-cols-[380px_1fr]">
         <aside className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-[0_12px_40px_rgba(30,64,175,0.3)]">
           <div>
@@ -397,33 +410,6 @@ const SupervisorLeadsExportPage: React.FC = () => {
                 max={endDate || undefined}
                 className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
               />
-            </label>
-
-            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-              Date de fin
-              <input
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                min={startDate || undefined}
-                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-              />
-            </label>
-
-            <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-              Fournisseur
-              <select
-                value={originFilter}
-                onChange={(event) => setOriginFilter(event.target.value)}
-                className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-              >
-                <option value="all">Tous les fournisseurs</option>
-                {originOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
             </label>
 
             <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
@@ -525,9 +511,24 @@ const SupervisorLeadsExportPage: React.FC = () => {
                         {origin}
                       </span>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-blue-50">{row.typeOffre || "—"}</span>
-                      <span className="break-all text-xs text-blue-200/70 leading-snug">{row.intituleOffre || "—"}</span>
+                    <div className="flex flex-col max-w-[320px]">
+                      {/* Type d'offre sous forme de badge pour une meilleure lisibilité */}
+                      <span className="inline-flex max-w-max items-center gap-1 rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-blue-100">
+                        {row.typeOffre || "—"}
+                      </span>
+                      {/* Intitulé: clamp sur 2 lignes, sans cassure brutale des mots, avec infobulle */}
+                      <span
+                        title={row.intituleOffre || undefined}
+                        className="mt-1 text-xs text-blue-200/80 leading-snug"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {formatOfferTitle(row.intituleOffre)}
+                      </span>
                     </div>
                     <span className="text-right text-xs text-blue-200/70 break-all">{trimmedId}</span>
                     <div className="flex items-center justify-center">

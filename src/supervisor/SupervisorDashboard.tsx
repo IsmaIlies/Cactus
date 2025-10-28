@@ -47,9 +47,10 @@ const SupervisorDashboard: React.FC = () => {
           const unsubs: Array<() => void> = [];
           const un1 = subscribeToLeadKpis((snap) => {
             if (cancelled) return;
-            const hip = (snap?.hipto?.mobiles || 0) + (snap?.hipto?.box || 0);
-            const dol = (snap?.dolead?.mobiles || 0) + (snap?.dolead?.box || 0);
-            const mm = (snap?.mm?.mobiles || 0) + (snap?.mm?.box || 0);
+            // Additionne uniquement Internet + Internet Sosh (PAS mobile ni mobile sosh)
+            const hip = (snap?.hipto?.internetSosh || 0) + (snap?.hipto?.box || 0 - (snap?.hipto?.internetSosh || 0));
+            const dol = (snap?.dolead?.internetSosh || 0) + (snap?.dolead?.box || 0 - (snap?.dolead?.internetSosh || 0));
+            const mm = (snap?.mm?.internetSosh || 0) + (snap?.mm?.box || 0 - (snap?.mm?.internetSosh || 0));
             const day = hip + dol + mm;
             setKpi((prev) => ({ ...prev, daySales: day }));
             setLeadDayByOrigin({ hipto: hip, doleadd: dol, mm });

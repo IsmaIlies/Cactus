@@ -381,7 +381,7 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
           </article>
           <article className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#123061]/70 via-[#1a3f74]/70 to-[#214a87]/70 p-5 shadow-[0_22px_60px_rgba(8,20,40,0.5)]">
             <h3 className="text-lg font-semibold text-blue-200 mb-3">MM</h3>
-            <div classégorie="h-64">
+            <div className="h-64">
               <ChartComponent type="pie" data={pieDataForSource(sourceBreakdown.mm)} options={pieOptions} />
             </div>
           </article>
@@ -416,20 +416,30 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                agentBreakdown.map((entry) => (
-                  <tr
-                    key={entry.agent}
-                    className="border-b border-white/10 transition-all.duration-200 hover:-translate-y-0.5 hover:bg-blue-500/10 hover:shadow-[0_8px_32px_rgba(56,189,248,0.35)]"
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap font-semibold text-white">{entry.agent}</td>
-                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.internet}</td>
-                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.internetSosh}</td>
-                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.mobile}</td>
-                    <td className="px-4 py-3 text-right text-blue-100">{entry.counts.mobileSosh}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-white">{entry.counts.total}</td>
+                <>
+                  {agentBreakdown.map((entry) => (
+                    <tr
+                      key={entry.agent}
+                      className="border-b border-white/10 transition-all.duration-200 hover:-translate-y-0.5 hover:bg-blue-500/10 hover:shadow-[0_8px_32px_rgba(56,189,248,0.35)]"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap font-semibold text-white">{entry.agent}</td>
+                      <td className="px-4 py-3 text-right text-blue-100">{entry.counts.internet}</td>
+                      <td className="px-4 py-3 text-right text-blue-100">{entry.counts.internetSosh}</td>
+                      <td className="px-4 py-3 text-right text-blue-100">{entry.counts.mobile}</td>
+                      <td className="px-4 py-3 text-right text-blue-100">{entry.counts.mobileSosh}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-white">{entry.counts.total}</td>
+                    </tr>
+                  ))}
+                  {/* Total row */}
+                  <tr className="bg-cyan-900/30 border-t border-cyan-400/30">
+                    <td className="px-4 py-3 font-bold text-cyan-200">Total ventes du jour</td>
+                    <td className="px-4 py-3 text-right font-bold text-cyan-100">{loading ? '--' : agentBreakdown.reduce((sum, a) => sum + a.counts.internet, 0)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-cyan-100">{loading ? '--' : agentBreakdown.reduce((sum, a) => sum + a.counts.internetSosh, 0)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-cyan-100">{loading ? '--' : agentBreakdown.reduce((sum, a) => sum + a.counts.mobile, 0)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-cyan-100">{loading ? '--' : agentBreakdown.reduce((sum, a) => sum + a.counts.mobileSosh, 0)}</td>
+                    <td className="px-4 py-3 text-right font-extrabold text-cyan-100">{loading ? '--' : agentBreakdown.reduce((sum, a) => sum + a.counts.total, 0)}</td>
                   </tr>
-
-                ))
+                </>
               )}
             </tbody>
           </table>

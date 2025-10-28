@@ -38,7 +38,8 @@ const breakdownFromOffer = (typeOffre: string | undefined | null): LeadBreakdown
     internetSosh: cat.internetSosh,
     mobile: cat.mobile,
     mobileSosh: cat.mobileSosh,
-    total: cat.internet + cat.internetSosh + cat.mobile + cat.mobileSosh,
+    // total = uniquement Internet + Internet Sosh
+    total: cat.internet + cat.internetSosh,
   };
 };
 

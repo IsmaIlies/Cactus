@@ -10,6 +10,7 @@ import TeleSalesAssistantTestPage from "./pages/TeleSalesAssistantTestPage";
 import TeleSalesAssistant from "./components/TeleSalesAssistant";
 import AssistantTestPage from "./pages/AssistantTestPage";
 import { AuthProvider } from "./contexts/AuthContext";
+import AutoLogout from "./components/AutoLogout";
 import { RegionProvider } from './contexts/RegionContext';
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
@@ -44,6 +45,7 @@ import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
 function App() {
   return (
     <AuthProvider>
+      <AutoLogout />
       <RegionProvider>
       <Routes>
         <Route
