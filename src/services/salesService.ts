@@ -1,3 +1,28 @@
+/**
+ * Récupère toutes les ventes validées (sans limite de date)
+ */
+export async function getAllValidatedSales(region?: 'FR' | 'CIV'): Promise<Sale[]> {
+  const activeRegion = region || (localStorage.getItem('activeRegion') as 'FR' | 'CIV') || 'FR';
+  try {
+    const qRef = query(collection(db, 'sales'), where('region', '==', activeRegion));
+    let snap = await getDocs(qRef);
+    // Si aucun résultat et la région est peut-être stockée en minuscule, on réessaie
+    if (snap.empty && region) {
+      const qRefLower = query(collection(db, 'sales'), where('region', '==', (activeRegion as string).toLowerCase()));
+      snap = await getDocs(qRefLower);
+    }
+    const all = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+    const isValidated = (s: Sale) => {
+      const bs = (s as any).basketStatus as string | undefined;
+      if (bs && ["OK", "Valid SOFT", "VALID FINALE"].includes(bs)) return true;
+      if ((s as any).consent === "yes") return true; // legacy
+      return false;
+    };
+    return all.filter(isValidated);
+  } catch (err: any) {
+    throw err;
+  }
+}
 // services/salesService.ts
 import { db } from "../firebase";
 import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";

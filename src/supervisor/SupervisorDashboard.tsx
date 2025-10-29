@@ -7,6 +7,8 @@ import { db } from '../firebase';
 import { subscribeToLeadKpis } from '../leads/services/leadsSalesService';
 
 const SupervisorDashboard: React.FC = () => {
+  // State pour le tableau ventes du jour par agent Canal+
+  const [canalDayByAgent, setCanalDayByAgent] = React.useState<Array<{ agent: string; canal: number; cine: number; sport: number; cent: number; total: number }>>([]);
   const { area } = useParams<{ area: string }>();
   const subtitle = area?.toUpperCase() === 'LEADS'
     ? 'KPIs LEADS — collection "leads_sales"'
@@ -35,6 +37,7 @@ const SupervisorDashboard: React.FC = () => {
   const [chartMonth, setChartMonth] = React.useState<{ data: any; options: any } | null>(null);
   // LEADS per-origin KPIs (du jour)
   const [leadDayByOrigin, setLeadDayByOrigin] = React.useState<{ opportunity: number; doleadd: number; mm: number }>({ opportunity: 0, doleadd: 0, mm: 0 });
+  const [chartCanalOnly, setChartCanalOnly] = React.useState<{ data: any; options: any } | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -63,8 +66,40 @@ const SupervisorDashboard: React.FC = () => {
           const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
           const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
 
+          // Conversion robuste Firestore Timestamp OU string Firestore
           const toDate = (v: any): Date | null => {
-            try { if (!v) return null; if (v instanceof Date) return v; if (typeof v?.toDate === 'function') return v.toDate(); const d = new Date(v); return isNaN(d.getTime()) ? null : d; } catch { return null; }
+            try {
+              if (!v) return null;
+              if (v instanceof Date) return v;
+              if (typeof v?.toDate === 'function') return v.toDate();
+              // Si string Firestore (ex: 'October 1, 2025 at 5:44:34 PM UTC+2')
+              if (typeof v === 'string') {
+                // Essaye d'abord Date.parse
+                let d = new Date(v);
+                if (!isNaN(d.getTime())) return d;
+                // Sinon, parse format Firestore
+                const match = v.match(/(\w+) (\d+), (\d{4}) at (\d+):(\d+):(\d+) (AM|PM) UTC([+-]\d+)/);
+                if (match) {
+                  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                  const month = months.indexOf(match[1]);
+                  const day = parseInt(match[2],10);
+                  const year = parseInt(match[3],10);
+                  let hour = parseInt(match[4],10);
+                  const min = parseInt(match[5],10);
+                  const sec = parseInt(match[6],10);
+                  const pm = match[7] === 'PM';
+                  if (pm && hour < 12) hour += 12;
+                  if (!pm && hour === 12) hour = 0;
+                  // UTC offset
+                  const offset = parseInt(match[8],10);
+                  const date = new Date(Date.UTC(year, month, day, hour - offset, min, sec));
+                  return date;
+                }
+                return null;
+              }
+              const d = new Date(v);
+              return isNaN(d.getTime()) ? null : d;
+            } catch { return null; }
           };
 
           const computeFromSnapshot = (snap: any, clientFilterByMonth: boolean) => {
@@ -168,8 +203,40 @@ const SupervisorDashboard: React.FC = () => {
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        // Conversion robuste Firestore Timestamp OU string Firestore
         const toDate = (v: any): Date | null => {
-          try { if (!v) return null; if (v instanceof Date) return v; if (typeof v?.toDate === 'function') return v.toDate(); const d = new Date(v); return isNaN(d.getTime()) ? null : d; } catch { return null; }
+          try {
+            if (!v) return null;
+            if (v instanceof Date) return v;
+            if (typeof v?.toDate === 'function') return v.toDate();
+            // Si string Firestore (ex: 'October 1, 2025 at 5:44:34 PM UTC+2')
+            if (typeof v === 'string') {
+              // Essaye d'abord Date.parse
+              let d = new Date(v);
+              if (!isNaN(d.getTime())) return d;
+              // Sinon, parse format Firestore
+              const match = v.match(/(\w+) (\d+), (\d{4}) at (\d+):(\d+):(\d+) (AM|PM) UTC([+-]\d+)/);
+              if (match) {
+                const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                const month = months.indexOf(match[1]);
+                const day = parseInt(match[2],10);
+                const year = parseInt(match[3],10);
+                let hour = parseInt(match[4],10);
+                const min = parseInt(match[5],10);
+                const sec = parseInt(match[6],10);
+                const pm = match[7] === 'PM';
+                if (pm && hour < 12) hour += 12;
+                if (!pm && hour === 12) hour = 0;
+                // UTC offset
+                const offset = parseInt(match[8],10);
+                const date = new Date(Date.UTC(year, month, day, hour - offset, min, sec));
+                return date;
+              }
+              return null;
+            }
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? null : d;
+          } catch { return null; }
         };
         const isSameDayOrAfter = (d: Date, ref: Date) => d.getTime() >= ref.getTime();
         const dayCount = validated.filter(s => { const d = toDate((s as any).date); return d && d >= startOfToday; }).length;
@@ -182,52 +249,116 @@ const SupervisorDashboard: React.FC = () => {
         const perSeller: Record<string, number> = {};
         validated.forEach(s => { const k = sellerKey(s); perSeller[k] = (perSeller[k] || 0) + 1; });
         const top = Object.entries(perSeller).sort((a,b) => b[1]-a[1]);
-        // Graphique du mois (validées/jour) — du 1er au dernier jour du mois courant
+        // Graphique multi courbes Canal+ (Canal+, Ciné Séries, Sport, 100%)
         const nowM = new Date();
         const startMonth = new Date(nowM.getFullYear(), nowM.getMonth(), 1, 0, 0, 0, 0);
         const daysInMonth = new Date(nowM.getFullYear(), nowM.getMonth() + 1, 0).getDate();
         const labels: string[] = [];
-        const counts = Array(daysInMonth).fill(0);
         for (let i = 0; i < daysInMonth; i++) {
           const day = new Date(startMonth.getFullYear(), startMonth.getMonth(), i + 1);
           labels.push(day.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }));
         }
+        // Initialisation des tableaux de ventes par jour pour chaque offre
+        const offers = [
+          { key: 'canal', label: 'Canal+', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+          { key: 'cine', label: 'Canal+ Ciné Séries', color: '#a78bfa', bg: 'rgba(167,139,250,0.1)' },
+          { key: 'sport', label: 'Canal+ Sport', color: '#34d399', bg: 'rgba(52,211,153,0.1)' },
+          { key: 'cent', label: '100% Canal', color: '#fbbf24', bg: 'rgba(251,191,36,0.1)' },
+        ];
+        const salesByDay: Record<string, number[]> = {
+          canal: Array(daysInMonth).fill(0),
+          cine: Array(daysInMonth).fill(0),
+          sport: Array(daysInMonth).fill(0),
+          cent: Array(daysInMonth).fill(0),
+        };
         for (const s of validated) {
           const d = toDate((s as any).date);
           if (!d) continue;
-          if (d.getMonth() !== nowM.getMonth() || d.getFullYear() !== nowM.getFullYear()) continue; // sécurité
+          if (d.getMonth() !== nowM.getMonth() || d.getFullYear() !== nowM.getFullYear()) continue;
           const index = d.getDate() - 1;
-          if (index >= 0 && index < daysInMonth) counts[index] += 1;
+          if (index < 0 || index >= daysInMonth) continue;
+          // Détection de l'offre (adapter selon structure réelle)
+          const offer = ((s as any).offer || (s as any).offre || '').toLowerCase();
+          if (offer.includes('ciné') || offer.includes('cine')) salesByDay.cine[index]++;
+          else if (offer.includes('sport')) salesByDay.sport[index]++;
+          else if (offer.includes('100')) salesByDay.cent[index]++;
+          else salesByDay.canal[index]++;
         }
-        const chartData = {
-          labels,
-          datasets: [
-            {
-              type: 'bar',
-              label: 'Ventes validées (mois)',
-              data: counts,
-              backgroundColor: 'rgba(16,185,129,0.6)',
-              borderColor: 'rgba(16,185,129,1)',
-              borderWidth: 1,
-            },
-          ],
-        };
+        const datasets = offers.map(o => ({
+          label: o.label,
+          data: salesByDay[o.key],
+          borderColor: o.color,
+          backgroundColor: o.bg,
+          pointBackgroundColor: o.color,
+          fill: true,
+          tension: 0.3,
+        }));
+        const chartData = { labels, datasets };
         const chartOptions = {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'bottom', labels: { color: '#cbd5e1' } },
+            legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } } },
             tooltip: { enabled: true },
+            title: { display: false },
           },
           scales: {
-            x: { ticks: { color: '#93c5fd' }, grid: { color: 'rgba(255,255,255,0.06)' } },
-            y: { ticks: { color: '#93c5fd' }, grid: { color: 'rgba(255,255,255,0.06)' }, beginAtZero: true, precision: 0 },
+            x: { ticks: { color: '#93c5fd', font: { size: 13 } }, grid: { color: 'rgba(255,255,255,0.08)' } },
+            y: { ticks: { color: '#93c5fd', font: { size: 13 } }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, precision: 0 },
           },
         };
+        // Prépare aussi un dataset pour les ventes Canal+ seules (hors Ciné, Sport, 100%)
+        const canalOnlyData = salesByDay.canal.slice();
+        const chartDataCanalOnly = {
+          labels,
+          datasets: [
+            {
+              label: 'Canal+ (seulement)',
+              data: canalOnlyData,
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59,130,246,0.1)',
+              pointBackgroundColor: '#3b82f6',
+              fill: true,
+              tension: 0.3,
+            },
+          ],
+        };
+        const chartOptionsCanalOnly = {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 14, weight: 'bold' } } },
+            tooltip: { enabled: true },
+            title: { display: false },
+          },
+          scales: {
+            x: { ticks: { color: '#93c5fd', font: { size: 13 } }, grid: { color: 'rgba(255,255,255,0.08)' } },
+            y: { ticks: { color: '#93c5fd', font: { size: 13 } }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, precision: 0 },
+          },
+        };
+        // Calcul ventes du jour par agent Canal+
+        const agentsMap: Record<string, { canal: number; cine: number; sport: number; cent: number; total: number }> = {};
+        for (const s of validated) {
+          const d = toDate((s as any).date);
+          if (!d) continue;
+          if (d.getDate() !== now.getDate() || d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) continue;
+          const offer = ((s as any).offer || (s as any).offre || '').toLowerCase();
+          const agent = String((s as any).name || (s as any).userName || (s as any).agent || 'Inconnu');
+          if (!agentsMap[agent]) agentsMap[agent] = { canal: 0, cine: 0, sport: 0, cent: 0, total: 0 };
+          if (offer.includes('ciné') || offer.includes('cine')) { agentsMap[agent].cine++; agentsMap[agent].total++; }
+          else if (offer.includes('sport')) { agentsMap[agent].sport++; agentsMap[agent].total++; }
+          else if (offer.includes('100')) { agentsMap[agent].cent++; agentsMap[agent].total++; }
+          else { agentsMap[agent].canal++; agentsMap[agent].total++; }
+        }
+        const canalDayRows = Object.entries(agentsMap)
+          .map(([agent, v]) => ({ agent, ...v }))
+          .sort((a, b) => b.total - a.total);
         if (!cancelled) {
           setKpi({ daySales: dayCount, weekSales: weekCount, conversion, topSeller: top[0]?.[0] || '—', monthSales: validated.length });
           setTopSellers(top.slice(0, 5));
           setChartMonth({ data: chartData, options: chartOptions });
+          setChartCanalOnly({ data: chartDataCanalOnly, options: chartOptionsCanalOnly });
+          setCanalDayByAgent(canalDayRows);
           setLoading(false);
         }
       } catch (e: any) {
@@ -282,15 +413,22 @@ const SupervisorDashboard: React.FC = () => {
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white/10 rounded-lg border border-white/10 p-4">
-          <p className="text-blue-200 text-sm mb-2">Chronologie du mois (du 1er au dernier jour)</p>
-          <div className="h-56">
+        <div className="lg:col-span-2 bg-white/10 rounded-2xl border border-white/10 p-6">
+          <div className="flex flex-row justify-between items-center mb-2">
+            <div>
+              <h2 className="text-white text-2xl font-bold leading-tight mb-0">Historique mensuel</h2>
+              <p className="text-[#b2becd] text-base font-normal mt-1 mb-0">Évolution des ventes Canal+ (toutes offres) sur le mois courant.</p>
+            </div>
+            <span className="text-[#b2becd] text-sm font-medium">Mois : {new Date().toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}</span>
+          </div>
+          <div className="h-80 mt-2">
             {chartMonth ? (
-              <ChartComponent type="bar" data={chartMonth.data} options={chartMonth.options} height={220} />
+              <ChartComponent type="line" data={chartMonth.data} options={chartMonth.options} height={300} />
             ) : (
               <div className="h-full flex items-center justify-center text-blue-300">…</div>
             )}
           </div>
+          {/* ...section Canal+ uniquement supprimée... */}
         </div>
         <div className="bg-white/10 rounded-lg border border-white/10 p-4">
           <p className="text-blue-200 text-sm mb-2">Top vendeurs</p>
@@ -302,6 +440,44 @@ const SupervisorDashboard: React.FC = () => {
             ))}
             {!loading && topSellers.length === 0 && <li className="text-blue-300">—</li>}
           </ul>
+        </div>
+      </div>
+      {/* Tableau ventes du jour par agent Canal+ (style inspiré du screen fourni) */}
+      <div className="bg-[#172635] rounded-2xl border border-[#22334a] p-6 mt-8 shadow-lg">
+        <div className="flex flex-row justify-between items-center mb-2">
+          <div>
+            <h2 className="text-white text-2xl font-bold leading-tight mb-0">Ventes du jour par agent</h2>
+            <p className="text-[#b2becd] text-base font-normal mt-1 mb-0">Canal+, Canal+ Ciné Séries, Canal+ Sport, Canal+ 100% consolidés.</p>
+          </div>
+          <span className="text-[#b2becd] text-sm font-medium">Actualisation automatique</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-base text-blue-100">
+            <thead>
+              <tr className="border-b border-[#22334a] bg-[#1e3147]">
+                <th className="py-2 px-4 text-left tracking-widest font-semibold text-blue-200">AGENT</th>
+                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">CANAL+</th>
+                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">CINÉ SÉRIES</th>
+                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">SPORT</th>
+                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">100% CANAL</th>
+                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {canalDayByAgent.length === 0
+                ? [<tr key="empty"><td colSpan={6} className="py-4 px-4 text-center text-blue-300">Aucun résultat</td></tr>]
+                : canalDayByAgent.map((row) => (
+                    <tr key={row.agent} className="border-b border-[#22334a] hover:bg-[#22334a]/40 transition-colors">
+                      <td className="py-2 px-4 font-semibold text-white">{row.agent}</td>
+                      <td className="py-2 px-4 text-center">{row.canal}</td>
+                      <td className="py-2 px-4 text-center">{row.cine}</td>
+                      <td className="py-2 px-4 text-center">{row.sport}</td>
+                      <td className="py-2 px-4 text-center">{row.cent}</td>
+                      <td className="py-2 px-4 text-center font-bold text-white">{row.total}</td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

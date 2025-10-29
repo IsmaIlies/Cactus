@@ -48,61 +48,86 @@ const SupervisorLayout: React.FC = () => {
             </div>
           </div>
         </div>
-        <nav className="p-3 space-y-2 flex-1 overflow-y-auto">
-          {String(area).toLowerCase() !== 'leads' && (
-            <NavLink
-              to={base}
-              end
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <LayoutDashboard className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              Dashboard
-            </NavLink>
-          )}
+        <div className="p-3 space-y-2 flex-1 overflow-y-auto">
           {String(area).toLowerCase() === 'leads' && (
-            <NavLink
-              to={`${base}/dashboard2`}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <Gauge className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              Dashboard
-            </NavLink>
+            <div>
+              <NavLink to={`${base}/dashboard2`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <Gauge className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Dashboard
+              </NavLink>
+              <NavLink to={`${base}/leads-plus`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <PlusCircle className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Leads+
+              </NavLink>
+              <NavLink to={`${base}/export`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <FileDown className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Export
+              </NavLink>
+              <NavLink to={`${base}/analyse`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <FlaskConical className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Analyse
+              </NavLink>
+              <NavLink to={`${base}/ecoutes`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <Phone className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                N° Écoutes
+              </NavLink>
+              <NavLink to={`${base}/leads-supervision`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <ListChecks className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Import
+              </NavLink>
+            </div>
           )}
-          {String(area).toLowerCase() === 'leads' && (
-            <NavLink
-              to={`${base}/leads-plus`}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <PlusCircle className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              Leads+
-            </NavLink>
+          {(String(area).toLowerCase() === 'fr' || String(area).toLowerCase() === 'civ') && (
+            <div>
+              <NavLink to={`${base}`} end className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-orange-400/40 via-red-500/30 to-transparent text-white border border-orange-300/40 shadow-[0_12px_32px_rgba(251,191,36,0.35)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(251,191,36,0.15)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-orange-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <LayoutDashboard className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Dashboard
+              </NavLink>
+              <NavLink to={`${base}/export`} className={({ isActive }) =>
+                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
+              }>
+                <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <FileDown className="relative h-4 w-4" aria-hidden="true" />
+                </span>
+                Export
+              </NavLink>
+            </div>
           )}
           {String(area).toLowerCase() === 'civ' && (
             <NavLink
@@ -120,78 +145,6 @@ const SupervisorLayout: React.FC = () => {
                 <Clock3 className="relative h-4 w-4" aria-hidden="true" />
               </span>
               Présence TA
-            </NavLink>
-          )}
-          {String(area).toLowerCase() === 'leads' && (
-            <NavLink
-              to={`${base}/export`}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <FileDown className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              Export
-            </NavLink>
-          )}
-          {String(area).toLowerCase() === 'leads' && (
-            <NavLink
-              to={`${base}/analyse`}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <FlaskConical className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              Analyse
-            </NavLink>
-          )}
-          {String(area).toLowerCase() === 'leads' && (
-            <NavLink
-              to={`${base}/ecoutes`}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <Phone className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              N° Écoutes
-            </NavLink>
-          )}
-          {String(area).toLowerCase() === 'leads' && (
-            <NavLink
-              to={`${base}/leads-supervision`}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]'
-                    : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'
-                }`
-              }
-            >
-              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-cyan-300 transition group-hover:bg-white/10 group-hover:text-white">
-                <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
-                <ListChecks className="relative h-4 w-4" aria-hidden="true" />
-              </span>
-              Import
             </NavLink>
           )}
           <NavLink
@@ -221,7 +174,7 @@ const SupervisorLayout: React.FC = () => {
             </span>
             <span className="relative">Déconnexion</span>
           </button>
-        </nav>
+        </div>
       </aside>
 
       {/* Main content */}
@@ -249,6 +202,6 @@ const SupervisorLayout: React.FC = () => {
       </main>
     </div>
   );
-};
+}
 
 export default SupervisorLayout;
