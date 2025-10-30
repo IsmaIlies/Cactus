@@ -104,7 +104,7 @@ function App() {
           <Route path="leads-plus" element={<SupervisorLeadsPlusPage />} />
           <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
           <Route path="ecoutes" element={<SupervisorLeadsEcoutesPage />} />
-          <Route path="export" element={<SupervisorExportPage />} />
+          <Route path="export" element={<SupervisorLeadsExportPage />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />
           {/* New nested page: Supervisor LEADS page (dashboard + CSV import) */}
