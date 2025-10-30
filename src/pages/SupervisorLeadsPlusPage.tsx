@@ -10,33 +10,77 @@ type LeadsStats = {
 
 const INITIAL_STATS: LeadsStats = { dolead: 0, opportunity: 0 };
 
+const toIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatHistoryDate = (iso: string) => {
+  const parts = iso.split('-').map((value) => Number(value));
+  if (parts.length === 3 && parts.every((value) => Number.isFinite(value))) {
+    const [year, month, day] = parts;
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+    });
+  }
+  return iso;
+};
+
 const SupervisorLeadsPlusPage: React.FC = () => {
   const [leadCount, setLeadCount] = React.useState<number | null>(null);
   const [leadType, setLeadType] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
+  const baseStatsUrl = React.useMemo(() => {
     const isLocal = typeof window !== 'undefined' && (window.location.origin.includes('localhost:5173') || window.location.hostname === '127.0.0.1');
-    const url = isLocal
+    return isLocal
       ? '/vendor/leads-stats?token=b7E8g2QEBh8jz7eF57uT'
       : 'https://orange-leads.mm.emitel.io/stats-lead.php?token=b7E8g2QEBh8jz7eF57uT';
-    fetch(url)
+  }, []);
+
+  const parseLeadStats = React.useCallback((json: any): LeadsStats => {
+    let dolead = 0;
+    let opportunity = 0;
+    if (typeof json?.dolead === 'number') {
+      dolead = Number(json.dolead) || 0;
+    }
+    if (typeof json?.opportunity === 'number') {
+      opportunity = Number(json.opportunity) || 0;
+    } else if (typeof json?.hipto === 'number') {
+      opportunity = Number(json.hipto) || 0;
+    }
+    if (json?.RESPONSE === 'OK' && Array.isArray(json?.DATA)) {
+      const findCount = (t: string) => {
+        const match = json.DATA.find((x: any) => x && String(x.type).toLowerCase() === t);
+        return match && typeof match.count === 'number' ? match.count : 0;
+      };
+      dolead = Number(findCount('dolead')) || dolead;
+      const opportunityCount = Number(findCount('opportunity')) || Number(findCount('hipto'));
+      opportunity = opportunityCount || opportunity;
+    }
+    return { dolead, opportunity };
+  }, []);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch(baseStatsUrl, { signal: controller.signal })
       .then((res) => res.json())
       .then((data) => {
-  // setApiRaw(data); // removed unused
-        if (Array.isArray(data.DATA) && data.DATA.length > 0) {
-          setLeadCount(data.DATA[0].count);
-          setLeadType(data.DATA[0].type);
-        } else {
-          setLeadCount(null);
-          setLeadType(null);
-        }
+        const parsed = parseLeadStats(data);
+        setStats(parsed);
+        const firstEntry = Array.isArray(data?.DATA) && data.DATA.length > 0 ? data.DATA[0] : null;
+        setLeadCount(firstEntry && typeof firstEntry.count === 'number' ? firstEntry.count : null);
+        setLeadType(firstEntry && firstEntry.type ? firstEntry.type : null);
       })
       .catch(() => {
-  // setApiRaw(null); // removed unused
         setLeadCount(null);
         setLeadType(null);
       });
-  }, []);
+    return () => controller.abort();
+  }, [baseStatsUrl, parseLeadStats]);
   const { area } = useParams<{ area: string }>();
   const normalizedArea = (area || '').toLowerCase();
 
@@ -48,34 +92,39 @@ const SupervisorLeadsPlusPage: React.FC = () => {
   });
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string>('');
+  const [history, setHistory] = React.useState<Array<{ date: string; dolead: number; opportunity: number }>>([]);
+  const [historyLoading, setHistoryLoading] = React.useState<boolean>(true);
+  const [historyError, setHistoryError] = React.useState<string>('');
+  const monthOptions = React.useMemo(() => {
+    const options: Array<{ label: string; value: string }> = [];
+    const current = new Date();
+    for (let i = 0; i < 6; i += 1) {
+      const d = new Date(current.getFullYear(), current.getMonth() - i, 1);
+      const value = `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-01`;
+      const label = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      options.push({ label, value });
+    }
+    return options;
+  }, []);
+  const [selectedMonth, setSelectedMonth] = React.useState<string>(monthOptions[0]?.value || toIsoDate(new Date()));
+  const selectedMonthDate = React.useMemo(() => {
+    const parsed = new Date(selectedMonth);
+    if (Number.isNaN(parsed.getTime())) {
+      const fallback = new Date();
+      fallback.setDate(1);
+      return fallback;
+    }
+    return parsed;
+  }, [selectedMonth]);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const isLocal = typeof window !== 'undefined' && (window.location.origin.includes('localhost:5173') || window.location.hostname === '127.0.0.1');
-      const url = isLocal
-        ? '/vendor/leads-stats?token=b7E8g2QEBh8jz7eF57uT'
-        : 'https://orange-leads.mm.emitel.io/stats-lead.php?token=b7E8g2QEBh8jz7eF57uT';
-      const response = await fetch(url);
+      const response = await fetch(baseStatsUrl);
       const json = await response.json();
-  // setApiRaw(json); // removed unused
-      let dolead = 0;
-      let opportunity = 0;
-      if (typeof json?.dolead === 'number' && typeof json?.opportunity === 'number') {
-        dolead = Number(json.dolead) || 0;
-        opportunity = Number(json.opportunity) || 0;
-      } else if (json?.RESPONSE === 'OK' && Array.isArray(json?.DATA)) {
-        const findCount = (t: string) => {
-          const it = json.DATA.find((x: any) => String(x?.type).toLowerCase() === t);
-          return it && typeof it.count === 'number' ? it.count : 0;
-        };
-        dolead = Number(findCount('dolead')) || 0;
-        opportunity = Number(findCount('opportunity')) || 0;
-      } else {
-        throw new Error('Format de réponse inattendu');
-      }
-      setStats({ dolead, opportunity });
+      const parsed = parseLeadStats(json);
+      setStats(parsed);
       if (Array.isArray(json?.DATA) && json.DATA.length > 0) {
         setLeadCount(json.DATA[0].count ?? null);
         setLeadType(json.DATA[0].type ?? null);
@@ -90,7 +139,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [baseStatsUrl, parseLeadStats]);
 
   // TODO: ajouter des filtres date_start/date_end via querystring.
 
@@ -133,6 +182,52 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     { key: 'dolead' as const, label: 'Dolead', leads: stats.dolead, kpi: safeSnapshot.dolead },
     { key: 'opportunity' as const, label: 'Opportunity', leads: stats.opportunity, kpi: safeSnapshot.opportunity },
   ];
+
+  React.useEffect(() => {
+    if (normalizedArea !== 'leads') {
+      setHistory([]);
+      setHistoryLoading(false);
+      setHistoryError('');
+      return;
+    }
+    let cancelled = false;
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      setHistoryError('');
+      try {
+        const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
+        const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0);
+        const days: string[] = [];
+        for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+          days.push(toIsoDate(new Date(d)));
+        }
+        const entries: Array<{ date: string; dolead: number; opportunity: number }> = [];
+        for (const isoDate of days) {
+          const url = `${baseStatsUrl}&date_start=${isoDate}&date_end=${isoDate}`;
+          const response = await fetch(url);
+          const json = await response.json();
+          const parsed = parseLeadStats(json);
+          entries.push({ date: isoDate, ...parsed });
+        }
+        if (!cancelled) {
+          setHistory(entries);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setHistory([]);
+          setHistoryError(err?.message || 'Impossible de charger l’historique des leads.');
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    };
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseStatsUrl, normalizedArea, parseLeadStats, selectedMonthDate]);
 
   const handleExport = React.useCallback(
     async (
@@ -355,6 +450,78 @@ const SupervisorLeadsPlusPage: React.FC = () => {
           );
         })}
       </div>
+
+      <section className="relative overflow-hidden rounded-3xl border border-cyan-400/40 bg-gradient-to-br from-[#030b1a] via-[#051633] to-[#020618] p-6 shadow-[0_24px_60px_rgba(34,211,238,0.22)]">
+        <div className="pointer-events-none absolute -top-24 -left-12 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-28 -right-16 h-60 w-60 rounded-full bg-emerald-500/15 blur-3xl" />
+        <header className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-cyan-100">Historique des leads livrés</h2>
+            <p className="text-sm text-cyan-200/70">Volumes Internet Dolead & Opportunity — filtrés par mois</p>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-cyan-100/80">
+            <span>Mois</span>
+            <select
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              className="min-w-[180px] rounded-lg border border-white/10 bg-slate-900/40 px-3 py-2 text-sm text-white focus:border-cyan-300 focus:outline-none"
+            >
+              {monthOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label.charAt(0).toUpperCase() + option.label.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </header>
+        {historyError && !historyLoading ? (
+          <div className="relative mt-4 rounded-xl border border-rose-400/40 bg-rose-500/20 px-3 py-2 text-sm text-rose-100 shadow-[0_12px_28px_rgba(244,63,94,0.25)]">
+            {historyError}
+          </div>
+        ) : null}
+        <div className="relative mt-6">
+          {historyLoading ? (
+            <div className="py-10 text-center text-sm text-cyan-100/70">Chargement de l’historique…</div>
+          ) : history.length === 0 ? (
+            <div className="py-10 text-center text-sm text-cyan-100/70">Aucune donnée disponible pour ce mois.</div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {history.map((entry) => {
+                const total = entry.dolead + entry.opportunity;
+                return (
+                  <div
+                    key={entry.date}
+                    className="group relative overflow-hidden rounded-2xl border border-cyan-400/20 bg-white/5 px-4 py-4 shadow-[0_18px_40px_rgba(14,165,233,0.18)] transition duration-300 hover:-translate-y-1 hover:border-cyan-300/40 hover:bg-cyan-500/10"
+                  >
+                    <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-60 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.35),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(56,189,248,0.25),transparent_60%)]" />
+                    <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{formatHistoryDate(entry.date)}</p>
+                        <p className="text-xs text-cyan-100/70">{entry.date}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-sm font-semibold text-emerald-100 drop-shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+                          Total : {total.toLocaleString('fr-FR')} leads
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/50 bg-sky-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-sky-100">
+                            <span className="h-2 w-2 rounded-full bg-sky-300" aria-hidden />
+                            Dolead : {entry.dolead.toLocaleString('fr-FR')}
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-amber-100">
+                            <span className="h-2 w-2 rounded-full bg-amber-300" aria-hidden />
+                            Opportunity : {entry.opportunity.toLocaleString('fr-FR')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 };
