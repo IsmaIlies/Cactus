@@ -1,14 +1,19 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import { subscribeToLeadKpis, type LeadKpiSnapshot } from '../leads/services/leadsSalesService';
+import { collection, getDocs, query, Timestamp, where } from 'firebase/firestore';
+import { subscribeToLeadKpis, categorize, type LeadKpiSnapshot } from '../leads/services/leadsSalesService';
+import { db } from '../firebase';
 
+
+type ProviderKey = 'dolead' | 'opportunity' | 'mm';
 
 type LeadsStats = {
   dolead: number;
   opportunity: number;
+  mm: number;
 };
 
-const INITIAL_STATS: LeadsStats = { dolead: 0, opportunity: 0 };
+const INITIAL_STATS: LeadsStats = { dolead: 0, opportunity: 0, mm: 0 };
 
 const toIsoDate = (date: Date) => {
   const year = date.getFullYear();
@@ -31,6 +36,59 @@ const formatHistoryDate = (iso: string) => {
   return iso;
 };
 
+const PROVIDERS: ProviderKey[] = ['dolead', 'opportunity', 'mm'];
+
+const PROVIDER_LABELS: Record<ProviderKey, string> = {
+  dolead: 'Dolead',
+  opportunity: 'Opportunity',
+  mm: 'MM',
+};
+
+type HistoryEntry = {
+  date: string;
+  dolead: number;
+  opportunity: number;
+  mm: number;
+};
+
+type HistorySalesTotals = {
+  internet: number;
+  internetSosh: number;
+  byOrigin: Record<ProviderKey, { internet: number; internetSosh: number }>;
+};
+
+const createEmptySalesTotals = (): HistorySalesTotals => ({
+  internet: 0,
+  internetSosh: 0,
+  byOrigin: {
+    dolead: { internet: 0, internetSosh: 0 },
+    opportunity: { internet: 0, internetSosh: 0 },
+    mm: { internet: 0, internetSosh: 0 },
+  },
+});
+
+const normalizeDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    const maybe = (value as { toDate?: () => Date }).toDate;
+    if (typeof maybe === 'function') {
+      try {
+        const date = maybe();
+        return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+};
+
 const SupervisorLeadsPlusPage: React.FC = () => {
   const [leadCount, setLeadCount] = React.useState<number | null>(null);
   const [leadType, setLeadType] = React.useState<string | null>(null);
@@ -42,26 +100,33 @@ const SupervisorLeadsPlusPage: React.FC = () => {
   }, []);
 
   const parseLeadStats = React.useCallback((json: any): LeadsStats => {
-    let dolead = 0;
-    let opportunity = 0;
+    let next: LeadsStats = { ...INITIAL_STATS };
     if (typeof json?.dolead === 'number') {
-      dolead = Number(json.dolead) || 0;
+      next.dolead = Number(json.dolead) || 0;
     }
     if (typeof json?.opportunity === 'number') {
-      opportunity = Number(json.opportunity) || 0;
+      next.opportunity = Number(json.opportunity) || 0;
     } else if (typeof json?.hipto === 'number') {
-      opportunity = Number(json.hipto) || 0;
+      next.opportunity = Number(json.hipto) || 0;
+    }
+    if (typeof json?.mm === 'number') {
+      next.mm = Number(json.mm) || 0;
     }
     if (json?.RESPONSE === 'OK' && Array.isArray(json?.DATA)) {
-      const findCount = (t: string) => {
-        const match = json.DATA.find((x: any) => x && String(x.type).toLowerCase() === t);
+      const findCount = (type: string) => {
+        const match = json.DATA.find((item: any) => item && String(item.type).toLowerCase() === type);
         return match && typeof match.count === 'number' ? match.count : 0;
       };
-      dolead = Number(findCount('dolead')) || dolead;
+      const doleadCount = Number(findCount('dolead'));
       const opportunityCount = Number(findCount('opportunity')) || Number(findCount('hipto'));
-      opportunity = opportunityCount || opportunity;
+      const mmCount = Number(findCount('mm'));
+      next = {
+        dolead: doleadCount || next.dolead,
+        opportunity: opportunityCount || next.opportunity,
+        mm: mmCount || next.mm,
+      };
     }
-    return { dolead, opportunity };
+    return next;
   }, []);
 
   React.useEffect(() => {
@@ -92,9 +157,10 @@ const SupervisorLeadsPlusPage: React.FC = () => {
   });
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string>('');
-  const [history, setHistory] = React.useState<Array<{ date: string; dolead: number; opportunity: number }>>([]);
+  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState<boolean>(true);
   const [historyError, setHistoryError] = React.useState<string>('');
+  const [historySales, setHistorySales] = React.useState<Record<string, HistorySalesTotals>>({});
   const monthOptions = React.useMemo(() => {
     const options: Array<{ label: string; value: string }> = [];
     const current = new Date();
@@ -116,6 +182,108 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     }
     return parsed;
   }, [selectedMonth]);
+  const isOctoberSelected = selectedMonthDate.getMonth() === 9;
+  const historyStartDay = isOctoberSelected ? 29 : 1;
+  const [historyDetail, setHistoryDetail] = React.useState<{
+    date: string;
+    label: string;
+    leads: Record<ProviderKey, number>;
+    sales: HistorySalesTotals | null;
+  } | null>(null);
+
+  const closeHistoryDetail = React.useCallback(() => {
+    setHistoryDetail(null);
+  }, []);
+
+  const renderHistoryDetailModal = () => {
+    if (!historyDetail) {
+      return null;
+    }
+
+    const providerStats = PROVIDERS.map((provider) => {
+      const leads = historyDetail.leads[provider] ?? 0;
+      const salesBucket = historyDetail.sales?.byOrigin[provider];
+      const internetSales = salesBucket ? salesBucket.internet + salesBucket.internetSosh : 0;
+      const internetRate = leads > 0 ? (internetSales / leads) * 100 : 0;
+      return {
+        key: provider,
+        label: PROVIDER_LABELS[provider],
+        leads,
+        internetSales,
+        internetRate,
+      };
+    });
+
+    const totalLeads = PROVIDERS.reduce((acc, provider) => acc + (historyDetail.leads[provider] ?? 0), 0);
+    const totalInternet = historyDetail.sales ? historyDetail.sales.internet : 0;
+    const totalRate = totalLeads > 0 ? (totalInternet / totalLeads) * 100 : 0;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <button
+          type="button"
+          aria-label="Fermer"
+          className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+          onClick={closeHistoryDetail}
+        />
+        <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-cyan-400/40 bg-slate-950/90 p-6 shadow-[0_25px_70px_rgba(15,118,110,0.35)]">
+          <header className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.4em] text-cyan-200/70">Détail journée</p>
+              <h3 className="text-xl font-semibold text-white">{historyDetail.label}</h3>
+              <p className="text-sm text-cyan-100/70">Total leads : {totalLeads.toLocaleString('fr-FR')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={closeHistoryDetail}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/10 text-lg text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/20"
+              aria-label="Fermer la fenêtre"
+            >
+              ×
+            </button>
+          </header>
+
+          <div className="mt-4 space-y-3">
+            <ul className="space-y-2">
+              {providerStats.map(({ key, label, leads, internetSales, internetRate }) => {
+                const rateLabel = leads > 0
+                  ? `${internetRate.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+                  : '—';
+                return (
+                  <li
+                    key={key}
+                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white"
+                  >
+                    <div>
+                      <p className="font-semibold">{label}</p>
+                      <p className="text-xs text-cyan-100/70">Leads livrés : {leads.toLocaleString('fr-FR')}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">Internet</p>
+                      <p className="text-base font-semibold text-emerald-200">{internetSales.toLocaleString('fr-FR')}</p>
+                      <p className="text-xs text-emerald-100/70">Taux : {rateLabel}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <footer className="mt-5 rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>Total internet : {totalInternet.toLocaleString('fr-FR')}</span>
+              <span>
+                Taux global :{' '}
+                {totalLeads > 0
+                  ? `${totalRate.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+                  : '—'}
+              </span>
+            </div>
+          </footer>
+        </div>
+      </div>
+    );
+  };
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -160,6 +328,103 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     };
   }, [normalizedArea]);
 
+  React.useEffect(() => {
+    if (normalizedArea !== 'leads') {
+      setHistory([]);
+      setHistoryLoading(false);
+      setHistoryError('');
+      setHistorySales({});
+      setHistoryDetail(null);
+      return;
+    }
+    let cancelled = false;
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      setHistoryError('');
+      setHistorySales({});
+      try {
+        const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), historyStartDay);
+        const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0);
+        const days: string[] = [];
+        for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+          days.push(toIsoDate(new Date(d)));
+        }
+        const daysSet = new Set(days);
+        const entries: HistoryEntry[] = [];
+        for (const isoDate of days) {
+          const url = `${baseStatsUrl}&date_start=${isoDate}&date_end=${isoDate}`;
+          const response = await fetch(url);
+          const json = await response.json();
+          const parsed = parseLeadStats(json);
+          entries.push({ date: isoDate, dolead: parsed.dolead, opportunity: parsed.opportunity, mm: parsed.mm });
+        }
+
+        const salesStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), historyStartDay, 0, 0, 0, 0);
+        const salesEndExclusive = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 1, 0, 0, 0, 0);
+        const salesQuery = query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('createdAt', '>=', Timestamp.fromDate(salesStart)),
+          where('createdAt', '<', Timestamp.fromDate(salesEndExclusive))
+        );
+        const snapshot = await getDocs(salesQuery);
+        const salesAccumulator: Record<string, HistorySalesTotals> = {};
+        snapshot.forEach((document) => {
+          const data = document.data() as Record<string, unknown>;
+          const createdAt = normalizeDate(data?.createdAt ?? null);
+          if (!createdAt) return;
+          const isoDate = toIsoDate(createdAt);
+          if (!daysSet.has(isoDate)) return;
+          const originRaw = typeof data?.origineLead === 'string' ? data.origineLead.toLowerCase() : '';
+          if (!PROVIDERS.includes(originRaw as ProviderKey)) return;
+          const origin = originRaw as ProviderKey;
+          const categorized = categorize(data?.typeOffre as string | undefined | null);
+          const record = salesAccumulator[isoDate] ?? createEmptySalesTotals();
+          record.internet += categorized.internet + categorized.internetSosh;
+          record.internetSosh += categorized.internetSosh;
+          record.byOrigin[origin].internet += categorized.internet;
+          record.byOrigin[origin].internetSosh += categorized.internetSosh;
+          salesAccumulator[isoDate] = record;
+        });
+
+        if (!cancelled) {
+          setHistory(entries);
+          setHistorySales(salesAccumulator);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setHistory([]);
+          setHistoryError(err?.message || 'Impossible de charger l’historique des leads.');
+          setHistorySales({});
+          setHistoryDetail(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    };
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [baseStatsUrl, historyStartDay, normalizedArea, parseLeadStats, selectedMonthDate]);
+
+  React.useEffect(() => {
+    if (!historyDetail) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setHistoryDetail(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [historyDetail]);
+
   if (normalizedArea !== 'leads') {
     return (
       <div className="p-6 text-sm text-rose-200">
@@ -176,58 +441,29 @@ const SupervisorLeadsPlusPage: React.FC = () => {
         mm: { mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 },
       };
 
-  const totalLeads = stats.dolead + stats.opportunity;
+  const totalLeads = stats.dolead + stats.opportunity + stats.mm;
 
   const originCards = [
     { key: 'dolead' as const, label: 'Dolead', leads: stats.dolead, kpi: safeSnapshot.dolead },
     { key: 'opportunity' as const, label: 'Opportunity', leads: stats.opportunity, kpi: safeSnapshot.opportunity },
   ];
 
-  React.useEffect(() => {
-    if (normalizedArea !== 'leads') {
-      setHistory([]);
-      setHistoryLoading(false);
-      setHistoryError('');
-      return;
-    }
-    let cancelled = false;
-    const loadHistory = async () => {
-      setHistoryLoading(true);
-      setHistoryError('');
-      try {
-        const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
-        const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0);
-        const days: string[] = [];
-        for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
-          days.push(toIsoDate(new Date(d)));
-        }
-        const entries: Array<{ date: string; dolead: number; opportunity: number }> = [];
-        for (const isoDate of days) {
-          const url = `${baseStatsUrl}&date_start=${isoDate}&date_end=${isoDate}`;
-          const response = await fetch(url);
-          const json = await response.json();
-          const parsed = parseLeadStats(json);
-          entries.push({ date: isoDate, ...parsed });
-        }
-        if (!cancelled) {
-          setHistory(entries);
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setHistory([]);
-          setHistoryError(err?.message || 'Impossible de charger l’historique des leads.');
-        }
-      } finally {
-        if (!cancelled) {
-          setHistoryLoading(false);
-        }
-      }
-    };
-    loadHistory();
-    return () => {
-      cancelled = true;
-    };
-  }, [baseStatsUrl, normalizedArea, parseLeadStats, selectedMonthDate]);
+  const historyTotals = history.reduce(
+    (acc, entry) => ({
+      dolead: acc.dolead + entry.dolead,
+      opportunity: acc.opportunity + entry.opportunity,
+      mm: acc.mm + entry.mm,
+    }),
+    { dolead: 0, opportunity: 0, mm: 0 }
+  );
+  const historyTotalsAll = historyTotals.dolead + historyTotals.opportunity + historyTotals.mm;
+  const historyTotalsInternet = history.reduce((acc, entry) => {
+    const totals = historySales[entry.date];
+    return acc + (totals ? totals.internet : 0);
+  }, 0);
+  const historyStartDate = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), historyStartDay);
+  const historyStartLabel = historyStartDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' });
+  const historyMonthLabel = selectedMonthDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 
   const handleExport = React.useCallback(
     async (
@@ -474,6 +710,35 @@ const SupervisorLeadsPlusPage: React.FC = () => {
             </select>
           </div>
         </header>
+        {isOctoberSelected && !historyLoading && !historyError ? (
+          <div className="relative mt-4 flex flex-wrap items-center gap-3 text-xs text-cyan-100/80 sm:text-sm">
+            <span className="text-cyan-200/75">
+              Totaux {historyMonthLabel} (depuis le {historyStartLabel})
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-cyan-100">
+              <span className="h-2 w-2 rounded-full bg-cyan-300" aria-hidden />
+              Total : {historyTotalsAll.toLocaleString('fr-FR')}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/50 bg-sky-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-sky-100">
+              <span className="h-2 w-2 rounded-full bg-sky-300" aria-hidden />
+              Dolead : {historyTotals.dolead.toLocaleString('fr-FR')}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-amber-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-amber-100">
+              <span className="h-2 w-2 rounded-full bg-amber-300" aria-hidden />
+              Opportunity : {historyTotals.opportunity.toLocaleString('fr-FR')}
+            </span>
+            {historyTotals.mm > 0 ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/40 bg-purple-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-purple-100">
+                <span className="h-2 w-2 rounded-full bg-purple-300" aria-hidden />
+                MM : {historyTotals.mm.toLocaleString('fr-FR')}
+              </span>
+            ) : null}
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-100">
+              <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden />
+              Internet : {historyTotalsInternet.toLocaleString('fr-FR')}
+            </span>
+          </div>
+        ) : null}
         {historyError && !historyLoading ? (
           <div className="relative mt-4 rounded-xl border border-rose-400/40 bg-rose-500/20 px-3 py-2 text-sm text-rose-100 shadow-[0_12px_28px_rgba(244,63,94,0.25)]">
             {historyError}
@@ -487,7 +752,9 @@ const SupervisorLeadsPlusPage: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-4">
               {history.map((entry) => {
-                const total = entry.dolead + entry.opportunity;
+                const total = entry.dolead + entry.opportunity + entry.mm;
+                const daySales = historySales[entry.date] ?? createEmptySalesTotals();
+                const internetSales = daySales.internet;
                 return (
                   <div
                     key={entry.date}
@@ -495,9 +762,26 @@ const SupervisorLeadsPlusPage: React.FC = () => {
                   >
                     <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-60 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.35),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(56,189,248,0.25),transparent_60%)]" />
                     <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{formatHistoryDate(entry.date)}</p>
-                        <p className="text-xs text-cyan-100/70">{entry.date}</p>
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{formatHistoryDate(entry.date)}</p>
+                          <p className="text-xs text-cyan-100/70">{entry.date}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setHistoryDetail({
+                              date: entry.date,
+                              label: formatHistoryDate(entry.date),
+                              leads: { dolead: entry.dolead, opportunity: entry.opportunity, mm: entry.mm },
+                              sales: historySales[entry.date] ?? null,
+                            })
+                          }
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/15 text-lg font-semibold text-cyan-100 transition hover:border-cyan-300/60 hover:bg-cyan-500/25"
+                          aria-label={`Voir le détail du ${entry.date}`}
+                        >
+                          +
+                        </button>
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
                         <span className="text-sm font-semibold text-emerald-100 drop-shadow-[0_0_12px_rgba(16,185,129,0.35)]">
@@ -512,6 +796,16 @@ const SupervisorLeadsPlusPage: React.FC = () => {
                             <span className="h-2 w-2 rounded-full bg-amber-300" aria-hidden />
                             Opportunity : {entry.opportunity.toLocaleString('fr-FR')}
                           </span>
+                          {entry.mm > 0 ? (
+                            <span className="inline-flex items-center gap-2 rounded-full border border-purple-400/40 bg-purple-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-purple-100">
+                              <span className="h-2 w-2 rounded-full bg-purple-300" aria-hidden />
+                              MM : {entry.mm.toLocaleString('fr-FR')}
+                            </span>
+                          ) : null}
+                          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-emerald-100">
+                            <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden />
+                            Internet : {internetSales.toLocaleString('fr-FR')}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -522,6 +816,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
           )}
         </div>
       </section>
+      {renderHistoryDetailModal()}
     </div>
   );
 };

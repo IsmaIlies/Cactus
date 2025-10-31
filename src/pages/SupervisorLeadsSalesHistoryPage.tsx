@@ -220,14 +220,6 @@ const SupervisorLeadsSalesHistoryPage: React.FC = () => {
     };
   }, [normalizedArea, selectedMonthDate]);
 
-  if (normalizedArea !== 'leads') {
-    return (
-      <div className="p-6 text-sm text-rose-200">
-        Accès réservé — sélectionne l'espace Leads pour consulter l'historique des ventes.
-      </div>
-    );
-  }
-
   const filteredRows = React.useMemo(() => {
     if (!selectedAgent) return rows;
     return rows.filter((row) => row.agent === selectedAgent);
@@ -320,6 +312,14 @@ const SupervisorLeadsSalesHistoryPage: React.FC = () => {
     { key: 'internet', label: 'Internet', value: (totals: LeadOriginTotals) => totals.internet },
     { key: 'internetSosh', label: 'Internet Sosh', value: (totals: LeadOriginTotals) => totals.internetSosh },
   ] as const;
+
+  if (normalizedArea !== 'leads') {
+    return (
+      <div className="p-6 text-sm text-rose-200">
+        Accès réservé — sélectionne l'espace Leads pour consulter l'historique des ventes.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6 text-white">
