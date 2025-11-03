@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone, History } from 'lucide-react';
+import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone, History, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const titleFor = (area?: string) => {
@@ -77,6 +77,22 @@ const SupervisorLayout: React.FC = () => {
                   <History className="relative h-4 w-4" aria-hidden="true" />
                 </span>
                 Historique ventes
+              </NavLink>
+              <NavLink
+                to={`${base}/stat-agent`}
+                className={({ isActive }) =>
+                  `group ml-8 mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-gradient-to-r from-cyan-500/30 via-blue-600/20 to-transparent text-white border border-cyan-300/30 shadow-[0_8px_24px_rgba(56,189,248,0.35)]'
+                      : 'text-blue-100/70 hover:bg-white/10 hover:shadow-[0_6px_18px_rgba(14,165,233,0.25)]'
+                  }`
+                }
+              >
+                <span className="relative inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-cyan-200 transition group-hover:bg-white/10 group-hover:text-white">
+                  <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                  <BarChart3 className="relative h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                Stat Agent
               </NavLink>
               <NavLink to={`${base}/export`} className={({ isActive }) =>
                 `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-cyan-500/40 via-blue-600/30 to-transparent text-white border border-cyan-300/40 shadow-[0_12px_32px_rgba(56,189,248,0.45)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(14,165,233,0.25)]'}`
