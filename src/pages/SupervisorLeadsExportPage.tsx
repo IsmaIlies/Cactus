@@ -336,17 +336,35 @@ const SupervisorLeadsExportPage: React.FC = () => {
   // (Voir l'extrait précédent pour le JSX complet, ou demande-le si tu veux tout le HTML/JSX détaillé)
 
   return (
-    <div className="flex flex-1 flex-col min-h-screen w-full px-4 lg:px-6 py-8 bg-transparent text-white">
-    <div className="grid w-full items-start gap-8 lg:grid-cols-[380px_1fr]">
-      {/* Filtres */}
-      <aside className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-[0_12px_40px_rgba(30,64,175,0.3)]">
-        <div>
-          <p className="text-xs uppercase tracking-[0.4em] text-blue-300/70">Filtres</p>
-          <h3 className="mt-2 text-xl font-semibold text-white">Affiner l’historique</h3>
+    <div className="flex min-h-screen w-full flex-col bg-transparent px-4 py-4 text-white lg:px-6 lg:py-6">
+      {/* Barre de filtres en haut (sticky) */}
+      <header className="sticky top-0 z-20 rounded-2xl border border-white/10 bg-slate-900/90 p-5 backdrop-blur-md shadow-[0_12px_40px_rgba(30,64,175,0.25)]">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.35em] text-blue-300/70">Filtres</p>
+            <h3 className="mt-1.5 text-lg font-semibold text-white">Affiner l’historique des ventes LEADS</h3>
+          </div>
+          {(startDate || endDate || agentFilter !== "all" || originFilter !== "all" || offerFilter !== "all" || phoneFilter || didFilter) && (
+            <button
+              type="button"
+              onClick={() => {
+                setAgentFilter("all");
+                setOriginFilter("all");
+                setOfferFilter("all");
+                setStartDate("");
+                setEndDate("");
+                setPhoneFilter("");
+                setDidFilter("");
+              }}
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100 transition-colors hover:bg-slate-800/70"
+            >
+              Réinitialiser
+            </button>
+          )}
         </div>
-        <div className="flex flex-col gap-6">
-          <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-            Agent
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
+            <span>Agent</span>
             <select
               value={agentFilter}
               onChange={(event) => setAgentFilter(event.target.value)}
@@ -361,8 +379,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
             </select>
           </label>
 
-          <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-            Origine
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
+            <span>Origine</span>
             <select
               value={originFilter}
               onChange={(event) => setOriginFilter(event.target.value)}
@@ -377,41 +395,8 @@ const SupervisorLeadsExportPage: React.FC = () => {
             </select>
           </label>
 
-          <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-            Téléphone
-            <input
-              type="text"
-              value={phoneFilter}
-              onChange={(event) => setPhoneFilter(event.target.value)}
-              placeholder="Rechercher par numéro"
-              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white placeholder:text-blue-200/40 shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-            />
-          </label>
-
-          <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-            DID
-            <input
-              type="text"
-              value={didFilter}
-              onChange={(event) => setDidFilter(event.target.value)}
-              placeholder="Rechercher par DID"
-              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white placeholder:text-blue-200/40 shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-            />
-          </label>
-
-          <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-            Date de début
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              max={endDate || undefined}
-              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-            />
-          </label>
-
-          <label className="flex flex-col gap-2 text-xs uppercase tracking-[0.35em] text-blue-200/70">
-            Offre
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
+            <span>Offre</span>
             <select
               value={offerFilter}
               onChange={(event) => setOfferFilter(event.target.value)}
@@ -426,134 +411,169 @@ const SupervisorLeadsExportPage: React.FC = () => {
             </select>
           </label>
 
-          {(startDate || endDate || agentFilter !== "all" || originFilter !== "all" || offerFilter !== "all" || phoneFilter || didFilter) && (
-            <button
-              type="button"
-              onClick={() => {
-                setAgentFilter("all");
-                setOriginFilter("all");
-                setOfferFilter("all");
-                setStartDate("");
-                setEndDate("");
-                setPhoneFilter("");
-                setDidFilter("");
-              }}
-              className="mt-2 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100 transition-colors duration-200 hover:bg-slate-800/60"
-            >
-              Réinitialiser
-            </button>
-          )}
-        </div>
-      </aside>
-
-      {/* Tableau + export */}
-      <section className="flex flex-col rounded-2xl border border-white/10 bg-slate-900 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-wrap items-center justify-between gap-6">
-          <div className="space-y-1.5">
-            <p className="text-[11px] uppercase tracking-[0.3em] text-blue-300/70">Historique</p>
-            <h2 className="text-2xl font-semibold text-white">Ventes LEADS</h2>
-            <span className="text-sm text-blue-200/80">
-              {filteredRows.length} vente{filteredRows.length > 1 ? "s" : ""} affichée{filteredRows.length > 1 ? "s" : ""}
-            </span>
-          </div>
-          <div className="flex flex-col items-end gap-2 text-right">
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={disabled}
-              className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-500 px-8 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-white shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-300 ${
-                disabled ? "cursor-not-allowed opacity-60" : "hover:brightness-110"
-              }`}
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              <span>Export XLSX</span>
-            </button>
-            {loading && <p className="text-sm text-blue-200">Chargement des ventes…</p>}
-            {!loading && filteredRows.length === 0 && !error && (
-              <p className="text-sm text-blue-200/80">Aucune vente LEADS disponible pour l'instant.</p>
-            )}
-            {error && <p className="text-sm text-rose-300">{error}</p>}
-          </div>
-        </div>
-
-        <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
-          <div className={`${TABLE_COLUMNS} gap-4 border-b border-white/10 bg-slate-900 px-4 py-3 text-[11px] uppercase tracking-[0.3em] text-blue-200/70`}>
-            <span>Début</span>
-            <span>Fin</span>
-            <span>Agent</span>
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
             <span>Téléphone</span>
+            <input
+              type="text"
+              value={phoneFilter}
+              onChange={(event) => setPhoneFilter(event.target.value)}
+              placeholder="Rechercher par numéro"
+              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white placeholder:text-blue-200/40 shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
             <span>DID</span>
-            <span>Origine</span>
-            <span>Offre</span>
-            <span className="text-right">ID</span>
-            <span className="text-center">Actions</span>
-          </div>
-          {filteredRows.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-blue-200/70">
-              Aucun résultat pour ces filtres.
-            </div>
-          ) : (
-            filteredRows.map((row) => {
-              const agentLabel = row.displayName || row.email || "—";
-              const phoneDisplay = row.telephone || '—';
-              const didDisplay = row.numeroId || '—';
-              const origin = (row.origineLead || "—").toUpperCase();
-              const trimmedId = row.id.length > 6 ? `${row.id.slice(0, 6)}…` : row.id;
-              return (
-                <div
-                  key={row.id}
-                  className={`${TABLE_COLUMNS} gap-4 border-b border-white/5 px-4 py-4 text-sm text-blue-50 transition-colors duration-200 last:border-b-0 hover:bg-slate-900/30`}
-                >
-                  <div>{renderDateTimeCell(row.startedAt)}</div>
-                  <div>{renderDateTimeCell(row.completedAt)}</div>
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-blue-50">{agentLabel}</span>
-                    {row.email ? (
-                      <span className="break-all text-xs text-blue-200/70 leading-snug">{row.email}</span>
-                    ) : null}
-                  </div>
-                  <div className="text-sm text-blue-100/80 break-all">{phoneDisplay}</div>
-                  <div className="text-sm text-blue-100/80 break-all">{didDisplay}</div>
-                  <div className="inline-flex min-h-[32px] items-center">
-                    <span className="inline-flex min-w-[72px] justify-center rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold tracking-[0.3em] text-blue-200">
-                      {origin}
-                    </span>
-                  </div>
-                  <div className="flex flex-col max-w-[320px]">
-                    <span className="inline-flex max-w-max items-center gap-1 rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-blue-100">
-                      {row.typeOffre || "—"}
-                    </span>
-                    <span
-                      title={row.intituleOffre || undefined}
-                      className="mt-1 text-xs text-blue-200/80 leading-snug"
-                      style={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {formatOfferTitle(row.intituleOffre)}
-                    </span>
-                  </div>
-                  <span className="text-right text-xs text-blue-200/70 break-all">{trimmedId}</span>
-                  <div className="flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(row)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-400/40 bg-blue-500/10 text-blue-100 hover:border-blue-300/60 hover:bg-blue-500/20 hover:text-white transition"
-                      aria-label={`Modifier la vente ${row.id}`}
-                    >
-                      <Pencil className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
+            <input
+              type="text"
+              value={didFilter}
+              onChange={(event) => setDidFilter(event.target.value)}
+              placeholder="Rechercher par DID"
+              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white placeholder:text-blue-200/40 shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
+            <span>Date de début</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+              max={endDate || undefined}
+              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-[11px] uppercase tracking-[0.3em] text-blue-200/70">
+            <span>Date de fin</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              min={startDate || undefined}
+              className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white shadow-[0_8px_24px_rgba(37,99,235,0.18)] focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            />
+          </label>
         </div>
-      </section>
-    </div>
+      </header>
+
+      {/* Contenu: Historique plein écran */}
+  <main className="mt-4 flex flex-1 flex-col">
+        <section className="flex flex-col rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
+          <div className="flex flex-wrap items-center justify-between gap-6">
+            <div className="space-y-1.5">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-blue-300/70">Historique</p>
+              <h2 className="text-2xl font-semibold text-white">Ventes LEADS</h2>
+              <span className="text-sm text-blue-200/80">
+                {filteredRows.length} vente{filteredRows.length > 1 ? "s" : ""} affichée{filteredRows.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex flex-col items-end gap-2 text-right">
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={disabled}
+                className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-500 px-8 py-3 text-sm font-semibold uppercase tracking-[0.3em] text-white shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-300 ${
+                  disabled ? "cursor-not-allowed opacity-60" : "hover:brightness-110"
+                }`}
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                <span>Export XLSX</span>
+              </button>
+              {loading && <p className="text-sm text-blue-200">Chargement des ventes…</p>}
+              {!loading && filteredRows.length === 0 && !error && (
+                <p className="text-sm text-blue-200/80">Aucune vente LEADS disponible pour l'instant.</p>
+              )}
+              {error && <p className="text-sm text-rose-300">{error}</p>}
+            </div>
+          </div>
+
+          {/* Zone scrollable */}
+          <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900">
+            <div className={`${TABLE_COLUMNS} sticky top-0 z-10 gap-4 border-b border-white/10 bg-slate-900/95 px-4 py-3 text-[11px] uppercase tracking-[0.3em] text-blue-200/70 backdrop-blur-md`}>
+              <span>Début</span>
+              <span>Fin</span>
+              <span>Agent</span>
+              <span>Téléphone</span>
+              <span>DID</span>
+              <span>Origine</span>
+              <span>Offre</span>
+              <span className="text-right">ID</span>
+              <span className="text-center">Actions</span>
+            </div>
+            <div className="max-h-[70vh] overflow-auto">
+              {filteredRows.length === 0 ? (
+                <div className="px-4 py-12 text-center text-sm text-blue-200/70">
+                  Aucun résultat pour ces filtres.
+                </div>
+              ) : (
+                filteredRows.map((row) => {
+                  const agentLabel = row.displayName || row.email || "—";
+                  const phoneDisplay = row.telephone || "—";
+                  const didDisplay = row.numeroId || "—";
+                  const origin = (row.origineLead || "—").toUpperCase();
+                  const trimmedId = row.id.length > 6 ? `${row.id.slice(0, 6)}…` : row.id;
+                  return (
+                    <div
+                      key={row.id}
+                      className={`${TABLE_COLUMNS} gap-4 border-b border-white/5 px-4 py-4 text-sm text-blue-50 transition-colors duration-200 last:border-b-0 hover:bg-slate-900/30`}
+                    >
+                      <div>{renderDateTimeCell(row.startedAt)}</div>
+                      <div>{renderDateTimeCell(row.completedAt)}</div>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-blue-50">{agentLabel}</span>
+                        {row.email ? (
+                          <span className="leading-snug break-all text-xs text-blue-200/70">{row.email}</span>
+                        ) : null}
+                      </div>
+                      <div className="break-all text-sm text-blue-100/80">{phoneDisplay}</div>
+                      <div className="break-all text-sm text-blue-100/80">{didDisplay}</div>
+                      <div className="inline-flex min-h-[32px] items-center">
+                        <span className="inline-flex min-w-[72px] justify-center rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold tracking-[0.3em] text-blue-200">
+                          {origin}
+                        </span>
+                      </div>
+                      <div className="flex max-w-[320px] flex-col">
+                        <span className="inline-flex max-w-max items-center gap-1 rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-blue-100">
+                          {row.typeOffre || "—"}
+                        </span>
+                        <span
+                          title={row.intituleOffre || undefined}
+                          className="mt-1 leading-snug text-xs text-blue-200/80"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {formatOfferTitle(row.intituleOffre)}
+                        </span>
+                      </div>
+                      <span
+                        title={row.id}
+                        className="break-all text-right text-xs text-blue-200/70 cursor-help hover:text-blue-100"
+                      >
+                        {trimmedId}
+                      </span>
+                      <div className="flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(row)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-400/40 bg-blue-500/10 text-blue-100 transition hover:border-blue-300/60 hover:bg-blue-500/20 hover:text-white"
+                          aria-label={`Modifier la vente ${row.id}`}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
 
     {/* Modale édition */}
     {editingRow && (

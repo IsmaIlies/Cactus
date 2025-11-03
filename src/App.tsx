@@ -40,7 +40,6 @@ import SupervisorLeadsDashboard2 from "./pages/SupervisorLeadsDashboard2";
 import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
 import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
 import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
-import SupervisorExportPage from "./pages/SupervisorExportPage";
 import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
 
 function App() {
