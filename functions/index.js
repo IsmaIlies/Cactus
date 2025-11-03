@@ -682,6 +682,9 @@ exports.submitLeadSale = onCall({ region: "europe-west9" }, async (req) => {
   const intituleOffre = normalizeString(data.intituleOffre, { maxLength: 200 });
   const referencePanier = normalizeString(data.referencePanier, { maxLength: 120 });
   const additionalOffers = sanitizeAdditionalOffers(data.additionalOffers);
+  // Region cloisonnement (FR par défaut si valeur absente/invalide)
+  let region = (data && typeof data.region === 'string' ? data.region.toUpperCase().trim() : 'FR');
+  if (region !== 'FR' && region !== 'CIV') region = 'FR';
 
   // Logging non-sensible pour diagnostic (sans données personnelles brutes)
   try {
@@ -734,6 +737,7 @@ exports.submitLeadSale = onCall({ region: "europe-west9" }, async (req) => {
     origineLead,
     telephone,
     mission: LEADS_MISSION,
+  region,
     mobileCount: categorized.mobile,
     boxCount: categorized.box,
     mobileSoshCount: categorized.mobileSosh,

@@ -387,6 +387,9 @@ const SupervisorSales: React.FC = () => {
     const startDate = start ? startOfDay(new Date(start)) : startOfDay(defaultStart);
     const endDateBase = end ? startOfDay(new Date(end)) : startOfDay(new Date());
     const endExclusive = addDays(endDateBase, 1);
+    const activeRegion = (() => {
+      try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase() === 'CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; }
+    })();
 
     let cancelled = false;
     let inFlight = false;
@@ -419,7 +422,10 @@ const SupervisorSales: React.FC = () => {
     const fetchPrimary = async (): Promise<LeadRow[]> => {
       const qPrimary = fsQuery(
         collection(db, 'leads_sales'),
-        where('mission','==','ORANGE_LEADS'),
+        ...(activeRegion === 'CIV'
+          ? [where('mission','==','ORANGE_LEADS'), where('region','==','CIV')]
+          : [where('mission','==','ORANGE_LEADS')]
+        ),
         where('createdAt','>=', Timestamp.fromDate(startDate)),
         where('createdAt','<', Timestamp.fromDate(endExclusive)),
         orderBy('createdAt','desc')
@@ -430,7 +436,9 @@ const SupervisorSales: React.FC = () => {
 
     const fetchFallback = async (): Promise<LeadRow[]> => {
       setLeadsUsingFallback(true);
-      const fb = fsQuery(collection(db, 'leads_sales'), where('mission','==','ORANGE_LEADS'));
+      const fb = activeRegion === 'CIV'
+        ? fsQuery(collection(db, 'leads_sales'), where('mission','==','ORANGE_LEADS'), where('region','==','CIV'))
+        : fsQuery(collection(db, 'leads_sales'), where('mission','==','ORANGE_LEADS'));
       const snap = await getDocs(fb);
       return snap.docs.map(mapSnapDoc)
         .filter(r => r.createdAt && r.createdAt >= startDate && r.createdAt < endExclusive)

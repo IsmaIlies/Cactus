@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
-// Durée d'inactivité avant déconnexion (25 minutes)
-const INACTIVITY_LIMIT_MS = 25 * 60 * 1000;
+// Durée d'inactivité avant déconnexion (60 minutes)
+const INACTIVITY_LIMIT_MS = 60 * 60 * 1000;
 const WARNING_BEFORE_LOGOUT_MS = 5 * 60 * 1000; // 5 minutes avant déconnexion
 
 /**
- * Composant qui déconnecte automatiquement l'utilisateur après 25 minutes d'inactivité.
+ * Composant qui déconnecte automatiquement l'utilisateur après 60 minutes d'inactivité.
  * Place-le dans App.tsx ou dans le layout principal, juste après AuthProvider.
  */
 export default function AutoLogout() {

@@ -1,8 +1,11 @@
 import React from "react";
-import { collection, deleteDoc, doc, onSnapshot, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, Timestamp, updateDoc, where } from "firebase/firestore";
 import { Download, Pencil, Trash2, X } from "lucide-react";
 import { utils as XLSXUtils, writeFile as writeXlsxFile } from "xlsx";
 import { db } from "../firebase";
+import Autocomplete from "../leads/components/common/Autocomplete";
+import { getLeadOffersCatalog } from "../leads/services/leadOffersCatalog";
+import { OFFER_OPTIONS } from "../leads/types/sales";
 
 type LeadRow = {
   id: string;
@@ -137,14 +140,52 @@ const SupervisorLeadsExportPage: React.FC = () => {
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
 
+  // Catalogue des offres (comme côté agent)
+  const [offerSuggestions, setOfferSuggestions] = React.useState<string[]>([]);
+  const [offerGroups, setOfferGroups] = React.useState<{ name: string; items: string[] }[] | undefined>(undefined);
+  const totalOffers = React.useMemo(() => offerGroups?.find(g => g.name.toLowerCase() === 'total')?.items.length
+    ?? offerSuggestions.length
+    ?? 0, [offerGroups, offerSuggestions]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const cat = await getLeadOffersCatalog();
+        if (cat?.groups && Array.isArray(cat.groups)) {
+          setOfferGroups(cat.groups);
+          const total = cat.groups.find((g) => g.name.toLowerCase() === 'total');
+          if (total && Array.isArray(total.items) && total.items.length > 0) {
+            setOfferSuggestions(total.items);
+          } else if (cat && Array.isArray(cat.items)) {
+            setOfferSuggestions(cat.items);
+          }
+        } else if (cat && Array.isArray(cat.items)) {
+          setOfferSuggestions(cat.items);
+        }
+      } catch {
+        // non bloquant: on conserve les suggestions populaires calculées plus bas si besoin
+      }
+    })();
+  }, []);
+
   // Chargement Firestore
   React.useEffect(() => {
     setLoading(true);
     setError(null);
-    const q = query(
-      collection(db, "leads_sales"),
-      orderBy("startedAt", "desc")
-    );
+    const region = (() => {
+      try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase() === 'CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; }
+    })();
+    // Supprime orderBy pour éviter l'index composite Firestore (mission + startedAt), tri fait côté client
+    const q = region === 'CIV'
+      ? query(
+          collection(db, "leads_sales"),
+          where("mission", "==", "ORANGE_LEADS"),
+          where("region", "==", 'CIV'),
+        )
+      : query(
+          collection(db, "leads_sales"),
+          where("mission", "==", "ORANGE_LEADS"),
+        );
     const unsub = onSnapshot(
       q,
       (snapshot) => {
@@ -170,6 +211,12 @@ const SupervisorLeadsExportPage: React.FC = () => {
             dateTechnicien: data?.dateTechnicien ?? null,
             telephone: data?.telephone ?? null,
           } satisfies LeadRow;
+        });
+        // Tri descendant sur startedAt (ou completedAt en repli) côté client
+        nextRows.sort((a, b) => {
+          const at = (a.startedAt ?? a.completedAt)?.getTime() ?? 0;
+          const bt = (b.startedAt ?? b.completedAt)?.getTime() ?? 0;
+          return bt - at;
         });
         setRows(nextRows);
         setLoading(false);
@@ -294,6 +341,30 @@ const SupervisorLeadsExportPage: React.FC = () => {
           updates[key] = raw.length > 0 ? raw : null;
         }
       });
+      // Normalisations supplémentaires pour respecter les règles Firestore et la cohérence des données
+      // 1) origineLead ne doit être que: 'opportunity' | 'dolead' | 'mm'
+      if (typeof updates["origineLead"] === 'string') {
+        const v = (updates["origineLead"] as string).trim().toLowerCase();
+        let norm: string | null = null;
+        if (!v) {
+          norm = null;
+        } else if (v.includes('dolead')) {
+          norm = 'dolead';
+        } else if (v === 'mm' || v.includes('mars')) {
+          norm = 'mm';
+        } else if (v === 'opportunity' || v.includes('opportun')) {
+          norm = 'opportunity';
+        } else {
+          // valeur inconnue: on garde en l'état en minuscule (peut être bloqué par règles)
+          norm = v;
+        }
+        updates["origineLead"] = norm;
+      }
+      // 2) téléphone: retirer espaces superflus
+      if (typeof updates["telephone"] === 'string') {
+        const t = (updates["telephone"] as string).replace(/\s+/g, ' ').trim();
+        updates["telephone"] = t || null;
+      }
       const updatePayload: Record<string, any> = { ...updates };
       const newDisplayName = (editData.displayName || "").trim();
       if (newDisplayName) {
@@ -327,7 +398,6 @@ const SupervisorLeadsExportPage: React.FC = () => {
   // Helpers UI
   const renderDateTimeCell = (date: Date | null) => date ? formatDateTime(date) : "—";
   const formatOfferTitle = (title?: string | null) => title ? title.slice(0, 60) + (title.length > 60 ? "…" : "") : "—";
-  const offerListId = "offer-list";
   const originListId = "origin-list";
 
   const disabled = loading || filteredRows.length === 0;
@@ -618,34 +688,32 @@ const SupervisorLeadsExportPage: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                  ) : key === "typeOffre" ? (
+                    <select
+                      value={editData.typeOffre}
+                      onChange={(e) => handleFieldChange("typeOffre", e.target.value)}
+                      className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                    >
+                      <option value="">Sélectionner un type</option>
+                      {Array.from(OFFER_OPTIONS).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
                   ) : key === "intituleOffre" ? (
                     <div className="space-y-2">
-                      <select
-                        value={offerOptions.some((option) => option.label === editData[key]) ? editData[key] : ""}
-                        onChange={(event) => handleFieldChange(key, event.target.value)}
-                        className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
-                      >
-                        <option value="">Choisir une offre populaire</option>
-                        {offerOptions.map(({ label: optionLabel, count }) => (
-                          <option key={optionLabel} value={optionLabel}>
-                            {count > 1 ? `${optionLabel} (${count})` : optionLabel}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        list={offerListId}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-slate-500">Catalogue d’offres</span>
+                        {totalOffers > 0 && (
+                          <span className="inline-flex items-center rounded-full border border-sky-300/60 bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">Total : {totalOffers}</span>
+                        )}
+                      </div>
+                      <Autocomplete
                         value={editData[key]}
-                        onChange={(event) => handleFieldChange(key, event.target.value)}
-                        className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
-                        placeholder="Rechercher ou saisir une offre"
+                        onChange={(v) => handleFieldChange(key, v)}
+                        suggestions={offerSuggestions.length ? offerSuggestions : offerOptions.map(o => o.label)}
+                        groups={offerGroups}
+                        placeholder="Saisir ou choisir une offre (Libellé ALF)"
                       />
-                      <datalist id={offerListId}>
-                        {offerOptions.map(({ label: optionLabel, count }) => (
-                          <option key={optionLabel} value={optionLabel}>
-                            {count > 1 ? `${optionLabel} (${count})` : optionLabel}
-                          </option>
-                        ))}
-                      </datalist>
                     </div>
                   ) : key === "origineLead" ? (
                     <div className="space-y-2">

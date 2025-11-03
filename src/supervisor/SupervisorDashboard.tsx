@@ -163,13 +163,23 @@ const SupervisorDashboard: React.FC = () => {
             }
           };
 
-          const primary = query(
-            collection(db, 'leads_sales'),
-            where('mission', '==', 'ORANGE_LEADS'),
-            where('createdAt', '>=', Timestamp.fromDate(monthStart)),
-            where('createdAt', '<', Timestamp.fromDate(nextMonth)),
-            orderBy('createdAt', 'asc')
-          );
+          const activeRegion = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
+          const primary = activeRegion === 'CIV'
+            ? query(
+                collection(db, 'leads_sales'),
+                where('mission', '==', 'ORANGE_LEADS'),
+                where('region', '==', 'CIV'),
+                where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+                where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+                orderBy('createdAt', 'asc')
+              )
+            : query(
+                collection(db, 'leads_sales'),
+                where('mission', '==', 'ORANGE_LEADS'),
+                where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+                where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+                orderBy('createdAt', 'asc')
+              );
 
           const un2 = onSnapshot(
             primary,
@@ -178,7 +188,9 @@ const SupervisorDashboard: React.FC = () => {
               const code = (err as any)?.code;
               if (code === 'failed-precondition') {
                 // Fallback without date range/order to avoid composite index requirement
-                const fb = query(collection(db, 'leads_sales'), where('mission', '==', 'ORANGE_LEADS'));
+                const fb = activeRegion === 'CIV'
+                  ? query(collection(db, 'leads_sales'), where('mission', '==', 'ORANGE_LEADS'), where('region','==', 'CIV'))
+                  : query(collection(db, 'leads_sales'), where('mission', '==', 'ORANGE_LEADS'));
                 const unfb = onSnapshot(
                   fb,
                   (snap) => computeFromSnapshot(snap, true),

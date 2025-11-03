@@ -41,6 +41,7 @@ import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
 import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
 import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
 import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
+import SsoLinkPrompt from "./components/SsoLinkPrompt";
 
 function App() {
   return (
@@ -159,6 +160,8 @@ function App() {
       <ChecklistReminderPopup />
       {/* Notifications globales pour Mr. White */}
       <GameNotification />
+      {/* Prompt to link Microsoft SSO for legacy email/password users */}
+      <SsoLinkPrompt />
       </RegionProvider>
     </AuthProvider>
   );

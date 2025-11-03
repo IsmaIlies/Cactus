@@ -18,6 +18,13 @@ import {
   updatePassword,
   verifyBeforeUpdateEmail,
   createUserWithEmailAndPassword,
+  OAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  fetchSignInMethodsForEmail,
+  linkWithCredential,
+  linkWithPopup,
+  linkWithRedirect,
 } from "firebase/auth";
 import { doc, setDoc, getFirestore } from "firebase/firestore";
 
@@ -38,6 +45,7 @@ interface AuthContextType {
   loading: boolean; // <-- ajoute cette ligne
   login: (email: string, password: string) => Promise<{ success: boolean; code?: string; message?: string }>;
   loginWithMicrosoft: () => Promise<boolean>;
+  linkMicrosoft: () => Promise<boolean>;
   register: (userData: RegisterData) => Promise<{ success: boolean; code?: string; message?: string }>;
   logout: () => void;
   updateUserEmail: (
@@ -191,7 +199,117 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const loginWithMicrosoft = async (): Promise<boolean> => {
-    return false;
+    const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
+    const buildProvider = () => {
+      const p = new OAuthProvider('microsoft.com');
+      const tenant = "6bb49185-2aa4-4acf-b86c-c8c649d584d6"
+      if (tenant) {
+        try { p.setCustomParameters({ tenant }); } catch {}
+      }
+      // p.addScope('User.Read'); // Optionnel
+      return p;
+    };
+
+    try {
+      if (method === 'redirect') {
+        await signInWithRedirect(auth, buildProvider());
+        return true; // onAuthStateChanged gérera l'état au retour
+      }
+      // Par défaut, popup puis fallback redirect si bloqué
+      const result = await signInWithPopup(auth, buildProvider());
+      const u = result.user;
+      setUser({
+        id: u.uid,
+        displayName: u.displayName || '',
+        email: u.email || '',
+        emailVerified: u.emailVerified,
+      });
+      return true;
+    } catch (err: any) {
+      const code: string = err?.code || 'auth/unknown';
+      if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, buildProvider());
+          return true;
+        } catch (e) {
+          console.warn('[auth] redirect microsoft failed', e);
+          return false;
+        }
+      }
+      if (code === 'auth/account-exists-with-different-credential') {
+        try {
+          const email = err?.customData?.email as string | undefined;
+          const pendingCred = OAuthProvider.credentialFromError?.(err) as any;
+          if (email) {
+            const methods = await fetchSignInMethodsForEmail(auth, email);
+            // Cas le plus courant: compte créé en email/mot de passe
+            if (methods.includes('password')) {
+              const pwd = typeof window !== 'undefined' ? window.prompt(`Un compte existe déjà pour ${email} avec un mot de passe.\nPour lier Microsoft à ce compte, entrez votre mot de passe:`) : null;
+              if (!pwd) return false;
+              // Se connecter avec email/pwd puis lier l'identité Microsoft
+              await signInWithEmailAndPassword(auth, email, pwd);
+              if (auth.currentUser && pendingCred) {
+                await linkWithCredential(auth.currentUser, pendingCred);
+                // Rafraîchir l'état utilisateur
+                const u = auth.currentUser;
+                setUser({
+                  id: u.uid,
+                  displayName: u.displayName || '',
+                  email: u.email || email,
+                  emailVerified: u.emailVerified,
+                });
+                return true;
+              }
+            }
+          }
+          // Autres providers (ex: google.com): guider l'utilisateur
+          try { console.warn('[auth] Compte existe avec un autre provider. Email:', email, 'methods:', await fetchSignInMethodsForEmail(auth, email || '')); } catch {}
+        } catch (e) {
+          console.warn('[auth] linking flow failed', e);
+        }
+        return false;
+      }
+      console.warn('[auth] microsoft login failed', code, err);
+      return false;
+    }
+  };
+
+  // Link Microsoft SSO to an already signed-in account (email/password users)
+  const linkMicrosoft = async (): Promise<boolean> => {
+    try {
+      if (!auth.currentUser) return false;
+      const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
+      const buildProvider = () => {
+        const p = new OAuthProvider('microsoft.com');
+        const tenant = "6bb49185-2aa4-4acf-b86c-c8c649d584d6";
+        if (tenant) {
+          try { p.setCustomParameters({ tenant }); } catch {}
+        }
+        return p;
+      };
+      if (method === 'redirect') {
+        await linkWithRedirect(auth.currentUser, buildProvider());
+        return true;
+      }
+      await linkWithPopup(auth.currentUser, buildProvider());
+      // Refresh local user state
+      const u = auth.currentUser;
+      if (u) {
+        setUser({
+          id: u.uid,
+          displayName: u.displayName || '',
+          email: u.email || '',
+          emailVerified: u.emailVerified,
+        });
+      }
+      return true;
+    } catch (err: any) {
+      const code: string = err?.code || 'auth/unknown';
+      if (localStorage.getItem('authDebug') === '1') {
+        console.warn('[auth] linkMicrosoft failed', code, err);
+      }
+      return false;
+    }
   };
 
   const register = async (userData: RegisterData): Promise<{ success: boolean; code?: string; message?: string }> => {
@@ -468,6 +586,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     loading,
     login,
     loginWithMicrosoft,
+  linkMicrosoft,
     register,
     logout,
     updateUserEmail,

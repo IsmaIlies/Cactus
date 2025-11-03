@@ -1,4 +1,3 @@
-import { FileText as FileExport } from "lucide-react";
 import { NavLink, Link, useParams } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -83,22 +82,7 @@ const Sidebar = () => {
           Dashboard
         </NavLink>
 
-        {/* Export tab for FR supervisor */}
-        {region === 'fr' && (
-          <NavLink
-            to={`${base}/export`}
-            className={({ isActive }) =>
-              `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-cactus-700 text-white"
-                  : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-              }`
-            }
-          >
-            <FileExport className="w-5 h-5 mr-3" />
-            Export
-          </NavLink>
-        )}
+        {/* Onglet Export retiré */}
 
     <NavLink
       to={`${base}/nouveautes`}

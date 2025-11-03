@@ -11,26 +11,37 @@ import {
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "../../firebase";
-import type { AdditionalOffer } from "../types/sales";
 
 const COLLECTION_PATH = "leads_sales";
 const missionFilter = "ORANGE_LEADS";
+
+// Resolve active region from localStorage; default to FR
+const getActiveRegion = (): 'FR' | 'CIV' => {
+  try {
+    const r = (localStorage.getItem('activeRegion') || 'FR').toUpperCase();
+    return r === 'CIV' ? 'CIV' : 'FR';
+  } catch {
+    return 'FR';
+  }
+};
 
 const startOfDay = (ref: Date) => new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 0, 0, 0, 0);
 const startOfMonth = (ref = new Date()) => new Date(ref.getFullYear(), ref.getMonth(), 1, 0, 0, 0, 0);
 const startOfNextMonth = (ref = new Date()) => new Date(ref.getFullYear(), ref.getMonth() + 1, 1, 0, 0, 0, 0);
 const formatDateKey = (date: Date) => date.toISOString().slice(0, 10);
 
-type LeadSaleInput = {
+export type LeadSaleInput = {
   numeroId: string;
   typeOffre: string;
   dateTechnicien: string | null;
   intituleOffre: string;
   referencePanier: string;
-  additionalOffers: Array<Pick<AdditionalOffer, "typeOffre" | "intituleOffre" | "referencePanier">>;
+  // Looser contract for transport; validated/normalized server-side
+  additionalOffers: Array<{ typeOffre: string; intituleOffre: string; referencePanier: string }>;
   ficheDuJour: string;
   origineLead: "opportunity" | "dolead" | "mm";
   telephone: string;
+  region?: 'FR' | 'CIV';
   // Horodatages formulaire
   startedAt?: Date | string | number; // début de saisie (client)
   completedAt?: Date | string | number; // fin de saisie (optionnel - si fourni on l'utilise, sinon serverTimestamp())
@@ -77,6 +88,7 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
       ficheDuJour: payload.ficheDuJour,
       origineLead: payload.origineLead,
       telephone: payload.telephone,
+      region: (payload.region === 'CIV' ? 'CIV' : 'FR'),
       // transmettre startedAt/completedAt si la fonction les accepte; sinon ignorés côté serveur
       startedAt: payload.startedAt ? (typeof payload.startedAt === 'number' ? payload.startedAt : (typeof payload.startedAt === 'string' ? payload.startedAt : (payload.startedAt as Date).toISOString())) : undefined,
       completedAt: payload.completedAt ? (typeof payload.completedAt === 'number' ? payload.completedAt : (typeof payload.completedAt === 'string' ? payload.completedAt : (payload.completedAt as Date).toISOString())) : undefined,
@@ -106,6 +118,7 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
       origineLead: payload.origineLead,
       telephone: payload.telephone,
       mission: missionFilter,
+      region: (payload.region === 'CIV' ? 'CIV' : 'FR'),
       // Optional counters for convenience
       mobileCount: cat.mobile,
       boxCount: cat.internet,
@@ -155,12 +168,20 @@ export type LeadKpiSnapshot = {
 
 export const subscribeToLeadKpis = (callback: (data: LeadKpiSnapshot) => void) => {
   const todayStart = startOfDay(new Date());
+  const region = getActiveRegion();
   // IMPORTANT: limiter aux ventes du jour pour éviter de lire toute la collection (coûteux en reads)
-  const q = query(
-    collection(db, COLLECTION_PATH),
-    where("mission", "==", missionFilter),
-    where("createdAt", ">=", Timestamp.fromDate(todayStart))
-  );
+  const q = region === 'CIV'
+    ? query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("region", "==", 'CIV'),
+        where("createdAt", ">=", Timestamp.fromDate(todayStart))
+      )
+    : query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("createdAt", ">=", Timestamp.fromDate(todayStart))
+      );
   return onSnapshot(
     q,
     (snapshot) => {
@@ -212,13 +233,23 @@ export const subscribeToLeadMonthlySeries = (
   callback: (series: LeadDailySeriesEntry[]) => void
 ) => {
   const monthStart = startOfMonth();
-  const q = query(
-    collection(db, COLLECTION_PATH),
-    where("mission", "==", missionFilter),
-    where("origineLead", "==", origin),
-    where("createdAt", ">=", Timestamp.fromDate(monthStart)),
-    orderBy("createdAt", "asc")
-  );
+  const region = getActiveRegion();
+  const q = region === 'CIV'
+    ? query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("region", "==", 'CIV'),
+        where("origineLead", "==", origin),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        orderBy("createdAt", "asc")
+      )
+    : query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("origineLead", "==", origin),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        orderBy("createdAt", "asc")
+      );
   let unsubscribe: (() => void) | null = null;
 
   const computeAndCallback = (snapshot: any, filterByDate = false) => {
@@ -251,11 +282,18 @@ export const subscribeToLeadMonthlySeries = (
         if (code === 'failed-precondition') {
           console.warn('subscribeToLeadMonthlySeries: index absent/en cours de construction, fallback sans filtre de date');
           try { unsubscribe && unsubscribe(); } catch {}
-          const fb = query(
-            collection(db, COLLECTION_PATH),
-            where('mission', '==', missionFilter),
-            where('origineLead', '==', origin)
-          );
+          const fb = region === 'CIV'
+            ? query(
+                collection(db, COLLECTION_PATH),
+                where('mission', '==', missionFilter),
+                where('region', '==', 'CIV'),
+                where('origineLead', '==', origin)
+              )
+            : query(
+                collection(db, COLLECTION_PATH),
+                where('mission', '==', missionFilter),
+                where('origineLead', '==', origin)
+              );
           unsubscribe = onSnapshot(
             fb,
             (snap) => computeAndCallback(snap, true),
@@ -297,14 +335,25 @@ export const subscribeToLeadAgentSummary = (
 ) => {
   const monthStart = startOfMonth(month);
   const monthEnd = startOfNextMonth(month);
-  const primaryQuery = query(
-    collection(db, COLLECTION_PATH),
-    where("mission", "==", missionFilter),
-    where("createdBy.userId", "==", userId),
-    where("createdAt", ">=", Timestamp.fromDate(monthStart)),
-    where("createdAt", "<", Timestamp.fromDate(monthEnd)),
-    orderBy("createdAt", "asc")
-  );
+  const region = getActiveRegion();
+  const primaryQuery = region === 'CIV'
+    ? query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("region", "==", 'CIV'),
+        where("createdBy.userId", "==", userId),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+        orderBy("createdAt", "asc")
+      )
+    : query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("createdBy.userId", "==", userId),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+        orderBy("createdAt", "asc")
+      );
   let unsubscribe: (() => void) | null = null;
 
   const subscribePrimary = () => {
@@ -363,13 +412,23 @@ export const subscribeToLeadMonthlyTotalsAllSources = (
 ) => {
   const monthStart = startOfMonth();
   const monthEnd = startOfNextMonth();
-  const primaryQuery = query(
-    collection(db, COLLECTION_PATH),
-    where("mission", "==", missionFilter),
-    where("createdAt", ">=", Timestamp.fromDate(monthStart)),
-    where("createdAt", "<", Timestamp.fromDate(monthEnd)),
-    orderBy("createdAt", "asc")
-  );
+  const region = getActiveRegion();
+  const primaryQuery = region === 'CIV'
+    ? query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("region", "==", 'CIV'),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+        orderBy("createdAt", "asc")
+      )
+    : query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+        orderBy("createdAt", "asc")
+      );
 
   let unsubscribe: (() => void) | null = null;
 
@@ -445,12 +504,21 @@ export const subscribeToRecentLeadSales = (
   maxCount: number,
   callback: (sales: RecentLeadSale[]) => void
 ) => {
-  const q = query(
-    collection(db, COLLECTION_PATH),
-    where("mission", "==", missionFilter),
-    orderBy("createdAt", "desc"),
-    limit(Math.max(1, Math.min(maxCount || 10, 100)))
-  );
+  const region = getActiveRegion();
+  const q = region === 'CIV'
+    ? query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("region", "==", 'CIV'),
+        orderBy("createdAt", "desc"),
+        limit(Math.max(1, Math.min(maxCount || 10, 100)))
+      )
+    : query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        orderBy("createdAt", "desc"),
+        limit(Math.max(1, Math.min(maxCount || 10, 100)))
+      );
 
   return onSnapshot(
     q,
@@ -503,14 +571,25 @@ export const subscribeToLeadAgentSales = (
 ) => {
   const monthStart = startOfMonth(month);
   const monthEnd = startOfNextMonth(month);
-  const primaryQuery = query(
-    collection(db, COLLECTION_PATH),
-    where("mission", "==", missionFilter),
-    where("createdBy.userId", "==", userId),
-    where("createdAt", ">=", Timestamp.fromDate(monthStart)),
-    where("createdAt", "<", Timestamp.fromDate(monthEnd)),
-    orderBy("createdAt", "desc")
-  );
+  const region = getActiveRegion();
+  const primaryQuery = region === 'CIV'
+    ? query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("region", "==", 'CIV'),
+        where("createdBy.userId", "==", userId),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+        orderBy("createdAt", "desc")
+      )
+    : query(
+        collection(db, COLLECTION_PATH),
+        where("mission", "==", missionFilter),
+        where("createdBy.userId", "==", userId),
+        where("createdAt", ">=", Timestamp.fromDate(monthStart)),
+        where("createdAt", "<", Timestamp.fromDate(monthEnd)),
+        orderBy("createdAt", "desc")
+      );
   let unsubscribe: (() => void) | null = null;
 
   const mapDoc = (doc: any): LeadAgentSaleEntry => {

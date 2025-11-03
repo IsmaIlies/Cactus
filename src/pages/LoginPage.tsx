@@ -28,6 +28,7 @@ const LoginPage = () => {
     "j.pariolleau@mars-marketing.fr",
     "olivier@evenmedia.fr",
     "m.maimoun@mars-marketing.fr",
+    "s.karabagli@mars-marketing.fr",
   ]; // temporary
   type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
   const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);
@@ -133,7 +134,13 @@ const LoginPage = () => {
   const navigate = useNavigate();
 
   const normalizedEmail = email.trim().toLowerCase();
-  const isSupervisorAllowed = SUPERVISOR_WHITELIST.includes(normalizedEmail);
+  // Autoriser soit l'email complet whitelisté, soit le simple identifiant (partie avant @)
+  const supervisorLocalParts = SUPERVISOR_WHITELIST.map(e => e.split('@')[0]);
+  const inputHasAt = normalizedEmail.includes('@');
+  const inputLocal = normalizedEmail.split('@')[0];
+  const isSupervisorAllowed = inputHasAt
+    ? SUPERVISOR_WHITELIST.includes(normalizedEmail)
+    : supervisorLocalParts.includes(inputLocal);
   const supervisorTargetPath = supervisorChoice
     ? `/dashboard/superviseur/${supervisorChoice}`
     : null;
@@ -445,13 +452,29 @@ const LoginPage = () => {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary w-full overflow-hidden rounded-xl py-3 font-semibold shadow-lg shadow-cactus-900/40 transition hover:shadow-cactus-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cactus-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
-                >
-                  {loading ? "Connexion..." : "Se connecter"}
-                </button>
+                {/* SSO Microsoft */}
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleMicrosoftLogin}
+                    disabled={loading}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-blue-300/40 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-100 transition hover:border-blue-300/70 hover:bg-blue-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                  >
+                    <ShieldCheck className="h-5 w-5" />
+                    <span>Se connecter avec Microsoft</span>
+                  </button>
+                  <div className="relative py-2 text-center text-xs text-slate-400">
+                    <span className="relative bg-slate-900/70 px-3">ou</span>
+                    <span className="pointer-events-none absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-white/10" />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn-primary w-full overflow-hidden rounded-xl py-3 font-semibold shadow-lg shadow-cactus-900/40 transition hover:shadow-cactus-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cactus-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                  >
+                    {loading ? "Connexion..." : "Se connecter"}
+                  </button>
+                </div>
 
                 <div className="flex justify-center">
                   <Link

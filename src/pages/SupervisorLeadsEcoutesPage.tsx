@@ -41,12 +41,20 @@ const SupervisorLeadsEcoutesPage: React.FC = () => {
   React.useEffect(() => {
     setLoading(true);
     setError(null);
+    const region = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
 
-    const q = query(
-      collection(db, "leads_sales"),
-      where("mission", "==", "ORANGE_LEADS"),
-      orderBy("createdAt", "desc")
-    );
+    const q = region === 'CIV'
+      ? query(
+          collection(db, "leads_sales"),
+          where("mission", "==", "ORANGE_LEADS"),
+          where("region", "==", 'CIV'),
+          orderBy("createdAt", "desc")
+        )
+      : query(
+          collection(db, "leads_sales"),
+          where("mission", "==", "ORANGE_LEADS"),
+          orderBy("createdAt", "desc")
+        );
 
     const unsubscribe = onSnapshot(
       q,

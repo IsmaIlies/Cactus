@@ -95,13 +95,23 @@ const SupervisorLeadsAnalysePage: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    const leadsQuery = query(
-      collection(db, 'leads_sales'),
-      where('mission', '==', 'ORANGE_LEADS'),
-      where('createdAt', '>=', Timestamp.fromDate(monthStart)),
-      where('createdAt', '<', Timestamp.fromDate(nextMonth)),
-      orderBy('createdAt', 'asc')
-    );
+    const region = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
+    const leadsQuery = region === 'CIV'
+      ? query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('region', '==', 'CIV'),
+          where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+          where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+          orderBy('createdAt', 'asc')
+        )
+      : query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+          where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+          orderBy('createdAt', 'asc')
+        );
 
     const unsubscribe = onSnapshot(
       leadsQuery,

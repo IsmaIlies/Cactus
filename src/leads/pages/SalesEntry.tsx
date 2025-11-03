@@ -6,10 +6,11 @@ import StepC from "../components/sales/StepC";
 import SuccessModal from "../components/sales/SuccessModal";
 import { OFFER_OPTIONS, FormState, Errors, defaultState, TouchedState, AdditionalOffer } from "../types/sales";
 import { calcProgress, ratioToColor, isStepValid, getStepFields, stepOrder } from "../utils/progress";
-import { saveLeadSale } from "../services/leadsSalesService";
+import { saveLeadSale, type LeadSaleInput } from "../services/leadsSalesService";
 import { useAuth } from "../../contexts/AuthContext";
 import { auth } from "../../firebase";
 import { getLeadOffersCatalog } from "../services/leadOffersCatalog";
+import { useRegion } from "../../contexts/RegionContext";
 
 const steps = [
   {
@@ -46,6 +47,7 @@ const generateId = () => {
 
 const SalesEntry: React.FC = () => {
   const { user } = useAuth();
+  const { region } = useRegion();
   const startedAtRef = React.useRef<Date>(new Date());
   const [form, setForm] = React.useState<FormState>({ ...defaultState });
   const [errors, setErrors] = React.useState<Errors>({});
@@ -362,12 +364,18 @@ const SalesEntry: React.FC = () => {
     }
   };
 
-  const getPayload = React.useCallback(() => {
-    const sanitizedAdditional = additionalOffers.map((offer) => ({
+  const getPayload: () => LeadSaleInput = React.useCallback(() => {
+    const sanitizedAdditional: LeadSaleInput['additionalOffers'] = additionalOffers.map((offer) => ({
       typeOffre: (offer.typeOffre || '').trim(),
       intituleOffre: offer.intituleOffre.trim(),
       referencePanier: offer.referencePanier.trim(),
     }));
+
+    // Ensure origineLead is always "opportunity" | "dolead" | "mm"
+    const allowedOrigines = ["opportunity", "dolead", "mm"] as const;
+    const safeOrigineLead = allowedOrigines.includes(form.origineLead as any)
+      ? (form.origineLead as "opportunity" | "dolead" | "mm")
+      : "opportunity";
 
     return {
       numeroId: form.numeroId.trim(),
@@ -377,11 +385,12 @@ const SalesEntry: React.FC = () => {
       referencePanier: form.referencePanier.trim(),
       additionalOffers: sanitizedAdditional,
       ficheDuJour: form.ficheDuJour,
-      origineLead: form.origineLead,
+      origineLead: safeOrigineLead,
       telephone: form.telephone.replace(/\s+/g, "").trim(),
       startedAt: startedAtRef.current,
+      region: (region === 'CIV' ? 'CIV' : 'FR'),
     };
-  }, [form, additionalOffers]);
+  }, [form, additionalOffers, region]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -480,6 +489,7 @@ const SalesEntry: React.FC = () => {
           origineLead: payload.origineLead as "opportunity" | "dolead" | "mm",
           telephone: payload.telephone,
           startedAt: startedAtRef.current,
+          region: (region === 'CIV' ? 'CIV' : 'FR'),
           completedAt: new Date(),
           createdBy: {
             userId: user.id,

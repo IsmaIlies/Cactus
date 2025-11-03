@@ -138,13 +138,22 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     startOfDay.setHours(0, 0, 0, 0);
     setLoading(true);
     setError(null);
+    const region = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
 
-    const q = query(
-      collection(db, 'leads_sales'),
-      where('mission', '==', 'ORANGE_LEADS'),
-      where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
-      orderBy('createdAt', 'desc')
-    );
+    const q = region === 'CIV'
+      ? query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('region', '==', 'CIV'),
+          where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+          orderBy('createdAt', 'desc')
+        )
+      : query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+          orderBy('createdAt', 'desc')
+        );
 
     const unsubscribe = onSnapshot(
       q,
@@ -197,6 +206,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
 
     setMonthlyLoading(true);
+    const region = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const labels = Array.from({ length: daysInMonth }, (_, idx) =>
       new Date(now.getFullYear(), now.getMonth(), idx + 1).toLocaleDateString('fr-FR', {
@@ -211,13 +221,22 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     const mobile = datasetTemplate();
     const mobileSosh = datasetTemplate();
 
-    const q = query(
-      collection(db, 'leads_sales'),
-      where('mission', '==', 'ORANGE_LEADS'),
-      where('createdAt', '>=', Timestamp.fromDate(monthStart)),
-      where('createdAt', '<', Timestamp.fromDate(nextMonth)),
-      orderBy('createdAt', 'asc')
-    );
+    const q = region === 'CIV'
+      ? query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('region', '==', 'CIV'),
+          where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+          where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+          orderBy('createdAt', 'asc')
+        )
+      : query(
+          collection(db, 'leads_sales'),
+          where('mission', '==', 'ORANGE_LEADS'),
+          where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+          where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+          orderBy('createdAt', 'asc')
+        );
 
     const unsubscribe = onSnapshot(
       q,
