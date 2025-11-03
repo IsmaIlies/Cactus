@@ -21,6 +21,7 @@ import ELearningPage from "./pages/ELearningPage";
 import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import LeadsLayout from "./leads/LeadsLayout";
+import SsoLinkPrompt from "./components/SsoLinkPrompt";
 import LeadsDashboardPage from "./leads/pages/LeadsDashboardPage";
 import SalesEntry from "./leads/pages/SalesEntry";
 import Checklist from "./pages/ChecklistPage";
@@ -41,7 +42,8 @@ import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
 import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
 import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
 import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
-import SsoLinkPrompt from "./components/SsoLinkPrompt";
+import SupervisorLeadsSalesHistoryPage from "./pages/SupervisorLeadsSalesHistoryPage";
+import SupervisorLeadsAgentStatsPage from "./pages/SupervisorLeadsAgentStatsPage";
 
 function App() {
   return (
@@ -102,6 +104,8 @@ function App() {
           <Route path="import" element={<SupervisorImport />} />
           <Route path="dashboard2" element={<SupervisorLeadsDashboard2 />} />
           <Route path="leads-plus" element={<SupervisorLeadsPlusPage />} />
+          <Route path="historique-ventes" element={<SupervisorLeadsSalesHistoryPage />} />
+          <Route path="stat-agent" element={<SupervisorLeadsAgentStatsPage />} />
           <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
           <Route path="ecoutes" element={<SupervisorLeadsEcoutesPage />} />
           <Route path="export" element={<SupervisorLeadsExportPage />} />

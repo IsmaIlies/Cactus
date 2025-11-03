@@ -119,6 +119,37 @@ const EDITABLE_FIELDS = [
 
 type EditableField = (typeof EDITABLE_FIELDS)[number]["key"];
 
+const CANONICAL_AGENT_ALIASES: Array<{ label: string; patterns: Array<(value: string) => boolean> }> = [
+  {
+    label: "TOM HALADJIAN MARIOTTI",
+    patterns: [
+      (value) => /tom/.test(value) && /mariotti/.test(value),
+      (value) => /tom/.test(value) && /haladjian/.test(value),
+    ],
+  },
+];
+
+const resolveAgentLabel = (displayName?: string | null, email?: string | null) => {
+  const candidates = [displayName, email]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.trim());
+
+  for (const candidate of candidates) {
+    const lower = candidate.toLowerCase();
+    for (const alias of CANONICAL_AGENT_ALIASES) {
+      if (alias.patterns.some((matcher) => matcher(lower))) {
+        return alias.label;
+      }
+    }
+  }
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  return null;
+};
+
 const SupervisorLeadsExportPage: React.FC = () => {
   const [rows, setRows] = React.useState<LeadRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -172,44 +203,36 @@ const SupervisorLeadsExportPage: React.FC = () => {
   React.useEffect(() => {
     setLoading(true);
     setError(null);
-    const region = (() => {
-      try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase() === 'CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; }
-    })();
-    // Supprime orderBy pour éviter l'index composite Firestore (mission + startedAt), tri fait côté client
-    const q = region === 'CIV'
-      ? query(
-          collection(db, "leads_sales"),
-          where("mission", "==", "ORANGE_LEADS"),
-          where("region", "==", 'CIV'),
-        )
-      : query(
-          collection(db, "leads_sales"),
-          where("mission", "==", "ORANGE_LEADS"),
-        );
+    const q = query(
+      collection(db, "leads_sales"),
+      where("mission", "==", "ORANGE_LEADS")
+    );
     const unsub = onSnapshot(
       q,
       (snapshot) => {
         const nextRows = snapshot.docs.map((doc) => {
-          const data = doc.data() as any;
-          const startedAtTs: Timestamp | null = data?.startedAt ?? data?.createdAt ?? null;
-          const completedAtTs: Timestamp | null = data?.completedAt ?? null;
-          const startedAt = startedAtTs ? startedAtTs.toDate() : null;
-          const completedAt = completedAtTs ? completedAtTs.toDate() : null;
+          const data = doc.data() as Record<string, unknown>;
+          const startedAtSource = (data?.startedAt as Timestamp | undefined) ?? (data?.createdAt as Timestamp | undefined) ?? null;
+          const completedAtSource = (data?.completedAt as Timestamp | undefined) ?? null;
+          const startedAt = startedAtSource instanceof Timestamp ? startedAtSource.toDate() : null;
+          const completedAt = completedAtSource instanceof Timestamp ? completedAtSource.toDate() : null;
+          const createdBy = (data?.createdBy ?? {}) as Record<string, unknown>;
+          const resolvedDisplayName = resolveAgentLabel(createdBy?.displayName as string | undefined, createdBy?.email as string | undefined);
           return {
             id: doc.id,
             startedAt,
             completedAt,
-            email: data?.createdBy?.email ?? null,
-            displayName: data?.createdBy?.displayName ?? null,
-            numeroId: data?.numeroId ?? null,
-            typeOffre: data?.typeOffre ?? null,
-            intituleOffre: data?.intituleOffre ?? null,
-            referencePanier: data?.referencePanier ?? null,
-            codeAlf: data?.codeAlf ?? null,
-            ficheDuJour: data?.ficheDuJour ?? null,
-            origineLead: data?.origineLead ?? null,
-            dateTechnicien: data?.dateTechnicien ?? null,
-            telephone: data?.telephone ?? null,
+            email: (createdBy?.email as string | undefined) ?? null,
+            displayName: resolvedDisplayName,
+            numeroId: (data?.numeroId as string | undefined) ?? null,
+            typeOffre: (data?.typeOffre as string | undefined) ?? null,
+            intituleOffre: (data?.intituleOffre as string | undefined) ?? null,
+            referencePanier: (data?.referencePanier as string | undefined) ?? null,
+            codeAlf: (data?.codeAlf as string | undefined) ?? null,
+            ficheDuJour: (data?.ficheDuJour as string | undefined) ?? null,
+            origineLead: (data?.origineLead as string | undefined) ?? null,
+            dateTechnicien: (data?.dateTechnicien as string | undefined) ?? null,
+            telephone: (data?.telephone as string | undefined) ?? null,
           } satisfies LeadRow;
         });
         // Tri descendant sur startedAt (ou completedAt en repli) côté client
@@ -232,6 +255,7 @@ const SupervisorLeadsExportPage: React.FC = () => {
   // Filtres dynamiques
   const agentOptions = React.useMemo(() => {
     const labels = new Set<string>();
+    CANONICAL_AGENT_ALIASES.forEach((alias) => labels.add(alias.label));
     rows.forEach((row) => {
       const label = row.displayName || row.email;
       if (label) labels.add(label);

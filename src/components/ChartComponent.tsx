@@ -12,7 +12,7 @@ import {
   Legend,
   Filler,
 } from "chart.js";
-import { Line, Bar, Pie } from "react-chartjs-2";
+import { Line, Bar, Pie, Doughnut } from "react-chartjs-2";
 
 ChartJS.register(
   CategoryScale,
@@ -28,7 +28,7 @@ ChartJS.register(
 );
 
 interface ChartProps {
-  type: "line" | "bar" | "pie";
+  type: "line" | "bar" | "pie" | "doughnut";
   data: any;
   options?: any;
   height?: number;
@@ -66,6 +66,8 @@ const ChartComponent: React.FC<ChartProps> = ({
         return <Bar data={data} options={mergedOptions} />;
       case "pie":
         return <Pie data={data} options={mergedOptions} />;
+      case "doughnut":
+        return <Doughnut data={data} options={mergedOptions} />;
       default:
         return <Line data={data} options={mergedOptions} />;
     }
