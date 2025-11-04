@@ -22,10 +22,7 @@ import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import LeadsLayout from "./leads/LeadsLayout";
 import SsoLinkPrompt from "./components/SsoLinkPrompt";
-import LeadsDashboardPage from "./leads/pages/LeadsDashboardPage";
-import SalesEntry from "./leads/pages/SalesEntry";
 import Checklist from "./pages/ChecklistPage";
-import LeadsChecklistPage from "./leads/pages/LeadsChecklistPage";
 import ChecklistArchivePage from "./pages/ChecklistArchivePage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import SupervisorLayout from "./supervisor/SupervisorLayout";
@@ -121,12 +118,7 @@ function App() {
               <LeadsLayout />
             </ProtectedRoute>
           }
-        >
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<LeadsDashboardPage />} />
-          <Route path="sales" element={<SalesEntry />} />
-          <Route path="checklist" element={<LeadsChecklistPage />} />
-        </Route>
+        />
         {/* Supervisor LEADS page is available inside the supervisor layout (nested route) */}
         <Route
           path="/admin/programme"

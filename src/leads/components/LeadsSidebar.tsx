@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutGrid, FileSignature, CheckSquare, LogOut, BarChart3 } from "lucide-react";
+import { LayoutGrid, FileSignature, LogOut, BarChart3 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import React from "react";
 
@@ -63,19 +63,7 @@ const LeadsSidebar = () => {
           <BarChart3 className="w-5 h-5" />
           Mes ventes
         </NavLink>
-        <NavLink
-          to="/leads/checklist"
-          className={({ isActive }) =>
-            `${linkBaseClasses} ${
-              isActive
-                ? "bg-white/10 text-white"
-                : "text-blue-100 hover:bg-white/10 hover:text-white"
-            }`
-          }
-        >
-          <CheckSquare className="w-5 h-5" />
-          Checklist
-        </NavLink>
+        {/* Checklist removed for Leads area to avoid Canal+ redirection */}
       </nav>
       <div className="mt-auto px-6 py-6 border-t border-white/10">
         <button

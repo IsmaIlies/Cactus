@@ -1,5 +1,5 @@
 import React from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Box, Wifi, Smartphone, Star } from "lucide-react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
@@ -45,6 +45,93 @@ const MyLeadSalesPage: React.FC = () => {
     saving: boolean;
     form: EditFormState | null;
   }>({ saleId: "", loading: false, error: null, saving: false, form: null });
+
+  // Presets for selects
+  const TYPE_OFFRE_OPTIONS = React.useMemo(() => [
+    { value: "", label: "—" },
+    { value: "Mobile", label: "Mobile" },
+    { value: "Internet", label: "Internet" },
+    { value: "Mobile Sosh", label: "Mobile SOSH" },
+    { value: "Internet Sosh", label: "Internet SOSH" },
+    { value: "Internet + Mobile", label: "Internet + Mobile" },
+    { value: "InternetSosh + MobileSosh", label: "Internet SOSH + Mobile SOSH" },
+  ], []);
+
+  const ensureOption = (options: Array<{value:string; label:string}>, current: string | undefined | null) => {
+    const v = (current || '').toString();
+    if (!v) return options;
+    return options.some(o => o.value === v) ? options : [{ value: v, label: `${v} (existant)` }, ...options];
+  };
+
+  // Fancy dropdown state for "Intitulé de l'offre"
+  const offerMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const [offerMenuOpen, setOfferMenuOpen] = React.useState(false);
+  React.useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!offerMenuRef.current) return;
+      if (!offerMenuRef.current.contains(e.target as Node)) setOfferMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  // Load full offers catalog (read-only) to make all offers choosable
+  const [offersCatalog, setOffersCatalog] = React.useState<string[]>([]);
+  const [offersLoading, setOffersLoading] = React.useState(false);
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setOffersLoading(true);
+      try {
+        const snap = await getDoc(doc(db, 'leads_config', 'offers'));
+        if (!mounted) return;
+        if (snap.exists()) {
+          const d: any = snap.data();
+          const collected = new Set<string>();
+          const take = (val: any) => {
+            if (Array.isArray(val)) val.forEach(v => { if (typeof v === 'string' && v.trim()) collected.add(v.trim()); });
+            else if (typeof val === 'string' && val.trim()) collected.add(val.trim());
+          };
+          if (Array.isArray(d?.offers)) take(d.offers);
+          if (Array.isArray(d?.items)) take(d.items);
+          if (d && typeof d === 'object') {
+            Object.values(d).forEach(take);
+          }
+          setOffersCatalog(Array.from(collected).sort((a,b)=> a.localeCompare(b, 'fr')));
+        } else {
+          setOffersCatalog([]);
+        }
+      } catch {
+        setOffersCatalog([]);
+      } finally {
+        if (mounted) setOffersLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Counters for the menu (approx from monthly summary)
+  const countInternet = (summary?.box || 0) + (summary?.internetSosh || 0);
+  const countMobile = (summary?.mobiles || 0) + (summary?.mobileSosh || 0);
+  const countTotal = countInternet + countMobile;
+  const countBest = Math.max(countInternet, countMobile);
+  const countOthers = 0; // non catégorisés (si besoin, on pourra affiner plus tard)
+
+  // Filter state for category selection (TOTAL / INTERNET / MOBILE / AUTRES / LES + VENDUS)
+  const [offerCategory, setOfferCategory] = React.useState<null | 'total' | 'internet' | 'mobile' | 'autres' | 'best'>(null);
+
+  // Simple classifier for offer labels to split Internet / Mobile / Autres
+  const classifyOfferLabel = React.useCallback((label: string): 'internet' | 'mobile' | 'autres' => {
+    const s = (label || '').toLowerCase();
+    const isInternet = /(internet|box|fibre|livebox|adsl|vdsl|wifi|open|sfr fibre|fibre\s+optique)/i.test(s);
+    const isMobile = /(mobile|forfait|sim|sms|go|5g|4g|smartphone|illimité|illimite)/i.test(s);
+    if (isInternet && !isMobile) return 'internet';
+    if (isMobile && !isInternet) return 'mobile';
+    // If both or none, push to autres by default to avoid surprises
+    return 'autres';
+  }, []);
+
+  
 
   const selectedMonth = React.useMemo(() => new Date(selectedMonthIso), [selectedMonthIso]);
 
@@ -132,6 +219,20 @@ const MyLeadSalesPage: React.FC = () => {
       return rows;
     });
   }, [filteredSales]);
+
+  // Compute "best sellers" list from user's current month sales (top 50 by frequency)
+  const topOffers = React.useMemo(() => {
+    const freq = new Map<string, number>();
+    flattenedSales.forEach((r) => {
+      const key = (r.offer || '').trim();
+      if (!key) return;
+      freq.set(key, (freq.get(key) || 0) + 1);
+    });
+    return Array.from(freq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50)
+      .map(([name]) => name);
+  }, [flattenedSales]);
 
   const openEditModal = React.useCallback(async (saleId: string) => {
     setEditModal({ saleId, loading: true, error: null, saving: false, form: null });
@@ -396,12 +497,15 @@ const MyLeadSalesPage: React.FC = () => {
                     />
                   </EditField>
                   <EditField label="Type d'offre">
-                    <input
-                      type="text"
+                    <select
                       value={editModal.form.typeOffre}
                       onChange={(event) => handleEditChange("typeOffre", event.target.value)}
                       className="w-full rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
-                    />
+                    >
+                      {ensureOption(TYPE_OFFRE_OPTIONS, editModal.form.typeOffre).map(opt => (
+                        <option key={opt.value || 'blank'} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </EditField>
                   <EditField label="Date technicien">
                     <input
@@ -413,12 +517,116 @@ const MyLeadSalesPage: React.FC = () => {
                     />
                   </EditField>
                   <EditField label="Intitulé de l'offre">
-                    <input
-                      type="text"
-                      value={editModal.form.intituleOffre}
-                      onChange={(event) => handleEditChange("intituleOffre", event.target.value)}
-                      className="w-full rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
-                    />
+                    <div ref={offerMenuRef} className="relative">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-[0.35em] text-sky-700/70">Catalogue d’offres</span>
+                        <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.25em] text-sky-700">
+                          Total : {offersCatalog.length}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={editModal.form.intituleOffre}
+                          onChange={(e)=> handleEditChange('intituleOffre', e.target.value)}
+                          onFocus={()=> setOfferMenuOpen(true)}
+                          placeholder="Saisir un intitulé ou choisir dans la liste"
+                          className="w-full rounded-xl border border-sky-200/70 bg-white pr-9 pl-4 py-2 text-sm text-slate-800 shadow-[0_10px_30px_rgba(14,116,144,0.12)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setOfferMenuOpen((s) => !s)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-100 text-slate-500"
+                          aria-label="Afficher les suggestions"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" clipRule="evenodd"/></svg>
+                        </button>
+                      </div>
+                      {offerMenuOpen && (
+                        <div className="absolute z-10 mt-2 w-full rounded-2xl border border-slate-200/80 bg-white p-2 shadow-xl">
+                          <ul className="space-y-2">
+                            {([
+                              { key:'total', label:'TOTAL', icon: Box, count: countTotal },
+                              { key:'internet', label:'INTERNET', icon: Wifi, count: countInternet },
+                              { key:'mobile', label:'MOBILE', icon: Smartphone, count: countMobile },
+                              { key:'autres', label:'AUTRES', icon: Box, count: countOthers },
+                              { key:'best', label:'LES + VENDUS', icon: Star, count: countBest },
+                            ] as const).map((opt) => {
+                              const active = offerCategory === opt.key;
+                              return (
+                                <li key={opt.key}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOfferCategory(active ? null : (opt.key as any))}
+                                    className={`w-full flex items-center justify-between rounded-xl border px-3 py-2 text-slate-800 hover:bg-slate-50 ${
+                                      active ? 'border-sky-300 bg-sky-50' : 'border-slate-200/80 bg-white'
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-3">
+                                      <opt.icon className={`h-4 w-4 ${active ? 'text-sky-700' : 'text-sky-600'}`} />
+                                      <span className="uppercase tracking-[0.25em] text-slate-700 text-xs">{opt.label}</span>
+                                    </span>
+                                    <span className="text-slate-500 text-xs font-medium">{opt.count}</span>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          <div className="my-2 h-px bg-slate-200" />
+                          <div className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                            {offerCategory === 'internet' && 'Offres Internet'}
+                            {offerCategory === 'mobile' && 'Offres Mobile'}
+                            {offerCategory === 'autres' && 'Autres offres'}
+                            {offerCategory === 'best' && 'Les + vendus (mois en cours)'}
+                            {(!offerCategory || offerCategory === 'total') && 'Toutes les offres'}
+                          </div>
+                          <div className="max-h-60 overflow-auto pr-1 custom-scrollbar">
+                            {offersCatalog.length === 0 && offerCategory !== 'best' ? (
+                              <div className="px-2 py-2 text-xs text-slate-400">{offersLoading ? 'Chargement…' : 'Aucune offre trouvée'}</div>
+                            ) : (
+                              <ul className="space-y-1">
+                                {(() => {
+                                  // Select the source list
+                                  let source: string[] = [];
+                                  if (offerCategory === 'best') source = topOffers;
+                                  else source = offersCatalog;
+                                  // Apply category filter
+                                  if (offerCategory === 'internet') source = source.filter((o) => classifyOfferLabel(o) === 'internet');
+                                  else if (offerCategory === 'mobile') source = source.filter((o) => classifyOfferLabel(o) === 'mobile');
+                                  else if (offerCategory === 'autres') source = source.filter((o) => classifyOfferLabel(o) === 'autres');
+                                  // Apply query filter from current input
+                                  const q = (editModal.form?.intituleOffre || '').toLowerCase();
+                                  if (q) source = source.filter((o) => o.toLowerCase().includes(q));
+                                  // unique + slice for performance
+                                  const uniq: string[] = Array.from(new Set(source));
+                                  return uniq.slice(0, 100).map((offer) => (
+                                    <li key={offer}>
+                                      <button
+                                        type="button"
+                                        onClick={() => { handleEditChange('intituleOffre', offer); setOfferMenuOpen(false); }}
+                                        className="w-full flex items-center justify-between rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-800 hover:bg-slate-50"
+                                      >
+                                        <span className="truncate pr-3">{offer}</span>
+                                        <span className="text-slate-300 text-[10px]">Choisir</span>
+                                      </button>
+                                    </li>
+                                  ));
+                                })()}
+                              </ul>
+                            )}
+                          </div>
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setOfferMenuOpen(false)}
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                            >
+                              Utiliser « {editModal.form?.intituleOffre || '…'} » tel quel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </EditField>
                   <EditField label="Référence panier">
                     <input

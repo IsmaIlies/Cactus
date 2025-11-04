@@ -120,6 +120,22 @@ const SupervisorLeadsDashboard2: React.FC = () => {
   const { area } = useParams<{ area: string }>();
   const normalizedArea = (area || '').toLowerCase();
 
+  // Region switcher (FR/CIV) replacing "Changer d'espace"
+  const [region, setRegion] = React.useState<'FR' | 'CIV'>(() => {
+    try {
+      return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase() === 'CIV') ? 'CIV' : 'FR';
+    } catch {
+      return 'FR';
+    }
+  });
+  const [regionMenuOpen, setRegionMenuOpen] = React.useState(false);
+  const toggleRegionMenu = () => setRegionMenuOpen((v) => !v);
+  const handleRegionChange = (r: 'FR' | 'CIV') => {
+    setRegion(r);
+    try { localStorage.setItem('activeRegion', r); } catch {}
+    setRegionMenuOpen(false);
+  };
+
   const [sourceBreakdown, setSourceBreakdown] = React.useState<Record<LeadSourceKey, LeadBreakdown>>({
     opportunity: createEmptyBreakdown(),
     dolead: createEmptyBreakdown(),
@@ -138,22 +154,14 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     startOfDay.setHours(0, 0, 0, 0);
     setLoading(true);
     setError(null);
-    const region = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
 
-    const q = region === 'CIV'
-      ? query(
-          collection(db, 'leads_sales'),
-          where('mission', '==', 'ORANGE_LEADS'),
-          where('region', '==', 'CIV'),
-          where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
-          orderBy('createdAt', 'desc')
-        )
-      : query(
-          collection(db, 'leads_sales'),
-          where('mission', '==', 'ORANGE_LEADS'),
-          where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
-          orderBy('createdAt', 'desc')
-        );
+    // TEMP: même requête pour FR & CIV (agrégées). Pas de filtre region.
+    const q = query(
+      collection(db, 'leads_sales'),
+      where('mission', '==', 'ORANGE_LEADS'),
+      where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+      orderBy('createdAt', 'desc')
+    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -188,7 +196,12 @@ const SupervisorLeadsDashboard2: React.FC = () => {
         setLoading(false);
       },
       (err) => {
-        setError(err?.message || "Impossible de charger les ventes Leads.");
+        const code = (err as any)?.code || '';
+        if (code === 'failed-precondition') {
+          setError("Index Firestore en cours de construction pour la région sélectionnée. Réessaie dans quelques minutes…");
+        } else {
+          setError((err as any)?.message || "Impossible de charger les ventes Leads.");
+        }
         setLoading(false);
       }
     );
@@ -196,7 +209,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     return () => {
       try { unsubscribe(); } catch { /* ignore */ }
     };
-  }, [normalizedArea]);
+  }, [normalizedArea, region]);
 
   React.useEffect(() => {
     if (normalizedArea !== 'leads') return;
@@ -206,7 +219,6 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
 
     setMonthlyLoading(true);
-    const region = (() => { try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase()==='CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; } })();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const labels = Array.from({ length: daysInMonth }, (_, idx) =>
       new Date(now.getFullYear(), now.getMonth(), idx + 1).toLocaleDateString('fr-FR', {
@@ -221,22 +233,14 @@ const SupervisorLeadsDashboard2: React.FC = () => {
     const mobile = datasetTemplate();
     const mobileSosh = datasetTemplate();
 
-    const q = region === 'CIV'
-      ? query(
-          collection(db, 'leads_sales'),
-          where('mission', '==', 'ORANGE_LEADS'),
-          where('region', '==', 'CIV'),
-          where('createdAt', '>=', Timestamp.fromDate(monthStart)),
-          where('createdAt', '<', Timestamp.fromDate(nextMonth)),
-          orderBy('createdAt', 'asc')
-        )
-      : query(
-          collection(db, 'leads_sales'),
-          where('mission', '==', 'ORANGE_LEADS'),
-          where('createdAt', '>=', Timestamp.fromDate(monthStart)),
-          where('createdAt', '<', Timestamp.fromDate(nextMonth)),
-          orderBy('createdAt', 'asc')
-        );
+    // TEMP: même requête pour FR & CIV (agrégées). Pas de filtre region.
+    const q = query(
+      collection(db, 'leads_sales'),
+      where('mission', '==', 'ORANGE_LEADS'),
+      where('createdAt', '>=', Timestamp.fromDate(monthStart)),
+      where('createdAt', '<', Timestamp.fromDate(nextMonth)),
+      orderBy('createdAt', 'asc')
+    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -306,14 +310,19 @@ const SupervisorLeadsDashboard2: React.FC = () => {
       (err) => {
         setMonthlyLoading(false);
         setMonthlyChart(null);
-        setError((prev) => prev || err?.message || 'Impossible de générer l’historique mensuel.');
+        const code = (err as any)?.code || '';
+        if (code === 'failed-precondition') {
+          setError((prev) => prev || 'Index Firestore en cours de construction pour la région sélectionnée. Réessaie dans quelques minutes…');
+        } else {
+          setError((prev) => prev || (err as any)?.message || 'Impossible de générer l’historique mensuel.');
+        }
       }
     );
 
     return () => {
       try { unsubscribe(); } catch { /* ignore */ }
     };
-  }, [normalizedArea]);
+  }, [normalizedArea, region]);
 
   if (normalizedArea !== 'leads') {
     return (
@@ -325,11 +334,41 @@ const SupervisorLeadsDashboard2: React.FC = () => {
 
   return (
     <div className="space-y-8 p-6 text-white">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Dashboard Leads — Vue 2</h1>
-        <p className="text-blue-200/80 text-sm">
-          Vision temps réel des performances ORANGE_LEADS (jour).
-        </p>
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard Leads — Vue 2</h1>
+          <p className="text-blue-200/80 text-sm">
+            {region === 'CIV'
+              ? 'Vision temps réel des performances ORANGE_LEADS — FR & CIV (agrégées, temporaire).'
+              : 'Vision temps réel des performances ORANGE_LEADS (jour).'}
+          </p>
+        </div>
+        {/* Region dropdown */}
+        <div className="relative">
+          <button
+            onClick={toggleRegionMenu}
+            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-blue-100 hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
+          >
+            Superviseur Leads — {region}
+          </button>
+          {regionMenuOpen && (
+            <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#0a1430] shadow-xl">
+              <div className="px-3 py-2 text-[11px] uppercase tracking-[0.25em] text-blue-300/70">Choisir l’espace</div>
+              <button
+                onClick={() => handleRegionChange('FR')}
+                className={`block w-full px-4 py-2 text-left text-sm hover:bg-white/10 ${region === 'FR' ? 'text-white' : 'text-blue-100/90'}`}
+              >
+                Leads — Superviseur FR
+              </button>
+              <button
+                onClick={() => handleRegionChange('CIV')}
+                className={`block w-full px-4 py-2 text-left text-sm hover:bg-white/10 ${region === 'CIV' ? 'text-white' : 'text-blue-100/90'}`}
+              >
+                Leads — Superviseur CIV
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {error && (

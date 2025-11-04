@@ -23,6 +23,39 @@
         "queryScope": "COLLECTION",
         "fields": [
           { "fieldPath": "mission", "order": "ASCENDING" },
+        { "fieldPath": "region", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mission", "order": "ASCENDING" },
+        { "fieldPath": "region", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy.userId", "order": "ASCENDING" },
+        { "fieldPath": "mission", "order": "ASCENDING" },
+        { "fieldPath": "region", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mission", "order": "ASCENDING" },
+        { "fieldPath": "region", "order": "ASCENDING" },
+        { "fieldPath": "origineLead", "order": "ASCENDING" },
           { "fieldPath": "createdAt", "order": "ASCENDING" },
           { "fieldPath": "__name__", "order": "ASCENDING" }
         ]

@@ -21,8 +21,11 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 // Configure Firestore to better handle restricted networks/dev environments
 // Fixes issues like 400 on Write/Listen channel by falling back to long polling
+// Allow forcing long polling via env to avoid WebChannel-based noise (400 on TYPE=terminate)
+const FORCE_LP = import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING === 'true';
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  experimentalAutoDetectLongPolling: !FORCE_LP,
+  experimentalForceLongPolling: FORCE_LP,
 });
 export const firebaseApp = app;
 export const storage = getStorage(app);

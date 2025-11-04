@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { CalendarRange } from 'lucide-react';
-import ProgrammePdfBanner from '../components/ProgrammePdfBanner';
-import ProgrammePdfTopBar from '../components/ProgrammePdfTopBar';
+import NouveautesPdfBanner from '../components/NouveautesPdfBanner';
 
 // Images (placer les visuels fournis dans /public ou adapter les paths)
 // Exemple: <img src="/marseille-cal.png" ... />
@@ -99,8 +98,7 @@ const NouveautesPage: React.FC = () => {
         </div>
       </div>
     <div className="flex-1 overflow-auto scroll-beauty scroll-fade p-5 sm:p-8 space-y-10 bg-gradient-to-br from-cactus-950 via-cactus-900 to-cactus-800 relative">
-  <ProgrammePdfTopBar />
-  <ProgrammePdfBanner />
+  <NouveautesPdfBanner />
   {/* Bloc régionalisation (remplace les blocs Programme mardi/mercredi/jeudi) */}
   <SectionBlock title="Régionalisation des sports — Partie 1" subtitle="Contenus localisés par régions (extraits)">
     <div className="space-y-6 text-[13px] leading-relaxed">

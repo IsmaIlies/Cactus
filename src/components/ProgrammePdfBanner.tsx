@@ -69,9 +69,10 @@ const ProgrammePdfBanner: React.FC = () => {
 
   const previewUrl = useMemo(() => {
     if (directUrl) {
-      // Ajout d'un paramètre cache-busting basé sur updatedAt/storagePath pour forcer le rafraîchissement de l'iframe
-      const sep = directUrl.includes('?') ? '&' : '?';
-      return `${directUrl}${sep}v=${versionToken}`;
+      // Ajout de paramètres pour forcer l'affichage inline côté Storage et cache-busting
+      const hasQuery = directUrl.includes('?');
+      const base = `${directUrl}${hasQuery ? '&' : '?'}v=${versionToken}&response-content-disposition=inline&response-content-type=application/pdf`;
+      return base;
     }
     if (!b64) return null;
     try {
@@ -273,12 +274,14 @@ const ProgrammePdfBanner: React.FC = () => {
         ) : (
           previewUrl && (
             <div className="relative group/pdf rounded-xl overflow-hidden border border-white/10 bg-black/40 backdrop-brightness-[1.05]">
-              {/* On masque la toolbar native PDF en utilisant #toolbar=0 si possible */}
+              {/* On masque la toolbar native PDF via le fragment; on privilégie un seul # */}
               <iframe
                 key={previewUrl}
-                src={previewUrl + (previewUrl.includes('#')?'&':'#') + 'toolbar=0&navpanes=0&scrollbar=0'}
+                src={`${previewUrl.split('#')[0]}#toolbar=0&navpanes=0&scrollbar=0`}
                 title="Programme PDF"
                 className="w-full h-[480px] select-none"
+                allow="fullscreen"
+                allowFullScreen
               />
               {/* Gradient overlay subtle */}
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40 opacity-60" />
@@ -286,7 +289,7 @@ const ProgrammePdfBanner: React.FC = () => {
               {directUrl && (
                 <div className="absolute top-3 right-3 flex items-center gap-2">
                   <button
-                    onClick={()=>{ if (directUrl) setDirectUrl(directUrl + (directUrl.includes('?')?'&':'?') + 'r=' + Date.now()); }}
+                    onClick={()=>{ if (directUrl) setDirectUrl(`${directUrl}${directUrl.includes('?')?'&':'?'}r=${Date.now()}`); }}
                     className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md bg-black/55 hover:bg-black/75 text-white shadow transition border border-white/10"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />

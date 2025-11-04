@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FileText, ToggleLeft, ToggleRight } from 'lucide-react';
+import { FileText, ToggleLeft, ToggleRight, Pin } from 'lucide-react';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { storage, db, auth } from '../firebase';
@@ -20,7 +20,7 @@ const NouveautesPdfTopBar: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<Array<{id:string; name:string; size:number; active:boolean; updatedAt:Date|null; storagePath?:string;}>>([]);
+  const [items, setItems] = useState<Array<{id:string; name:string; size:number; active:boolean; updatedAt:Date|null; storagePath?:string; pinned?: boolean;}>>([]);
   const [latestId, setLatestId] = useState<string | null>(null);
   const taskRef = useRef<ReturnType<typeof uploadBytesResumable> | null>(null);
   const privileged = !!user && (
@@ -34,7 +34,7 @@ const NouveautesPdfTopBar: React.FC = () => {
       try {
         // Charger la liste (plus récent en premier)
         const col = collection(db, 'novelties');
-        let list: Array<{id:string; name:string; size:number; active:boolean; updatedAt:Date|null; storagePath?:string;}> = [];
+  let list: Array<{id:string; name:string; size:number; active:boolean; updatedAt:Date|null; storagePath?:string; pinned?: boolean;}> = [];
         try {
           const q = query(col, orderBy('updatedAt','desc'));
           const snap = await getDocs(q);
@@ -47,14 +47,15 @@ const NouveautesPdfTopBar: React.FC = () => {
               active: Boolean(v?.active),
               updatedAt: v?.updatedAt?.toDate ? v.updatedAt.toDate() : null,
               storagePath: typeof v?.storagePath === 'string' ? v.storagePath : undefined,
+              pinned: !!v?.pinned,
             });
           });
         } catch {
           // fallback: sans orderBy
           const snap = await getDocs(col);
-          snap.forEach(d => { const v:any = d.data(); list.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), active:Boolean(v?.active), updatedAt:v?.updatedAt?.toDate ? v.updatedAt.toDate() : null, storagePath: typeof v?.storagePath === 'string' ? v.storagePath : undefined }); });
-          // trier côté client par updatedAt desc
-          list.sort((a,b)=> (b.updatedAt?.getTime()||0) - (a.updatedAt?.getTime()||0));
+          snap.forEach(d => { const v:any = d.data(); list.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), active:Boolean(v?.active), updatedAt:v?.updatedAt?.toDate ? v.updatedAt.toDate() : null, storagePath: typeof v?.storagePath === 'string' ? v.storagePath : undefined, pinned: !!v?.pinned }); });
+          // trier côté client: épinglés d'abord puis date
+          list.sort((a,b)=> (Number(b.pinned)-Number(a.pinned)) || ((b.updatedAt?.getTime()||0) - (a.updatedAt?.getTime()||0)));
         }
         if (!mounted) return;
         setItems(list);
@@ -123,8 +124,8 @@ const NouveautesPdfTopBar: React.FC = () => {
         const q = query(col, orderBy('updatedAt','desc'));
         const snap = await getDocs(q);
         const list: any[] = [];
-        snap.forEach(d=>{ const v:any=d.data(); list.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), active:Boolean(v?.active), updatedAt:v?.updatedAt?.toDate ? v.updatedAt.toDate() : null, storagePath: v?.storagePath }); });
-        setItems(list);
+        snap.forEach(d=>{ const v:any=d.data(); list.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), active:Boolean(v?.active), updatedAt:v?.updatedAt?.toDate ? v.updatedAt.toDate() : null, storagePath: v?.storagePath, pinned: !!v?.pinned }); });
+        setItems(list.sort((a,b)=> (Number(b.pinned)-Number(a.pinned)) || ((b.updatedAt?.getTime()||0) - (a.updatedAt?.getTime()||0))));
         if (list[0]) setLatestId(list[0].id);
       } catch {}
     } catch (e: any){
@@ -169,6 +170,18 @@ const NouveautesPdfTopBar: React.FC = () => {
         setUpdatedAt(head?.updatedAt || null);
       }
     } finally { setUploading(false); }
+  };
+
+  const togglePinned = async (id: string, current?: boolean) => {
+    if (!privileged) return;
+    const next = !current;
+    try {
+      await updateDoc(doc(db,'novelties', id), { pinned: next, updatedAt: serverTimestamp(), updatedBy: user?.id || null });
+      setItems(prev => prev
+        .map(it => it.id===id ? { ...it, pinned: next, updatedAt: new Date() } : it)
+        .sort((a,b)=> (Number(b.pinned)-Number(a.pinned)) || ((b.updatedAt?.getTime()||0) - (a.updatedAt?.getTime()||0)))
+      );
+    } catch (e) { /* ignore */ }
   };
 
   return (
@@ -216,9 +229,15 @@ const NouveautesPdfTopBar: React.FC = () => {
               <li key={it.id} className="px-3 py-2 text-[11px] flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1 flex items-center gap-2">
                   <span className="truncate">{it.name}</span>
+                  {it.pinned && (
+                    <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-[1px] rounded-full border border-amber-400/30 bg-amber-500/15 text-amber-200"><Pin className="h-3 w-3"/> épinglé</span>
+                  )}
                   {it.updatedAt && <span className="text-white/50">· {it.updatedAt.toLocaleDateString('fr-FR')} {it.updatedAt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>}
                 </div>
                 <div className="flex items-center gap-2">
+                  <button onClick={()=>togglePinned(it.id, it.pinned)} className={`px-2 py-0.5 rounded border ${it.pinned ? 'bg-amber-600/30 text-amber-100 border-amber-400/40' : 'bg-black/30 text-white/90 border-white/10 hover:bg-black/50'}`}>
+                    {it.pinned ? 'Détacher' : 'Épingler'}
+                  </button>
                   <button onClick={()=>toggleActive(it.id, it.active)} className="px-2 py-0.5 rounded border border-white/10 text-white/90 bg-black/30 hover:bg-black/50">
                     {it.active ? 'Désactiver' : 'Activer'}
                   </button>

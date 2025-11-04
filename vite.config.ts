@@ -27,13 +27,15 @@ export default defineConfig({
       '/api/justwatch': {
         target: JUSTWATCH_FN_BASE,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/justwatch$/, '/justwatchProxy'),
+        // Allow querystrings (e.g., /api/justwatch?title=...)
+        rewrite: (path) => path.replace(/^\/api\/justwatch/, '/justwatchProxy'),
       },
       // Forward /api/leads-stats to the leadsStats Cloud Function (prevents DOCTYPE HTML from SPA fallback)
       '/api/leads-stats': {
         target: LEADS_FN_BASE,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/leads-stats$/, '/leadsStats'),
+        // Allow querystrings (e.g., /api/leads-stats?date_start=YYYY-MM-DD&date_end=YYYY-MM-DD)
+        rewrite: (path) => path.replace(/^\/api\/leads-stats/, '/leadsStats'),
       },
       // Dev-only proxy to call the vendor API without CORS from the browser
       '/vendor/leads-stats': {

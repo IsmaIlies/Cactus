@@ -90,12 +90,45 @@ const normalizeDate = (value: unknown): Date | null => {
 };
 
 const SupervisorLeadsPlusPage: React.FC = () => {
+  // Helper robuste pour parser du JSON sans planter sur 204/vides/HTML
+  const parseJsonResponse = React.useCallback(async (res: Response) => {
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`);
+    }
+    if (res.status === 204) {
+      return {} as any;
+    }
+  // Not used for now, but could be leveraged to branch on content types
+  // const contentType = res.headers.get('content-type') || '';
+    // Si le serveur ne renvoie pas application/json, tenter un parse text -> json prudemment
+    const text = await res.text();
+    if (!text) return {} as any;
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Certains serveurs renvoient du texte/HTML: retourner un objet vide pour ne pas bloquer l'UI
+      // et laisser les compteurs à 0.
+      throw new Error('Réponse non JSON');
+    }
+  }, []);
+
+  // Construit une URL avec des query params en gérant correctement ? vs &
+  const withQueryParams = React.useCallback((base: string, params: Record<string, string>) => {
+    const hasQuery = base.includes('?');
+    const sep = hasQuery ? '&' : '?';
+    const qs = new URLSearchParams(params).toString();
+    return `${base}${sep}${qs}`;
+  }, []);
   const [leadCount, setLeadCount] = React.useState<number | null>(null);
   const [leadType, setLeadType] = React.useState<string | null>(null);
   const baseStatsUrl = React.useMemo(() => {
-    const isLocal = typeof window !== 'undefined' && (window.location.origin.includes('localhost:5173') || window.location.hostname === '127.0.0.1');
+    const isLocal = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    );
+    // En local, on passe par la Cloud Function proxifiée par Vite: plus robuste (gère token + erreurs)
+    // En prod, on peut garder l'URL vendor directe avec token en query
     return isLocal
-      ? '/vendor/leads-stats?token=b7E8g2QEBh8jz7eF57uT'
+      ? '/api/leads-stats'
       : 'https://orange-leads.mm.emitel.io/stats-lead.php?token=b7E8g2QEBh8jz7eF57uT';
   }, []);
 
@@ -132,7 +165,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
   React.useEffect(() => {
     const controller = new AbortController();
     fetch(baseStatsUrl, { signal: controller.signal })
-      .then((res) => res.json())
+      .then((res) => parseJsonResponse(res))
       .then((data) => {
         const parsed = parseLeadStats(data);
         setStats(parsed);
@@ -290,7 +323,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     setError('');
     try {
       const response = await fetch(baseStatsUrl);
-      const json = await response.json();
+      const json = await parseJsonResponse(response);
       const parsed = parseLeadStats(json);
       setStats(parsed);
       if (Array.isArray(json?.DATA) && json.DATA.length > 0) {
@@ -298,7 +331,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
         setLeadType(json.DATA[0].type ?? null);
       }
     } catch (e: any) {
-      const message = e?.message ? String(e.message) : 'Erreur inconnue (CORS ?)';
+      const message = e?.message ? String(e.message) : 'Erreur réseau ou format de réponse inattendu';
       setError(message);
       setStats(INITIAL_STATS);
   // setApiRaw(null); // removed unused
@@ -307,7 +340,7 @@ const SupervisorLeadsPlusPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [baseStatsUrl, parseLeadStats]);
+  }, [baseStatsUrl, parseLeadStats, parseJsonResponse]);
 
   // TODO: ajouter des filtres date_start/date_end via querystring.
 
@@ -352,9 +385,9 @@ const SupervisorLeadsPlusPage: React.FC = () => {
         const daysSet = new Set(days);
         const entries: HistoryEntry[] = [];
         for (const isoDate of days) {
-          const url = `${baseStatsUrl}&date_start=${isoDate}&date_end=${isoDate}`;
+          const url = withQueryParams(baseStatsUrl, { date_start: isoDate, date_end: isoDate });
           const response = await fetch(url);
-          const json = await response.json();
+          const json = await parseJsonResponse(response);
           const parsed = parseLeadStats(json);
           entries.push({ date: isoDate, dolead: parsed.dolead, opportunity: parsed.opportunity, mm: parsed.mm });
         }

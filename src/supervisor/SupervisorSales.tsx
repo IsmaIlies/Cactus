@@ -596,6 +596,164 @@ const SupervisorSales: React.FC = () => {
     return acc;
   }, [baseAfterOfferSeller]);
 
+  // ===== Export (Canal+) =====
+  type ExportColumnKey = 'date' | 'seller' | 'offer' | 'status' | 'rawStatus' | 'orderNumber' | 'region' | 'campaign' | 'client' | 'phone';
+  const EXPORT_COLUMNS: Record<ExportColumnKey, { label: string; width: number }> = {
+    date: { label: 'Date', width: 20 },
+    seller: { label: 'Télévendeur', width: 24 },
+    offer: { label: "Type d'offre (normalisé)", width: 26 },
+    status: { label: 'Statut (catégorie)', width: 20 },
+    rawStatus: { label: 'Statut (brut)', width: 24 },
+    orderNumber: { label: 'N° commande', width: 18 },
+    region: { label: 'Région', width: 10 },
+    campaign: { label: 'Campagne', width: 16 },
+    client: { label: 'Client', width: 22 },
+    phone: { label: 'Téléphone', width: 16 },
+  };
+  const DEFAULT_EXPORT_ORDER: ExportColumnKey[] = ['date','seller','offer','status','orderNumber','region','campaign','client','phone','rawStatus'];
+  const [exportOrder, setExportOrder] = React.useState<ExportColumnKey[]>(() => {
+    try {
+      const raw = localStorage.getItem('canalExportOrder');
+      if (raw) {
+        const parsed = JSON.parse(raw) as ExportColumnKey[];
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch {}
+    return DEFAULT_EXPORT_ORDER;
+  });
+  const [exportEnabled, setExportEnabled] = React.useState<Record<ExportColumnKey, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('canalExportEnabled');
+      if (raw) return JSON.parse(raw) as Record<ExportColumnKey, boolean>;
+    } catch {}
+    return Object.keys(EXPORT_COLUMNS).reduce((acc, k) => { (acc as any)[k] = true; return acc; }, {} as Record<ExportColumnKey, boolean>);
+  });
+  const [showExportConfig, setShowExportConfig] = React.useState(false);
+
+  React.useEffect(() => {
+    try { localStorage.setItem('canalExportOrder', JSON.stringify(exportOrder)); } catch {}
+  }, [exportOrder]);
+  React.useEffect(() => {
+    try { localStorage.setItem('canalExportEnabled', JSON.stringify(exportEnabled)); } catch {}
+  }, [exportEnabled]);
+
+  const moveCol = (key: ExportColumnKey, dir: -1 | 1) => {
+    setExportOrder((prev) => {
+      const idx = prev.indexOf(key);
+      if (idx === -1) return prev;
+      const ni = idx + dir;
+      if (ni < 0 || ni >= prev.length) return prev;
+      const next = prev.slice();
+      const [item] = next.splice(idx, 1);
+      next.splice(ni, 0, item);
+      return next;
+    });
+  };
+
+  const activeColumns = exportOrder.filter((k) => exportEnabled[k]);
+
+  const buildWorksheet = (rows: Sale[]) => {
+    const header = activeColumns.map((k) => EXPORT_COLUMNS[k].label);
+    const data: (string | number)[][] = [header];
+    rows.forEach((s) => {
+      const d = toDate(s.date);
+      const cat = getStatusCategory(s);
+      const raw = getRawStatus(s);
+      const clientName = `${(s as any).clientFirstName || ''} ${(s as any).clientLastName || ''}`.trim();
+      const phone = (s as any).clientPhone || '';
+      const offerNorm = classifyOffer(String(s.offer || ''));
+      const row = activeColumns.map((k) => {
+        switch (k) {
+          case 'date': return d ? fmtDate(d) : '';
+          case 'seller': return sellerName(s);
+          case 'offer': return offerNorm;
+          case 'status': return cat;
+          case 'rawStatus': return raw || '';
+          case 'orderNumber': return s.orderNumber || '';
+          case 'region': return (s as any).region || '';
+          case 'campaign': return s.campaign || '';
+          case 'client': return clientName || '';
+          case 'phone': return phone || '';
+        }
+      });
+      data.push(row as (string | number)[]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    (ws as any)['!cols'] = activeColumns.map((k) => ({ wch: EXPORT_COLUMNS[k].width }));
+    for (let c = 0; c < header.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 0, c });
+      const cell = (ws as any)[addr];
+      if (cell) {
+        cell.s = {
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+          fill: { patternType: 'solid', fgColor: { rgb: '0F172A' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: { bottom: { style: 'thin', color: { rgb: '334155' } } },
+        } as any;
+      }
+    }
+    (ws as any)['!freeze'] = { rows: 1, columns: 0 };
+    (ws as any)['!rows'] = [{ hpt: 22 }];
+    return ws;
+  };
+
+  const exportExcel = (rows: Sale[]) => {
+    const ws = buildWorksheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'VENTES CANAL+');
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date(); const pad = (n:number)=>n.toString().padStart(2,'0');
+    a.href = url; a.download = `canal_sales_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  // Construit un CSV UTF-8 (séparateur ;) en forçant la date au format texte (évite ##### dans Excel)
+  const buildCsvString = (rows: Sale[]) => {
+    const header = activeColumns.map((k) => EXPORT_COLUMNS[k].label);
+    const lines: string[] = [];
+    const esc = (v: string) => '"' + v.replace(/"/g, '""') + '"';
+    lines.push(header.map(h => esc(h)).join(';'));
+    rows.forEach((s) => {
+      const d = toDate(s.date);
+      const cat = getStatusCategory(s);
+      const raw = getRawStatus(s);
+      const clientName = `${(s as any).clientFirstName || ''} ${(s as any).clientLastName || ''}`.trim();
+      const phone = (s as any).clientPhone || '';
+      const offerNorm = classifyOffer(String(s.offer || ''));
+      const fields = activeColumns.map((k) => {
+        switch (k) {
+          case 'date': return '\t' + (d ? fmtDate(d) : ''); // \t pour forcer texte dans Excel
+          case 'seller': return sellerName(s);
+          case 'offer': return offerNorm;
+          case 'status': return cat;
+          case 'rawStatus': return raw || '';
+          case 'orderNumber': return s.orderNumber || '';
+          case 'region': return (s as any).region || '';
+          case 'campaign': return s.campaign || '';
+          case 'client': return clientName || '';
+          case 'phone': return phone || '';
+        }
+      }).map(v => esc(String(v ?? '')));
+      lines.push(fields.join(';'));
+    });
+    return lines.join('\r\n');
+  };
+
+  const exportCsv = (rows: Sale[]) => {
+    const csv = buildCsvString(rows);
+    // BOM UTF-8 pour préserver les accents à l'ouverture dans Excel
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const now = new Date(); const pad = (n:number)=>n.toString().padStart(2,'0');
+    a.href = url; a.download = `canal_sales_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
 
   // Vue LEADS: pas de filtres Canal+, affiche le tableau LEADS demandé
   if (isLeads) {
@@ -743,14 +901,29 @@ const SupervisorSales: React.FC = () => {
 
       {/* KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm animate-fade-in" style={{animationDelay:'40ms'}}>
             <p className="text-blue-200 text-sm">Ventes Canal+ listées</p>
             <p className="text-3xl font-extrabold text-white">{loading ? '…' : totalListed}</p>
             {usingFallback && <div className="text-[11px] text-blue-300 mt-1">Affichage optimisé (index en cours)</div>}
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm animate-fade-in" style={{animationDelay:'80ms'}}>
             <p className="text-blue-200 text-sm">Période</p>
             <div className="text-sm text-blue-100">{start || '—'} → {end || new Date().toISOString().slice(0,10)}</div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm animate-fade-in" style={{animationDelay:'120ms'}}>
+            <p className="text-blue-200 text-sm mb-2">Répartition statuts</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(statusCounts).map(([k,v]) => {
+                const dot = k.toLowerCase().includes('valid') ? 'bg-emerald-500' : k.toLowerCase().includes('attente') ? 'bg-amber-500' : /iban|roac/i.test(k) ? 'bg-rose-500' : 'bg-gray-400';
+                return (
+                  <span key={k} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-blue-100 text-xs">
+                    <span className={`inline-block w-2 h-2 rounded-full ${dot}`} />
+                    {k}
+                    <span className="ml-0.5 inline-flex items-center justify-center text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 border border-white/10 text-blue-100">{v ?? 0}</span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -824,15 +997,60 @@ const SupervisorSales: React.FC = () => {
           </div>
 
         {/* Liste des ventes */}
-          <div className="lg:col-span-2 rounded-lg border border-white/10 bg-white/5 p-0 shadow-sm">
+          <div className="lg:col-span-2 rounded-lg border border-white/10 bg-white/5 p-0 shadow-sm relative">
           <div className="flex items-center justify-between mb-3">
             <div className="px-4 pt-4">
               <h3 className="font-semibold text-white">Ventes Canal+ ({totalListed})</h3>
               <div className="text-xs text-blue-200">{totalListed} ventes Canal+ trouvées</div>
             </div>
-            {error && !/requires an index/i.test(String(error)) && (
-              <div className="text-rose-300 text-xs px-4">{error}</div>
-            )}
+            <div className="flex items-center gap-2 px-4 pt-4">
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportConfig((s)=>!s)}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20"
+                >Colonnes</button>
+                {showExportConfig && (
+                  <div className="absolute right-0 mt-2 w-[320px] rounded-lg border border-white/10 bg-slate-900/95 backdrop-blur p-3 shadow-xl animate-fade-in z-10">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-white">Colonnes export</h4>
+                      <button className="text-blue-200 text-xs hover:underline" onClick={()=>{ setExportOrder(DEFAULT_EXPORT_ORDER); setExportEnabled(Object.keys(EXPORT_COLUMNS).reduce((acc,k)=>{(acc as any)[k]=true; return acc;}, {} as Record<ExportColumnKey, boolean>)); }}>Réinitialiser</button>
+                    </div>
+                    <div className="max-h-64 overflow-auto pr-1 scroll-beauty">
+                      {exportOrder.map((k)=> (
+                        <div key={k} className="flex items-center justify-between gap-2 py-1">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="accent-cactus-600" checked={!!exportEnabled[k]} onChange={()=> setExportEnabled(prev => ({ ...prev, [k]: !prev[k] }))} />
+                            <span className="text-white">{EXPORT_COLUMNS[k].label}</span>
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <button className="px-1.5 py-0.5 text-xs rounded bg-white/10 border border-white/10 text-blue-100 hover:bg-white/20" onClick={()=>moveCol(k,-1)}>↑</button>
+                            <button className="px-1.5 py-0.5 text-xs rounded bg-white/10 border border-white/10 text-blue-100 hover:bg-white/20" onClick={()=>moveCol(k,1)}>↓</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-right">
+                      <button className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20" onClick={()=>setShowExportConfig(false)}>Fermer</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={()=> exportExcel(filtered)}
+                className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20"
+                disabled={filtered.length===0}
+                title={filtered.length===0 ? 'Aucune donnée à exporter' : 'Exporter Excel (.xlsx)'}
+              >Export Excel</button>
+              <button
+                onClick={()=> exportCsv(filtered)}
+                className="px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white bg-white/10 hover:bg-white/20"
+                disabled={filtered.length===0}
+                title={filtered.length===0 ? 'Aucune donnée à exporter' : 'Exporter CSV (.csv)'}
+              >Export CSV</button>
+              {error && !/requires an index/i.test(String(error)) && (
+                <div className="text-rose-300 text-xs">{error}</div>
+              )}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -852,18 +1070,22 @@ const SupervisorSales: React.FC = () => {
                 {loading && (
                   Array.from({length:8}).map((_,i) => (
                     <tr key={i} className="border-t border-white/10">
-                      <td className="p-3 text-blue-300">…</td>
-                      <td className="p-3 text-blue-300">…</td>
-                      <td className="p-3 text-blue-300">…</td>
+                      {[120,140,110].map((w, idx) => (
+                        <td key={idx} className="p-3">
+                          <div className="h-4 rounded bg-white/10 overflow-hidden relative" style={{width: w}}>
+                            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer-move" />
+                          </div>
+                        </td>
+                      ))}
                     </tr>
                   ))
                 )}
-                {!loading && filtered.map((s) => {
+                {!loading && filtered.map((s,idx) => {
                   const d = toDate(s.date);
                   const cat = getStatusCategory(s);
                   const raw = getRawStatus(s);
                   return (
-                    <tr key={s.id} className="border-t border-white/10 hover:bg-white/5 even:bg-white/[0.03]" title={`Statut: ${cat} | Brut: ${raw || '—'} | Consent: ${s.consent || '—'}`}>
+                    <tr key={s.id} className="border-t border-white/10 hover:bg-white/5 even:bg-white/[0.03] animate-fade-in" style={{animationDelay: `${Math.min(idx,30)*30}ms`}} title={`Statut: ${cat} | Brut: ${raw || '—'} | Consent: ${s.consent || '—'}`}>
                       <td className="p-3 whitespace-nowrap text-white">{fmtDate(d)}</td>
                       <td className="p-3 text-white">{sellerName(s)}</td>
                       <td className="p-3 text-white">{s.orderNumber || '—'}</td>

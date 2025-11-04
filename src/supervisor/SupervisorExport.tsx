@@ -15,18 +15,23 @@ const SupervisorExport: React.FC = () => {
     agents: [] as string[],
   });
 
+  // Region state (FR/CIV) with localStorage persistence
+  const [region, setRegion] = React.useState<'FR' | 'CIV'>(() => {
+    try { return ((localStorage.getItem('activeRegion') || 'FR').toUpperCase() === 'CIV') ? 'CIV' : 'FR'; } catch { return 'FR'; }
+  });
   React.useEffect(() => {
     setLoading(true);
-    getAllValidatedSales("FR")
+    setError(null);
+    getAllValidatedSales(region)
       .then((data) => {
         setSales(data);
         setLoading(false);
       })
-      .catch((e) => {
+      .catch(() => {
         setError("Erreur de chargement des ventes Canal+");
         setLoading(false);
       });
-  }, []);
+  }, [region]);
 
   // Extraction unique pour les filtres dynamiques
   const agentsList = Array.from(new Set(sales.map(s => s.name || s.userName || s.agent || ''))).filter(Boolean);
@@ -154,7 +159,7 @@ const SupervisorExport: React.FC = () => {
     const ws = utils.json_to_sheet(data);
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "Ventes Canal+");
-    writeFile(wb, `ventes_canalplus_${new Date().toISOString().slice(0,10)}.xlsx`);
+    writeFile(wb, `ventes_canalplus_${region.toLowerCase()}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   return (
@@ -228,8 +233,20 @@ const SupervisorExport: React.FC = () => {
       <div className="flex-1 min-w-0">
         <div className="flex flex-row justify-between items-center mb-6">
           <div>
-            <h2 className="text-white text-2xl font-bold leading-tight mb-0">Ventes Canal+</h2>
+            <h2 className="text-white text-2xl font-bold leading-tight mb-0">Ventes Canal+ — {region}</h2>
             <p className="text-[#b2becd] text-base font-normal mt-1 mb-0">{filteredSales.length} ventes affichées</p>
+          </div>
+          {/* Region switcher */}
+          <div className="flex items-center gap-2">
+            <span className="text-blue-200 text-sm">Région</span>
+            <select
+              value={region}
+              onChange={(e)=>{ const r = (e.target.value === 'CIV' ? 'CIV' : 'FR') as 'FR'|'CIV'; setRegion(r); try{localStorage.setItem('activeRegion', r);}catch{}}}
+              className="rounded-lg bg-[#0d1220] border border-[#22334a] px-3 py-2 text-blue-100"
+            >
+              <option value="FR">FR</option>
+              <option value="CIV">CIV</option>
+            </select>
           </div>
           <button
             onClick={handleExport}
@@ -241,7 +258,7 @@ const SupervisorExport: React.FC = () => {
           </button>
         </div>
         <div className="bg-[#172635] rounded-2xl border border-[#22334a] p-6 shadow-lg">
-          <h3 className="text-white text-xl font-bold mb-4">Historique</h3>
+          <h3 className="text-white text-xl font-bold mb-4">Historique ({region})</h3>
           {error && <div className="text-red-400 mb-4">{error}</div>}
           <div className="overflow-x-auto">
             <table className="min-w-full text-base text-blue-100">

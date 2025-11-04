@@ -65,9 +65,9 @@ export const categorize = (typeOffre: string | undefined | null) => {
       return { ...zero, internetSosh: 1 };
     case "mobilesosh":
       return { ...zero, mobileSosh: 1 };
-    case "internet + mobile":
+    case "internet+mobile":
       return { ...zero, internet: 1, mobile: 1 };
-    case "internetsosh + mobilesosh":
+    case "internetsosh+mobilesosh":
       return { ...zero, internetSosh: 1, mobileSosh: 1 };
     default:
       return { ...zero };
