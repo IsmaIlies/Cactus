@@ -121,17 +121,57 @@ const SupervisorArchives: React.FC = () => {
   const toHoursLabel = (mins: number) => `${String(Math.floor(mins/60)).padStart(2,'0')}h${String(mins%60).padStart(2,'0')}`;
 
   const exportCsv = () => {
-    const headers = ['Jour','Agent','Matin','Après-midi','Opération','Heures','Brief','Statut'];
+    // Excel (FR) friendly export: semicolon separator, FR date format, UTF-8 BOM, CRLF
+    const headers = [
+      'Période','Jour','Agent',
+      'Matin début','Matin fin','Après-midi début','Après-midi fin',
+      'Durée (hhmm)','Total (min)','Opération','Brief','Mission','Espace','Statut'
+    ];
+    const sep = ';';
     const esc = (s: any) => `"${(s ?? '').toString().replaceAll('"','""')}"`;
-    const lines = [headers.join(',')];
+    const toFR = (iso?: string) => {
+      if (!iso) return '';
+      // iso expected YYYY-MM-DD; fallback: try Date parse
+      try {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+          const [y,m,d] = iso.split('-').map(Number); return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
+        }
+        const dt = new Date(iso);
+        const d = String(dt.getDate()).padStart(2,'0');
+        const m = String(dt.getMonth()+1).padStart(2,'0');
+        const y = dt.getFullYear();
+        if (!y || isNaN(y)) return iso;
+        return `${d}/${m}/${y}`;
+      } catch { return iso; }
+    };
+    const statusToFR = (s?: string) => {
+      const v = (s || '').toLowerCase();
+      if (v === 'approved') return 'Validé';
+      if (v === 'rejected') return 'Refusé';
+      if (v === 'pending' || v === 'submitted') return 'En attente';
+      return s || '';
+    };
+    const lines: string[] = [];
+    lines.push(headers.join(sep));
     visibleRows.forEach(r => {
       const agent = r.userDisplayName || r.userEmail || '';
-      const matin = r.includeMorning ? `${r.morningStart || ''}-${r.morningEnd || ''}` : '';
-      const apm = r.includeAfternoon ? `${r.afternoonStart || ''}-${r.afternoonEnd || ''}` : '';
+      const matinDeb = r.includeMorning ? (r.morningStart || '') : '';
+      const matinFin = r.includeMorning ? (r.morningEnd || '') : '';
+      const apmDeb = r.includeAfternoon ? (r.afternoonStart || '') : '';
+      const apmFin = r.includeAfternoon ? (r.afternoonEnd || '') : '';
       const mins = (r.includeMorning? minutesBetween(r.morningStart, r.morningEnd):0) + (r.includeAfternoon? minutesBetween(r.afternoonStart, r.afternoonEnd):0);
-      lines.push([esc(r.day), esc(agent), esc(matin), esc(apm), esc(r.project||''), esc(toHoursLabel(mins)), esc(r.notes||''), esc(r.reviewStatus||'')].join(','));
+      const mission = r.mission || '';
+      const espace = r.region || '';
+  const statut = statusToFR(r.reviewStatus || 'Approved');
+      lines.push([
+        esc(period), esc(toFR(r.day)), esc(agent),
+        esc(matinDeb), esc(matinFin), esc(apmDeb), esc(apmFin),
+        esc(toHoursLabel(mins)), esc(mins), esc(r.project||''), esc(r.notes||''), esc(mission), esc(espace), esc(statut)
+      ].join(sep));
     });
-    const csv = lines.join('\n');
+    const csvBody = lines.join('\r\n');
+    const BOM = '\uFEFF';
+    const csv = BOM + csvBody;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

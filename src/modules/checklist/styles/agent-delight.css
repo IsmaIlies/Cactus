@@ -1,0 +1,87 @@
+/* Delightful enhancements for the Agent Checklist page */
+
+@keyframes bgWave {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(.98); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.delight-bg {
+  background-image: radial-gradient(1200px 600px at 10% -10%, rgba(16,185,129,.10), transparent),
+                    radial-gradient(900px 500px at 110% 10%, rgba(59,130,246,.10), transparent);
+  background-attachment: fixed;
+}
+
+.delight-hero {
+  border-radius: 16px;
+  background: linear-gradient(120deg, rgba(16,185,129,.14), rgba(59,130,246,.10), rgba(16,185,129,.14));
+  background-size: 200% 200%;
+  animation: bgWave 12s ease infinite;
+  box-shadow: 0 20px 40px -20px rgba(16,185,129,.25);
+}
+
+.gradient-title {
+  background: linear-gradient(90deg, #eafff5, #a7f3d0 35%, #93c5fd 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.anim-fade { animation: fadeIn 360ms ease-out both; }
+.anim-pop { animation: popIn 320ms ease-out both; }
+
+/* Pulsing badge around status line */
+.badge-pulse { position: relative; }
+.badge-pulse::after {
+  content: '';
+  position: absolute; inset: -6px -8px; border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  animation: pulse 2400ms ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: .85 } }
+
+/* Radiant CTA with ripple */
+.btn-radiant {
+  --x: 50%;
+  --y: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.2);
+  color: #fff;
+  background-image: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 12px 24px -12px rgba(16,185,129,.55), inset 0 1px 0 0 rgba(255,255,255,.18);
+}
+.btn-radiant::after {
+  content: '';
+  position: absolute;
+  left: var(--x); top: var(--y);
+  width: 0; height: 0; border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(255,255,255,.35), transparent);
+  opacity: 0; pointer-events: none;
+}
+.btn-radiant.is-rippling::after {
+  animation: ripple .5s ease-out forwards;
+}
+@keyframes ripple {
+  0% { width: 0; height: 0; opacity: .45; }
+  100% { width: 300px; height: 300px; opacity: 0; }
+}
+
+/* Subtle glow for cards */
+.glow-card {
+  box-shadow: 0 8px 20px -12px rgba(16,185,129,.35), inset 0 1px 0 0 rgba(255,255,255,.06);
+  border: 1px solid rgba(16,185,129,.25);
+}
+
+/* Table row hover lift (keeps existing theme classes intact) */
+.checklist-table tbody tr:hover { background: rgba(255,255,255,.03); }

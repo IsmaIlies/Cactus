@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { approveEntry, rejectEntry, updateEntryFields } from '../services/hoursService';
 import { useParams } from 'react-router-dom';
 import { Calendar, Download, RefreshCw, User as UserIcon, ArrowDown, ArrowUp, CheckCircle2, XCircle, Clock as ClockIcon } from 'lucide-react';
+import './styles/supervisor-checklist-ux.css';
 
 type Row = {
   _docId: string;
@@ -311,14 +312,14 @@ const SupervisorChecklist: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Header banner polished */}
-      <div className={`rounded-2xl bg-gradient-to-br ${theme.header} ${theme.border} border p-5 shadow-[0_10px_30px_-10px_rgba(16,185,129,0.25)]`}>
+      <div className={`rounded-2xl bg-gradient-to-br ${theme.header} ${theme.border} border p-5 shadow-[0_10px_30px_-10px_rgba(16,185,129,0.25)] anim-fade` }>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="text-2xl font-semibold flex items-center gap-2">
             <Calendar className={`w-6 h-6 ${theme.accentIcon}`} /> Supervision des heures
           </div>
-          <span className={`px-3 py-1 rounded-full text-xs ${theme.badge}`}>PERIODE {monthLabel.toUpperCase()}</span>
+          <span className={`px-3 py-1 rounded-full text-xs ${theme.badge} badge-pulse`}>PERIODE {monthLabel.toUpperCase()}</span>
           <div className="flex-1" />
-          <button onClick={exportCsv} className={`px-4 py-2 rounded-full ${theme.primaryBtn} text-white font-semibold inline-flex items-center gap-2 hover:brightness-110`}>
+          <button onClick={exportCsv} className={`btn-primary-gradient inline-flex items-center gap-2`}>
             <Download className="w-4 h-4" /> Exporter en CSV
           </button>
         </div>
@@ -363,7 +364,7 @@ const SupervisorChecklist: React.FC = () => {
         </div>
       </div>
 
-      <div ref={listRef} className="bg-white/5 rounded-2xl border border-white/10 max-h-[70vh] overflow-x-auto relative scroll-beauty scroll-fade pr-2">
+      <div ref={listRef} className="bg-white/5 rounded-2xl border border-white/10 max-h-[70vh] overflow-x-auto relative scroll-beauty scroll-fade pr-2 anim-fade">
         <table className={`text-sm min-w-full`}> 
           <thead className="sticky top-0 z-10 backdrop-blur bg-black/20">
             <tr className="text-blue-200">
@@ -383,9 +384,9 @@ const SupervisorChecklist: React.FC = () => {
           <tbody>
             {loading && (
               [...Array(6)].map((_, i) => (
-                <tr key={i} className="border-t border-white/10 animate-pulse">
+                <tr key={i} className="border-t border-white/10">
                   <td className={`p-3`} colSpan={11}>
-                    <div className="h-4 bg-white/10 rounded w-full" />
+                    <div className="shimmer-line" />
                   </td>
                 </tr>
               ))
@@ -393,22 +394,22 @@ const SupervisorChecklist: React.FC = () => {
             {!loading && visibleRows.length === 0 && (
               <tr>
                 <td colSpan={11} className="p-6">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-blue-100">
-                    <div className="mx-auto w-10 h-10 rounded-full bg-white/10 flex items-center justify-center mb-2">
-                      <XCircle className="w-5 h-5" />
+                  <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.03] p-8 text-center text-blue-100 anim-pop">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
+                      <XCircle className="w-6 h-6" />
                     </div>
-                    Aucune {view==='pending' ? 'demande en cours' : 'entrée dans l’historique'} pour la période {monthLabel.toUpperCase()}.
-                    <div className="text-xs mt-1">Ajustez les filtres (période ou agent) ou revenez plus tard.</div>
+                    <div className="font-semibold mb-1">Aucune {view==='pending' ? 'demande en cours' : 'entrée dans l’historique'} pour {monthLabel.toUpperCase()}</div>
+                    <div className="text-xs opacity-80">Ajustez les filtres (période ou agent) ou revenez plus tard.</div>
                   </div>
                 </td>
               </tr>
             )}
-            {!loading && visibleRows.map((r) => {
+            {!loading && visibleRows.map((r, idx) => {
               const isApproved = r.reviewStatus==='Approved' || r.reviewStatus==='approved';
               const isRejected = r.reviewStatus==='Rejected' || r.reviewStatus==='rejected';
               const statusBar = isApproved ? 'bg-emerald-500/70' : isRejected ? 'bg-red-500/70' : 'bg-yellow-500/70';
               return (
-              <tr key={r._docId} className="border-t border-white/10 hover:bg-white/[0.04] transition-colors odd:bg-white/[0.02]">
+              <tr key={r._docId} className="border-t border-white/10 hover:bg-white/[0.04] transition-colors odd:bg-white/[0.02] anim-slide-up" style={{ animationDelay: `${Math.min(idx*30, 240)}ms` }}>
                 <td className={`p-3 text-center sticky left-0 z-10 bg-black/10 backdrop-blur` }>
                   <div className="flex items-center gap-2">
                     <span className={`inline-block w-1.5 h-5 rounded-full ${statusBar}`} />
@@ -482,13 +483,13 @@ const SupervisorChecklist: React.FC = () => {
                   <div className="flex items-center gap-2">
                     {editingId === r._docId ? (
                       <>
-                        <button onClick={() => commitEdit(r._docId)} className="px-3 py-1.5 rounded bg-emerald-600 text-white text-xs font-semibold hover:brightness-105">Enregistrer</button>
+                        <button onClick={() => commitEdit(r._docId)} className="px-3 py-1.5 rounded bg-emerald-600 text-white text-xs font-semibold hover:brightness-105 glow-focus">Enregistrer</button>
                         <button onClick={cancelEdit} className="px-3 py-1.5 rounded bg-white/10 border border-white/20 text-xs font-semibold">Annuler</button>
                       </>
                     ) : (
                       <>
                         <button onClick={() => beginEdit(r)} className="px-3 py-1.5 rounded bg-white/10 border border-white/20 text-xs font-semibold">Modifier</button>
-                        <button onClick={() => onApprove(r._docId)} className="px-3 py-1.5 rounded bg-emerald-500 text-white text-xs font-semibold hover:brightness-105">Valider</button>
+                        <button onClick={() => onApprove(r._docId)} className="px-3 py-1.5 rounded bg-emerald-500 text-white text-xs font-semibold hover:brightness-105 glow-focus">Valider</button>
                         <button onClick={() => onReject(r._docId)} className="px-3 py-1.5 rounded bg-red-500 text-white text-xs font-semibold hover:brightness-105">Refuser</button>
                       </>
                     )}

@@ -197,7 +197,12 @@ export async function updateEntryFields(docId: string, patch: Partial<Pick<Hours
 
 export async function approveEntry(docId: string) {
   const ref = doc(db, HOURS_ENTRIES, docId);
-  await updateDoc(ref, { reviewStatus: EntryReviewStatus.Approved, updatedAt: serverTimestamp() } as DocumentData);
+  // Mark the review as approved and persist a stable workflow status so it doesn't appear as "brouillon" after refresh
+  await updateDoc(ref, {
+    reviewStatus: EntryReviewStatus.Approved,
+    status: 'approved',
+    updatedAt: serverTimestamp(),
+  } as DocumentData);
 }
 
 export async function rejectEntry(docId: string) {

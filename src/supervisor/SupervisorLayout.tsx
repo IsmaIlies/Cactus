@@ -154,6 +154,24 @@ const SupervisorLayout: React.FC = () => {
                 Ventes Canal+
               </NavLink>
               {String(area).toLowerCase() === 'fr' && (
+                <NavLink
+                  to={`${base}/presence-fr`}
+                  className={({ isActive }) =>
+                    `mt-1 group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${
+                      isActive
+                        ? 'bg-gradient-to-r from-orange-400/40 via-red-500/30 to-transparent text-white border border-orange-300/40 shadow-[0_12px_32px_rgba(251,191,36,0.35)]'
+                        : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(251,191,36,0.15)]'
+                    }`
+                  }
+                >
+                  <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-orange-300 transition group-hover:bg-white/10 group-hover:text-white">
+                    <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
+                    <Clock3 className="relative h-4 w-4" aria-hidden="true" />
+                  </span>
+                  Présence Canal+ FR
+                </NavLink>
+              )}
+              {String(area).toLowerCase() === 'fr' && (
                 <NavLink to={`${base}/nouveautes`} className={({ isActive }) =>
                   `mt-1 group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${isActive ? 'bg-gradient-to-r from-orange-400/40 via-red-500/30 to-transparent text-white border border-orange-300/40 shadow-[0_12px_32px_rgba(251,191,36,0.35)]' : 'text-blue-100/80 hover:bg-white/10 hover:shadow-[0_10px_28px_rgba(251,191,36,0.15)]'}`
                 }>

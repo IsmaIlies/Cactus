@@ -14,6 +14,7 @@ import { computeWorkedMinutes, formatDayLabel, formatHours, formatMonthLabel, so
 import '../modules/checklist/styles/base.css';
 import '../modules/checklist/styles/select-operation-fix.css';
 import '../modules/checklist/styles/modern-theme.css';
+import '../modules/checklist/styles/agent-delight.css';
 import ChecklistTopHeader from '../modules/checklist/components/ChecklistTopHeader';
 
 import { subscribeEntriesByUser, upsertAgentEntry, submitAgentHours, deleteEntry as deleteRemoteEntry, getEntryDocIdFor } from '../services/hoursService';
@@ -75,33 +76,28 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
 
   }, []);
 
-  // Fusionne remote + local pour que l'ajout local reste visible même si la sync Firestore échoue
-
-  // Affiche toutes les entrées locales (même plusieurs pour le même jour),
-
-  // mais si une entrée Firestore existe pour un jour, elle masque toutes les locales de ce jour
-
+  // Fusionne remote + local pour robustesse hors-ligne, en évitant les doublons
+  // Règles:
+  // - Les entrées Firestore sont la source de vérité (toujours incluses)
+  // - On masque toutes les entrées locales dont l'id existe déjà en remote
+  // - On masque également toute entrée locale d'un jour qui existe déjà en remote (peu importe le statut)
+  //   -> Cela évite la "réapparition" d'une locale "Soumise" quand une version distante existe (y compris validée)
   const mergedEntries = useMemo(() => {
-
-    // On re-utilise les identifiants synchronises pour visualiser l'etat des lignes
-
+    // Source de vérité: distantes
     const result: DayEntry[] = [...remoteEntries];
-
-    // On ajoute les entrees locales qui n'ont pas encore ete synchronisees
+    const daysWithRemote = new Set<string>(remoteEntries.map((e) => e.day));
 
     for (const e of agentState.entries) {
-
-      if (!remoteIds.has(e.id)) {
-
-        result.push(e);
-
-      }
-
+      // Si un doc distant a le même id, ignorer la locale
+      if (remoteIds.has(e.id)) continue;
+      // Si un doc distant existe pour ce jour, on masque uniquement les locales non-brouillon (pour éviter la réapparition)
+      // mais on laisse les nouveaux brouillons visibles pour permettre plusieurs entrées le même jour.
+      if (daysWithRemote.has(e.day) && e.status !== Status.Draft) continue;
+      result.push(e);
     }
 
     return result;
-
-  }, [remoteEntries, agentState.entries]);
+  }, [remoteEntries, remoteIds, agentState.entries]);
 
   const sortedEntries = useMemo(() => [...mergedEntries].sort((a, b) => sortIsoDatesAscending(a.day, b.day)), [mergedEntries]);
 
@@ -140,10 +136,11 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
 
     if (!user?.id) return;
 
-    const unsub = subscribeEntriesByUser(user.id, agentState.period, (list) => {
+  const unsub = subscribeEntriesByUser(user.id, agentState.period, (list) => {
 
       // reflect entries into UI, but we still keep localStorage for offline capability
 
+      // 1) Répercute les entrées distantes dans l'UI
       setRemoteEntries(list.map((e) => ({
         id: e.id,
         day: e.day,
@@ -161,6 +158,24 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
         hasDispute: (e as any).hasDispute,
         supervisor: (e as any).supervisor || '',
       })));
+
+      // 2) Nettoyage passif du localStorage: si un jour est validé à distance,
+      // on retire les entrées locales de ce même jour pour éviter toute réapparition ultérieure
+      try {
+        const approvedDays = new Set(
+          list
+            .filter((e) => ('' + (e as any).reviewStatus).toLowerCase() === 'approved')
+            .map((e) => e.day)
+        );
+        if (approvedDays.size > 0) {
+          updateState((draft) => {
+            // Ne nettoie pas les brouillons: autorise l'ajout d'une nouvelle entrée sur un jour déjà validé
+            const nextEntries = draft.entries.filter((e) => !(approvedDays.has(e.day) && e.status !== Status.Draft));
+            if (nextEntries.length === draft.entries.length) return draft; // no-op
+            return { ...draft, entries: nextEntries };
+          });
+        }
+      } catch {}
 
     });
 
@@ -213,7 +228,7 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
       }
     } catch {}
 
-  }, [updateState]);
+  }, [updateState, agentState.period, user?.id]);
 
   const toggleSession = useCallback((id: string, session: 'includeMorning' | 'includeAfternoon', enabled: boolean) => {
 
@@ -460,6 +475,19 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
 
   const selectedMonthLabel = formatMonthLabel(agentState.period);
 
+  // Micro-interaction: ripple on fancy buttons (e.g., Ajouter un jour)
+  const ripple = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    el.style.setProperty('--x', `${e.clientX - rect.left}px`);
+    el.style.setProperty('--y', `${e.clientY - rect.top}px`);
+    el.classList.remove('is-rippling');
+    // Force reflow to restart animation
+    void el.offsetWidth;
+    el.classList.add('is-rippling');
+    window.setTimeout(() => el.classList.remove('is-rippling'), 500);
+  }, []);
+
   // Helpers: ISO week for grouping
   function getIsoWeekParts(dateStr: string): { year: number; week: number } {
     const [y, m, d] = dateStr.split('-').map((n) => parseInt(n, 10));
@@ -520,6 +548,8 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
             <div className="day-field__meta">
               <span className="day-field__weekday">{formatDayLabel(entry.day)}</span>
               {isToday && <span className="day-field__status day-field__status--today">Aujourd'hui</span>}
+              {/* Petite pastille JJ/MM pour repère visuel, comme sur la maquette */}
+              <span className="date-chip date-chip--muted">{`${entry.day.slice(8,10)}/${entry.day.slice(5,7)}`}</span>
             </div>
           </div>
         </td>
@@ -609,17 +639,17 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
 
 
   return (
-    <div className={`cactus-hours-theme ${themeClass}`} style={{ minHeight: '100vh' }}>
+    <div className={`cactus-hours-theme ${themeClass} delight-bg`} style={{ minHeight: '100vh' }}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
         {!tableOnly && <Sidebar />}
         <div className="page-shell" style={{ flex: 1, minWidth: 0 }}>
           {!tableOnly && (
             <>
               <ChecklistTopHeader active="agent" />
-              <div className="page-header">
+              <div className="page-header delight-hero anim-fade">
                 <div>
-                  <h2 className="page-title">Mes heures</h2>
-                  <div className="status-line">
+                  <h2 className="page-title gradient-title">Mes heures</h2>
+                  <div className="status-line badge-pulse">
                     <StatusBadge status={agentState.status} />
                     <span>{selectedMonthLabel}</span>
                   </div>
@@ -627,7 +657,7 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
                 <div className="toolbar">
                   <label htmlFor="period-select" className="sr-only">Période</label>
                   <input id="period-select" className="input" type="month" value={agentState.period} onChange={onPeriodChange} />
-                  <button className="button" type="button" onClick={addDay}>Ajouter un jour</button>
+                  <button className="button btn-radiant" type="button" onClick={(e) => { ripple(e); addDay(); }}>Ajouter un jour</button>
                   <button className="button button--ghost" type="button" onClick={resetEntries}>Réinitialiser</button>
                   {hasSubmittedEntries && (
                     <button className="button button--danger" type="button" onClick={undoSubmission}>Annuler la soumission</button>
@@ -641,7 +671,7 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
           )}
 
           <div className="table-container">
-            <div className="table-scroll">
+            <div className="table-scroll anim-fade">
               <table className="checklist-table">
               <colgroup>
                 <col className="col-day" />
@@ -683,7 +713,7 @@ export default function ChecklistPage({ themeClass = 'checklist-modern', tableOn
           </div>
 
           {!tableOnly && visibleEntries.length === 0 && (
-            <div className="card hint-card">Toutes vos déclarations validées sont visibles dans les archives.</div>
+            <div className="card hint-card glow-card anim-pop">Toutes vos déclarations validées sont visibles dans les archives.</div>
           )}
           {!tableOnly && (
             <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px' }}>

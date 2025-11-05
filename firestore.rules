@@ -263,6 +263,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Heures mensuelles par agent (supervision): écriture contrôlée côté front, schéma validé ici
+    match /leads_prod_hours_monthly/{docId} {
+      allow read: if request.auth != null;
+      // Ouvrir en écriture aux comptes authentifiés, avec validation stricte du schéma
+      // NOTE: à resserrer si besoin (par rôle superviseur) via hasAdminRole() ou un filtre email
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['monthKey','monthStart','agentLabel','hours','updatedAt'])
+        && request.resource.data.monthKey is string
+        && request.resource.data.agentLabel is string
+        && request.resource.data.hours is number
+        && request.resource.data.hours >= 0
+        && request.resource.data.monthStart is timestamp;
+      allow delete: if false;
+    }
+
     // Par défaut, on n'ouvre pas en écriture mais on autorise lecture publique
     // pour éviter les erreurs permission-denied sur du contenu non sensible affiché publiquement.
     match /{document=**} {

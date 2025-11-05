@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ReviewBadge } from '../modules/checklist/components/ReviewBadge';
-import StatusBadge from '../modules/checklist/components/StatusBadge';
 import { EntryReviewStatus } from '../modules/checklist/lib/constants';
 import { loadAgentFromStorage } from '../modules/checklist/lib/storage';
 import { computeWorkedMinutes, formatDayLabel, formatHours, formatMonthLabel, sortIsoDatesAscending } from '../modules/checklist/lib/time';
 import '../modules/checklist/styles/base.css';
 import '../modules/checklist/styles/archive-hours-right.css';
+import '../modules/checklist/styles/archives-animations.css';
 import Sidebar from '../components/Sidebar';
 import ChecklistTopHeader from '../modules/checklist/components/ChecklistTopHeader';
 import { createDispute, subscribeEntriesByUser, cancelDispute } from '../services/hoursService';
@@ -47,34 +47,44 @@ export default function ChecklistArchivePage() {
   };
 
   return (
-    <div className="cactus-hours-theme" style={{ minHeight: '100vh', background: '#f7fafc' }}>
+    <div className="cactus-hours-theme" style={{ minHeight: '100vh' }}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
         <Sidebar />
         <div className="page-shell" style={{ flex: 1, minWidth: 0 }}>
           <ChecklistTopHeader active="archive" />
-          <div className="page-header">
-            <div>
-              <h2 className="page-title">Archives</h2>
-              <div className="status-line">
-                <StatusBadge status={state.status} />
-                <span>{month}</span>
-              </div>
+          <div className="page-header fade-in">
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <h2 className="page-title" style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <span style={{
+                  width: 34,
+                  height: 34,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 999,
+                  background: 'linear-gradient(180deg, rgba(46,196,136,.25), rgba(17,63,40,.35))',
+                  border: '1px solid rgba(30,207,136,.35)'
+                }}>📁</span>
+                Archives
+              </h2>
+              <span className="badge badge--small" title="Toutes les entrées ici sont validées">Validées</span>
+              <span className="section-subtitle">{month}</span>
             </div>
             <div className="toolbar">
               <input className="input" type="month" value={period || state.period} onChange={(e) => setPeriod(e.target.value)} />
             </div>
           </div>
           <div className="archive-wrap">
-            <div className="archive-header">
+            <div className="archive-header fade-in-delay-1">
               <div>
                 <div className="section-subtitle">{month}</div>
                 <div style={{ color: 'var(--color-text-secondary)' }}>{sorted.length} {sorted.length <= 1 ? 'jour soumis' : 'jours soumis'}</div>
               </div>
-              <div className="total-highlight">{formatHours(total)}</div>
+              <div className="total-highlight" title="Total des heures validées pour la période">{formatHours(total)}</div>
             </div>
-            <div style={{ display:'grid', gap: '12px' }}>
-              {Object.entries(grouped).map(([dayIso, entries]) => (
-                <div key={dayIso} className="archive-day">
+            <div style={{ display:'grid', gap: '14px' }}>
+              {Object.entries(grouped).map(([dayIso, entries], idx) => (
+                <div key={dayIso} className="archive-day hover-lift fade-in-up" style={{ animationDelay: `${Math.min(idx*40, 240)}ms` }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                       <strong className="date-label">{formatDayLabel(dayIso)}</strong>
@@ -83,8 +93,8 @@ export default function ChecklistArchivePage() {
                     <div className="archive-hours-right">{formatHours(entries.reduce((a, e) => a + computeWorkedMinutes(e), 0))}</div>
                   </div>
                   <div style={{ display:'grid', gap: '10px' }}>
-                    {entries.map((entry) => (
-                      <div key={entry.id} className="archive-entry">
+                    {entries.map((entry, i) => (
+                      <div key={entry.id} className="archive-entry hover-subtle glow-border" style={{ animationDelay: `${Math.min(i*20, 160)}ms` }}>
                         <div className="archive-entry-col" style={{ minWidth: 160 }}>
                           <span className="project-badge">{entry.project}</span>
                           <div style={{ color: 'var(--color-text-secondary)' }}>Notes : {entry.notes?.trim() ? entry.notes : '—'}</div>
@@ -177,13 +187,25 @@ export default function ChecklistArchivePage() {
                             </>) : 'N/A'}
                           </div>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <div className="entry-actions" style={{ display:'flex', alignItems:'center', gap:10 }}>
                           <button
                             type="button"
-                            className="icon-badge"
-                            title="Signaler une erreur"
-                            onClick={() => { setClaimForDocId((entry as any)._docId ?? ''); setClaimNote(''); }}
-                          >?</button>
+                            className="cta-claim"
+                            title="Faire sa réclamation"
+                            onClick={(e) => {
+                              try {
+                                const el = e.currentTarget as HTMLButtonElement;
+                                const r = el.getBoundingClientRect();
+                                const x = e.clientX - r.left; const y = e.clientY - r.top;
+                                el.style.setProperty('--x', `${x}px`);
+                                el.style.setProperty('--y', `${y}px`);
+                              } catch {}
+                              setClaimForDocId((entry as any)._docId ?? '');
+                              setClaimNote('');
+                            }}
+                          >
+                            Faire sa réclamation
+                          </button>
                           <ReviewBadge status={entry.reviewStatus}>Validée</ReviewBadge>
                         </div>
                       </div>
@@ -193,16 +215,16 @@ export default function ChecklistArchivePage() {
               ))}
             </div>
           </div>
-          <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px' }}>
+          <div className="card fade-in-delay-2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px' }}>
             <div>
               <span className="section-subtitle">Total période</span>
               <div className="total-highlight">{formatHours(total)}</div>
             </div>
-            <StatusBadge status={state.status} />
+            <span className="badge" title="Toutes les entrées affichées sont validées">Validées</span>
           </div>
           {claimForDocId && (
-            <div className="modal-backdrop" role="dialog" aria-modal="true">
-              <div className="modal-card" style={{ padding: 20 }}>
+            <div className="modal-backdrop anim-fade-in" role="dialog" aria-modal="true">
+              <div className="modal-card anim-pop-in" style={{ padding: 20 }}>
                 <h3 className="modal-title" style={{ fontSize: 20, marginBottom: 6 }}>Envoyer une réclamation</h3>
                 <div className="section-subtitle" style={{ marginBottom: 14 }}>
                   Décrivez le problème rencontré sur cette journée.<br />

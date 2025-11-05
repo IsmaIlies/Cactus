@@ -21,7 +21,6 @@ import ELearningPage from "./pages/ELearningPage";
 import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import LeadsLayout from "./leads/LeadsLayout";
-import SsoLinkPrompt from "./components/SsoLinkPrompt";
 import Checklist from "./pages/ChecklistPage";
 import ChecklistArchivePage from "./pages/ChecklistArchivePage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
@@ -30,6 +29,7 @@ import SupervisorDashboard from "./supervisor/SupervisorDashboard";
 import SupervisorSales from "./supervisor/SupervisorSales";
 import SupervisorChecklist from "./supervisor/SupervisorChecklist";
 import SupervisorPresencePage from "./supervisor/SupervisorPresencePage";
+import SupervisorPresenceFRPage from "./supervisor/SupervisorPresenceFRPage";
 import SupervisorArchives from "./supervisor/SupervisorArchives";
 import SupervisorImport from "./supervisor/SupervisorImport";
 import SupervisorNouveautesPdf from "./supervisor/SupervisorNouveautesPdf";
@@ -96,6 +96,7 @@ function App() {
         <Route path="/dashboard/superviseur/:area/*" element={<ProtectedRoute><SupervisorLayout /></ProtectedRoute>}>
           <Route index element={<SupervisorDashboard />} />
           <Route path="presence" element={<SupervisorPresencePage />} />
+          <Route path="presence-fr" element={<SupervisorPresenceFRPage />} />
           <Route path="nouveautes" element={<SupervisorNouveautesPdf />} />
           <Route path="ventes" element={<SupervisorSales />} />
           <Route path="import" element={<SupervisorImport />} />
@@ -156,8 +157,7 @@ function App() {
       <ChecklistReminderPopup />
       {/* Notifications globales pour Mr. White */}
       <GameNotification />
-      {/* Prompt to link Microsoft SSO for legacy email/password users */}
-      <SsoLinkPrompt />
+  {/* Microsoft SSO linking prompt disabled */}
       </RegionProvider>
     </AuthProvider>
   );
