@@ -74,12 +74,17 @@ const SupervisorDashboard: React.FC = () => {
   const [regionOverride, setRegionOverride] = React.useState<'FR'|'CIV'|''>('');
 
   // UI tokens (harmonized colors)
+  // Palette Canal+ jour – augmenter la différenciation visuelle : Canal+ passe à un dégradé turquoise
   const COLORS = React.useMemo(() => ({
-    neutral: '#1f2937', // slate-800
-    cine: '#8b5cf6',    // violet-500
-    sport: '#06b6d4',   // cyan-500
-    cent: '#f59e0b',    // amber-500
-    primary: '#60a5fa', // sky-400
+    // Canal+ passe en véritable turquoise clair + contour accent pour visibilité
+    canalSolid: '#22d3ee',      // turquoise principale (CANAL+ segment plein)
+    canalBorder: '#06b6d4',     // bord / barre accent
+    canalGradientFrom: '#0ea5e9',
+    canalGradientTo: '#22d3ee',
+    cine: '#8b5cf6',
+    sport: '#10b981',
+    cent: '#f59e0b',
+    primary: '#60a5fa',
   }), []);
 
   // Lightweight spinner for KPIs
@@ -327,9 +332,9 @@ const SupervisorDashboard: React.FC = () => {
         }
         // Initialisation des tableaux de ventes par jour pour chaque offre
         const offers = [
-          { key: 'canal', label: 'Canal+', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+          { key: 'canal', label: 'Canal+', color: COLORS.canalSolid, bg: 'rgba(34,211,238,0.18)' },
           { key: 'cine', label: 'Canal+ Ciné Séries', color: '#a78bfa', bg: 'rgba(167,139,250,0.1)' },
-          { key: 'sport', label: 'Canal+ Sport', color: '#34d399', bg: 'rgba(52,211,153,0.1)' },
+          { key: 'sport', label: 'Canal+ Sport', color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
           { key: 'cent', label: '100% Canal', color: '#fbbf24', bg: 'rgba(251,191,36,0.1)' },
         ];
         const nbDays = labels.length;
@@ -750,15 +755,28 @@ const SupervisorDashboard: React.FC = () => {
                 labels: ['CANAL+','CANAL+ Ciné Séries','CANAL+ Sport','CANAL+ 100%'],
                 datasets: [{
                   data: [dayOffers.canal, dayOffers.cine, dayOffers.sport, dayOffers.cent],
-                  backgroundColor: [COLORS.neutral, COLORS.cine, COLORS.sport, COLORS.cent],
+                  backgroundColor: [COLORS.canalSolid, COLORS.cine, COLORS.sport, COLORS.cent],
                   borderWidth: 0,
                 }],
               }}
+              options={{
+                plugins: { legend: { display: false } },
+                cutout: '60%'
+              }}
             />
+            {/* Légende custom pour un contrôle total des couleurs */}
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-blue-100/80">
+              {[{label:'CANAL+', color:COLORS.canalSolid}, {label:'CANAL+ Ciné Séries', color:COLORS.cine}, {label:'CANAL+ Sport', color:COLORS.sport}, {label:'CANAL+ 100%', color:COLORS.cent}].map(i => (
+                <div key={i.label} className="flex items-center gap-2">
+                  <span className="inline-block h-3 w-6 rounded-sm" style={{ background:i.color }} />
+                  <span>{i.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3 content-start">
             <div className="relative rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-              <span className="absolute left-0 right-0 top-0 h-1 rounded-t-xl" style={{ background: COLORS.neutral }} />
+              <span className="absolute left-0 right-0 top-0 h-1 rounded-t-xl" style={{ background: `linear-gradient(90deg, ${COLORS.canalGradientFrom}, ${COLORS.canalGradientTo})` }} />
               <p className="text-[11px] uppercase tracking-[0.3em] text-blue-200/60">CANAL+</p>
               <p className="text-2xl font-semibold">{dayOffers.canal}</p>
             </div>

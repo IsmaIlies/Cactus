@@ -123,13 +123,12 @@ class GeminiLiveAssistant {
   private onScriptUpdate?: (steps: ScriptStep[]) => void;
 
   constructor(apiKey?: string) {
-    const key = apiKey || import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyDqpjxQoiubpPOE2tIxztb0SB61QX01Zas';
-    if (!key) {
-      throw new Error('Clé API Gemini manquante. Veuillez configurer VITE_GEMINI_API_KEY dans .env');
+    // Supprime la clé codée en dur. On exige que l'environnement fournisse VITE_GEMINI_API_KEY.
+    const key = apiKey || import.meta.env.VITE_GEMINI_API_KEY;
+    if (!key || key.trim().length < 20) {
+      throw new Error('Clé API Gemini manquante ou invalide. Définissez VITE_GEMINI_API_KEY dans .env.local puis redémarrez (npm run dev).');
     }
-    this.ai = new GoogleGenAI({
-      apiKey: key
-    });
+    this.ai = new GoogleGenAI({ apiKey: key });
     
     this.context = {
       clientProfile: {
@@ -207,7 +206,7 @@ class GeminiLiveAssistant {
       });
 
     } catch (error) {
-      console.error('Erreur de connexion:', error);
+      console.error('Erreur de connexion Gemini Live:', error);
       throw error;
     }
   }
@@ -313,7 +312,7 @@ Réponds UNIQUEMENT en JSON valide. Sois précis et actionnable.`;
       }
 
     } catch (error) {
-      console.error('Erreur traitement message:', error);
+      console.error('Erreur traitement message Gemini Live:', error);
     }
   }
 
@@ -470,7 +469,7 @@ Analyse cette intervention et réponds en JSON selon le format défini.`;
       });
 
     } catch (error) {
-      console.error('Erreur envoi audio:', error);
+      console.error('Erreur envoi audio (chunk):', error);
     }
   }
 
@@ -536,7 +535,7 @@ Analyse cette intervention par rapport au script Canal+ et retourne ton analyse 
       // Mettre à jour le transcript
       this.onTranscriptUpdate?.(text, speaker);
     } catch (error) {
-      console.error('Erreur envoi texte:', error);
+      console.error('Erreur envoi texte Gemini Live:', error);
     }
   }
 
@@ -569,7 +568,7 @@ Analyse cette intervention par rapport au script Canal+ et retourne ton analyse 
         turnComplete: false // Streaming audio
       });
     } catch (error) {
-      console.error('Erreur envoi audio:', error);
+      console.error('Erreur envoi audio (buffer):', error);
     }
   }
 

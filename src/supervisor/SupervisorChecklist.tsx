@@ -1,9 +1,10 @@
 import React from 'react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { collection, onSnapshot, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
 import { approveEntry, rejectEntry, updateEntryFields } from '../services/hoursService';
 import { useParams } from 'react-router-dom';
-import { Calendar, Download, RefreshCw, User as UserIcon, ArrowDown, ArrowUp, CheckCircle2, XCircle, Clock as ClockIcon } from 'lucide-react';
+import { Calendar, Download, RefreshCw, User as UserIcon, CheckCircle2, XCircle, Clock as ClockIcon, ChevronDown, ChevronRight } from 'lucide-react';
 import './styles/supervisor-checklist-ux.css';
 
 type Row = {
@@ -56,6 +57,7 @@ const SupervisorChecklist: React.FC = () => {
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const [selectedAgent, setSelectedAgent] = React.useState<string>('__ALL__');
   const [showRejected, setShowRejected] = React.useState<boolean>(false);
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   const theme = React.useMemo(() => {
     const mission = missionForArea(area);
@@ -180,6 +182,20 @@ const SupervisorChecklist: React.FC = () => {
     try { await rejectEntry(id); } catch (e) { console.error(e); }
   };
 
+  // batch actions for selection toolbar
+  const approveSelected = async () => {
+    const ids = Object.entries(selected).filter(([,v]) => v).map(([k]) => k);
+    for (const id of ids) {
+      try { await approveEntry(id); } catch (e) { console.error(e); }
+    }
+  };
+  const rejectSelected = async () => {
+    const ids = Object.entries(selected).filter(([,v]) => v).map(([k]) => k);
+    for (const id of ids) {
+      try { await rejectEntry(id); } catch (e) { console.error(e); }
+    }
+  };
+
   const beginEdit = (r: Row) => {
     setEditingId(r._docId);
     setEditDraft({
@@ -296,10 +312,7 @@ const SupervisorChecklist: React.FC = () => {
   const toggleOne = (id: string, checked: boolean) => setSelected(s => ({ ...s, [id]: checked }));
 
 
-  const scrollToBottom = () => {
-    const el = listRef.current; if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  };
+  // Removed scroll controls (Monter/Descendre) on request
 
   const monthLabel = React.useMemo(() => {
     try {
@@ -309,10 +322,58 @@ const SupervisorChecklist: React.FC = () => {
     } catch { return period; }
   }, [period]);
 
+  // Timeline segment component for expanded detail view
+  const BarSeg: React.FC<{ start?: string; end?: string; color: string }> = ({ start, end, color }) => {
+    const toMin = (h?: string) => {
+      if (!h || !/^\d{2}:\d{2}$/.test(h)) return null;
+      const [H, M] = h.split(':').map(Number);
+      return H * 60 + M;
+    };
+    const s = toMin(start); const e = toMin(end);
+    if (s == null || e == null || e <= s) return null;
+    // schedule window 08:00 (480) to 20:00 (1200) for relative scaling
+    const minWindow = 8 * 60; const maxWindow = 20 * 60; const span = maxWindow - minWindow;
+    const pctStart = Math.max(0, Math.min(100, ((s - minWindow) / span) * 100));
+    const pctEnd = Math.max(0, Math.min(100, ((e - minWindow) / span) * 100));
+    const pctWidth = pctEnd - pctStart;
+    return <div style={{ left: pctStart + '%', width: Math.max(2, pctWidth) + '%', backgroundColor: color }} className="absolute inset-y-0 rounded-sm shadow-[0_0_0_1px_rgba(255,255,255,.15),0_4px_12px_-2px_rgba(0,0,0,.4)] transition-all" />;
+  };
+
+  // Framer Motion scroll-based transforms (parallax + dynamic gradient shift)
+  const { scrollYProgress } = useScroll();
+  const headerY = useTransform(scrollYProgress, [0, 0.4], [0, -40]);
+  const headerBgOpacity = useTransform(scrollYProgress, [0, 0.4], [0.85, 0.65]);
+  const headerGlow = useTransform(scrollYProgress, [0, 1], [0.35, 0]);
+  const dynamicGradient = useTransform(scrollYProgress, [0, 0.6], [
+    'linear-gradient(135deg,rgba(12,22,40,1),rgba(16,185,129,0.15))',
+    'linear-gradient(135deg,rgba(12,22,40,0.9),rgba(16,185,129,0.35))'
+  ]);
+
+  // Animation variants for rows
+  const rowVariants = {
+    hidden: { opacity: 0, y: 14 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 70, damping: 14 } }
+  } as const;
+
   return (
     <div className="space-y-5">
-      {/* Header banner polished */}
-      <div className={`rounded-2xl bg-gradient-to-br ${theme.header} ${theme.border} border p-5 shadow-[0_10px_30px_-10px_rgba(16,185,129,0.25)] anim-fade` }>
+      {/* Header banner polished with parallax & animated gradient */}
+      <motion.div
+        style={{ y: headerY, backgroundImage: dynamicGradient, boxShadow: headerGlow.get() ? `0 0 0 0 rgba(16,185,129,${headerGlow.get()}), 0 10px 30px -10px rgba(16,185,129,0.25)` : undefined, opacity: headerBgOpacity }}
+        className={`rounded-2xl relative overflow-hidden ${theme.border} border p-5 anim-fade`}
+      >
+        <div className="absolute inset-0 pointer-events-none">
+          <motion.div
+            aria-hidden
+            style={{ opacity: headerGlow, scale: headerBgOpacity }}
+            className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-emerald-400/10 blur-3xl"
+          />
+          <motion.div
+            aria-hidden
+            style={{ opacity: headerGlow }}
+            className="absolute bottom-0 right-0 w-72 h-72 bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent blur-2xl"
+          />
+        </div>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="text-2xl font-semibold flex items-center gap-2">
             <Calendar className={`w-6 h-6 ${theme.accentIcon}`} /> Supervision des heures
@@ -362,7 +423,7 @@ const SupervisorChecklist: React.FC = () => {
             </a>
           </div>
         </div>
-      </div>
+  </motion.div>
 
       <div ref={listRef} className="bg-white/5 rounded-2xl border border-white/10 max-h-[70vh] overflow-x-auto relative scroll-beauty scroll-fade pr-2 anim-fade">
         <table className={`text-sm min-w-full`}> 
@@ -409,14 +470,27 @@ const SupervisorChecklist: React.FC = () => {
               const isRejected = r.reviewStatus==='Rejected' || r.reviewStatus==='rejected';
               const statusBar = isApproved ? 'bg-emerald-500/70' : isRejected ? 'bg-red-500/70' : 'bg-yellow-500/70';
               return (
-              <tr key={r._docId} className="border-t border-white/10 hover:bg-white/[0.04] transition-colors odd:bg-white/[0.02] anim-slide-up" style={{ animationDelay: `${Math.min(idx*30, 240)}ms` }}>
+              <React.Fragment key={r._docId}>
+              <motion.tr
+                  variants={rowVariants}
+                  initial="hidden"
+                  animate="show"
+                  layout
+                  className="group border-t border-white/10 hover:bg-white/[0.05] transition-colors odd:bg-white/[0.02]"
+                  style={{ animationDelay: `${Math.min(idx*30, 240)}ms` }}
+              >
                 <td className={`p-3 text-center sticky left-0 z-10 bg-black/10 backdrop-blur` }>
                   <div className="flex items-center gap-2">
                     <span className={`inline-block w-1.5 h-5 rounded-full ${statusBar}`} />
                     <input type="checkbox" checked={!!selected[r._docId]} onChange={(e) => toggleOne(r._docId, (e.target as HTMLInputElement).checked)} />
                   </div>
                 </td>
-                <td className={`p-3 whitespace-nowrap`}>{r.day || '—'}</td>
+                <td className={`p-3 whitespace-nowrap`}>
+                  <button onClick={() => setExpandedId(expandedId===r._docId?null:r._docId)} className="inline-flex items-center gap-1 hover:underline">
+                    {expandedId===r._docId ? <ChevronDown className="w-4 h-4 opacity-75"/> : <ChevronRight className="w-4 h-4 opacity-75"/>}
+                    <span>{r.day || '—'}</span>
+                  </button>
+                </td>
                 <td className={`p-3`}>{r.userDisplayName || r.userEmail || '—'}</td>
                 <td className={`p-3`}>
                   {editingId === r._docId ? (
@@ -495,14 +569,62 @@ const SupervisorChecklist: React.FC = () => {
                     )}
                   </div>
                 </td>
-              </tr>
+              </motion.tr>
+              <AnimatePresence>
+              {expandedId===r._docId && (
+                <motion.tr
+                  layout
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="detail-row"
+                >
+                  <td colSpan={11} className="p-0">
+                    <div className="px-6 py-4 bg-white/[0.05] border-t border-white/10 anim-collapse">
+                      <div className="flex flex-wrap items-start gap-6">
+                        <div className="min-w-[240px]">
+                          <div className="text-xs text-blue-200/70 mb-1">Note</div>
+                          <div className="text-sm text-blue-100 whitespace-pre-wrap">{r.notes || '—'}</div>
+                        </div>
+                        <div className="flex-1 min-w-[260px]">
+                          <div className="text-xs text-blue-200/70 mb-1">Timeline</div>
+                          <div className="h-8 rounded-md bg-black/20 border border-white/10 overflow-hidden relative">
+                            {r.includeMorning && (
+                              <BarSeg start={r.morningStart} end={r.morningEnd} color="rgba(59,130,246,.7)" />
+                            )}
+                            {r.includeAfternoon && (
+                              <BarSeg start={r.afternoonStart} end={r.afternoonEnd} color="rgba(16,185,129,.7)" />
+                            )}
+                            <div className="absolute inset-0 pointer-events-none grid grid-cols-8 opacity-20">
+                              {Array.from({length:8}).map((_,i)=> <div key={i} className="border-l border-white/10" />)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-auto text-xs">
+                          <button onClick={() => setExpandedId(null)} className="px-3 py-1.5 rounded-full bg-white/10 border border-white/20 hover:bg-white/15 transition-colors">Fermer</button>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </motion.tr>
+              )}
+              </AnimatePresence>
+              </React.Fragment>
             );})}
           </tbody>
         </table>
-        <div className="sticky bottom-3 right-3 ml-auto w-fit flex flex-col gap-2">
-          <button onClick={() => listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-xs hover:bg-white/25"><ArrowUp className="w-4 h-4" /> Monter</button>
-          <button onClick={scrollToBottom} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 border border-white/30 text-xs hover:bg-white/25"><ArrowDown className="w-4 h-4" /> Descendre</button>
-        </div>
+        {/* selection toolbar */}
+        {Object.values(selected).some(Boolean) && (
+          <div className="selection-toolbar anim-slide-up">
+            <div className="flex items-center gap-3">
+              <span className="text-xs opacity-80">{Object.values(selected).filter(Boolean).length} sélectionné(s)</span>
+              <button onClick={approveSelected} className="px-3 py-1.5 rounded bg-emerald-500 text-white text-xs font-semibold hover:brightness-105 glow-focus">Valider</button>
+              <button onClick={rejectSelected} className="px-3 py-1.5 rounded bg-red-500 text-white text-xs font-semibold hover:brightness-105">Refuser</button>
+              <button onClick={() => setSelected({})} className="px-3 py-1.5 rounded bg-white/10 border border-white/20 text-xs">Effacer</button>
+            </div>
+          </div>
+        )}
+
       </div>
       {/* Footer summary */}
       <div className="rounded-xl bg-white/5 border border-white/10 p-3 flex items-center justify-between">

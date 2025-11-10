@@ -10,6 +10,8 @@ const LEADS_FN_BASE = 'https://europe-west1-cactus-mm.cloudfunctions.net';
 
 export default defineConfig({
   plugins: [react()],
+  // Ensure only variables prefixed with VITE_ are exposed to the client
+  envPrefix: 'VITE_',
   css: {
     postcss: {
       plugins: [tailwindcss(), autoprefixer()],

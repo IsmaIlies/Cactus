@@ -29,9 +29,184 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { CallData } from "../pages/CallScriptPage";
 import { ProgramCard } from "../pages/AiAssistantPage";
 
-const genAI = new GoogleGenAI({
-  apiKey: "AIzaSyDqpjxQoiubpPOE2tIxztb0SB61QX01Zas", // ⚠️ Ne jamais exposer en prod (à déplacer dans une variable d'environnement)
-});
+// Require env key; provide a DEV-only localStorage escape hatch (no hardcoded key)
+// Resolve API key dynamically at call time to support runtime overrides
+function resolveApiKey(): { key: string; source: 'vite' | 'process' | 'runtime' | 'localStorage' | 'prompt' | 'none' } {
+  // 1) Vite env
+  try {
+    const im: any = (import.meta as any);
+    const k = im?.env?.VITE_GEMINI_API_KEY as string | undefined;
+    if (k) return { key: k, source: 'vite' };
+  } catch {}
+  // 2) Node process.env (SSR/tests)
+  try {
+    const k = (typeof process !== 'undefined' ? (process as any)?.env?.VITE_GEMINI_API_KEY : undefined) as string | undefined;
+    if (k) return { key: k, source: 'process' };
+  } catch {}
+  // 3) Runtime window injection (index.html / main.tsx)
+  try {
+    const k = (typeof window !== 'undefined' ? (window as any).__INITIAL_GEMINI_KEY : undefined) as string | undefined;
+    if (k) return { key: k, source: 'runtime' };
+  } catch {}
+  // 4) Dev-only localStorage override
+  try {
+    const k = (typeof window !== 'undefined' ? window.localStorage?.getItem('DEV_GEMINI_API_KEY') : undefined) as string | undefined;
+    if (k) return { key: k, source: 'localStorage' };
+  } catch {}
+  // 5) Dev-only prompt to unblock quickly
+  try {
+    const isDev = !!(import.meta as any)?.env?.DEV;
+    if (isDev && typeof window !== 'undefined' && typeof window.prompt === 'function') {
+      const entered = window.prompt('Clé API Gemini manquante. Entrez une clé API pour le DEV (non conservée côté serveur) :', '');
+      const val = (entered || '').trim();
+      if (val && val.length > 20) {
+        window.localStorage.setItem('DEV_GEMINI_API_KEY', val);
+        return { key: val, source: 'prompt' };
+      }
+    }
+  } catch {}
+  return { key: '', source: 'none' };
+}
+
+let genAI: GoogleGenAI | null = null;
+let lastKeyUsed: string | null = null;
+
+function assertApiKeyPresent() {
+  const { key } = resolveApiKey();
+  if (!key) {
+    throw new GeminiFriendlyError(
+      "Clé API Gemini manquante. Définissez VITE_GEMINI_API_KEY dans votre environnement (ex: .env.local) puis redémarrez le serveur.\nAstuce DEV: vous pouvez aussi définir localStorage['DEV_GEMINI_API_KEY'] pour des tests locaux uniquement."
+    );
+  }
+}
+
+function getClient(): GoogleGenAI {
+  const { key } = resolveApiKey();
+  if (!key) assertApiKeyPresent();
+  if (!genAI || lastKeyUsed !== key) {
+    genAI = new GoogleGenAI({ apiKey: key });
+    lastKeyUsed = key;
+  }
+  return genAI as GoogleGenAI;
+}
+
+// Expose un utilitaire de debug en DEV pour vérifier la résolution de clé depuis la console
+try {
+  // @ts-ignore
+  if ((import.meta as any)?.env?.DEV && typeof window !== 'undefined') {
+    (window as any).__geminiDebugResolve = resolveApiKey;
+  }
+} catch {}
+
+// Export explicite pour import contrôlé depuis main.tsx
+export function debugResolveApiKey() {
+  return resolveApiKey();
+}
+
+// Centralized model preference (single model) to avoid 404 noise on unsupported aliases
+// Keep only a known-supported model for your project/config
+const MODEL_PREFS = [
+  "gemini-2.0-flash",
+] as const;
+
+// --- Helpers to normalize requests to the SDK ---
+function normalizeContents(contents: any): any {
+  if (!contents) {
+    return [{ role: "user", parts: [{ text: "" }] }];
+  }
+  if (typeof contents === "string") {
+    return [{ role: "user", parts: [{ text: contents }] }];
+  }
+  // If already in the expected array format (has role/parts), pass through
+  if (Array.isArray(contents)) {
+    if (contents.length === 0) return [{ role: "user", parts: [{ text: "" }] }];
+    const first = contents[0];
+    if (first && (first.role || first.parts)) return contents;
+    // If it's an array of strings, join into one user prompt
+    if (typeof first === "string") {
+      return [{ role: "user", parts: [{ text: contents.join("\n") }] }];
+    }
+  }
+  // As a fallback, stringify
+  return [{ role: "user", parts: [{ text: String(contents) }] }];
+}
+
+function stripUnsupportedTools(config: any): any {
+  if (!config) return config;
+  if (config.tools && Array.isArray(config.tools)) {
+    // Remove googleSearch tool to avoid 400 if entitlement not enabled
+    config = { ...config, tools: config.tools.filter((t: any) => !t.googleSearch) };
+  }
+  return config;
+}
+
+function isPermissionOrAvailabilityError(err: any): boolean {
+  const msg = (err?.message || "").toLowerCase();
+  return (
+    msg.includes("403") ||
+    msg.includes("forbidden") ||
+    msg.includes("permission") ||
+    msg.includes("not found") ||
+    msg.includes("blocked") ||
+    msg.includes("unsupported")
+  );
+}
+
+export class GeminiFriendlyError extends Error {
+  constructor(message: string, public cause?: any) {
+    super(message);
+    this.name = 'GeminiFriendlyError';
+  }
+}
+
+async function generateWithFallback(args: any) {
+  const client = getClient();
+  let lastError: any = null;
+  for (const model of MODEL_PREFS) {
+    try {
+      const normalized = {
+        ...args,
+        model,
+        contents: normalizeContents(args?.contents),
+        config: stripUnsupportedTools(args?.config),
+      };
+      const res = await client.models.generateContent(normalized as any);
+      return res;
+    } catch (e: any) {
+      lastError = e;
+      if (!isPermissionOrAvailabilityError(e)) throw e;
+      // try next model
+      console.warn(`[gemini] fallback due to error on ${args?.model || model}:`, (e as any)?.message || e);
+      continue;
+    }
+  }
+  const hint = 'Vérifiez: API activée, facturation, et restrictions de clé (référent/IP).';
+  throw new GeminiFriendlyError(`Aucun modèle disponible (403/permissions). ${hint}`, lastError);
+}
+
+async function streamWithFallback(args: any) {
+  const client = getClient();
+  let lastError: any = null;
+  for (const model of MODEL_PREFS) {
+    try {
+      const normalized = {
+        ...args,
+        model,
+        contents: normalizeContents(args?.contents),
+        config: stripUnsupportedTools(args?.config),
+      };
+      const stream = await client.models.generateContentStream(normalized as any);
+      return stream;
+    } catch (e: any) {
+      lastError = e;
+      if (!isPermissionOrAvailabilityError(e)) throw e;
+      console.warn(`[gemini] stream fallback due to error on ${args?.model || model}:`, (e as any)?.message || e);
+      continue;
+    }
+  }
+  const hint = 'Vérifiez: API activée, facturation, et restrictions de clé (référent/IP).';
+  throw new GeminiFriendlyError(`Aucun modèle disponible (403/permissions). ${hint}`, lastError);
+}
 
 // Instruction système globale pour forcer les réponses en français
 const FRENCH_SYSTEM_INSTRUCTION = `Tu réponds toujours strictement en FRANÇAIS.
@@ -47,12 +222,10 @@ export async function* streamOfferScript(
   assertRateLimit();
 
   const prompt = buildPrompt(callData);
-  const model = "gemini-2.0-flash";
-
-  const stream = await genAI.models.generateContentStream({
-    model,
-    contents: prompt,
-    config: {
+    const stream = await streamWithFallback({
+      model: MODEL_PREFS[0],
+      contents: prompt,
+      config: {
       systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu es un conseiller Orange et un vendeur remarquable qui vend des offres Canal sans que cela paraisse insistant. Ton ton est dynamique, fluide, naturel, orienté bénéfices client. Réponds uniquement en français.`,
       temperature: 0.7,
       maxOutputTokens: 512,
@@ -131,9 +304,9 @@ export async function respondToObjection(
     .map((m) => `${m.from === "IA" ? "TA" : "Client"}: ${m.text}`)
     .join("\\n");
 
-  const stream = await genAI.models.generateContent({
-    model: "gemini-2.0-flash",
-    contents: `
+    const stream = await generateWithFallback({
+      model: MODEL_PREFS[0],
+      contents: `
 Voici l'historique de la conversation de vente :
 ${context}
 
@@ -176,15 +349,10 @@ export async function getObjectionsFromScript(
 ): Promise<string[]> {
   assertRateLimit();
 
-  const genAI = new GoogleGenAI({
-    apiKey: "AIzaSyDqpjxQoiubpPOE2tIxztb0SB61QX01Zas", // ⚠️ Ne jamais exposer en prod
-  });
-
-  const response = await genAI.models.generateContent({
-    model: "gemini-2.0-flash",
+  const response = await generateWithFallback({
     contents: `
-  Voici un script de proposition commerciale à un client :
-  ${script}
+    Voici un script de proposition commerciale à un client :
+    ${script}
   
   Génère une liste d'objections possibles du client à ce discours.
   Retourne UNIQUEMENT un JSON de la forme :
@@ -224,7 +392,7 @@ export async function streamGeminiResponse(
 ): Promise<void> {
   assertRateLimit();
 
-  const model = "models/gemini-2.0-flash"; // ou "models/gemini-1.5-pro" si souhaité
+  const model = MODEL_PREFS[0]; // preferred; fallbacks handled below
 
   // Reformatage de l'historique en "contents" compatible avec le SDK
   const contents = chatHistory.map((msg) => ({
@@ -241,7 +409,7 @@ export async function streamGeminiResponse(
   }
 
   // Ajout du support d'annulation via AbortSignal
-  const stream = await genAI.models.generateContentStream({
+  const stream = await streamWithFallback({
     model,
     contents,
     config: {
@@ -320,8 +488,8 @@ Répond seulement avec ce JSON. Sois bref, va droit au but. 3 éléments.
 Pas d’introduction, pas de conclusion, juste les données.
 `;
 
-  const result = await genAI.models.generateContent({
-    model: "models/gemini-2.0-flash",
+  const result = await generateWithFallback({
+    model: MODEL_PREFS[0],
     contents: [
       {
         role: "user",
@@ -347,8 +515,8 @@ export async function transformTextToStructuredJSON(
 ): Promise<ProgramCard[]> {
   assertRateLimit();
 
-  const result = await genAI.models.generateContent({
-    model: "models/gemini-2.0-flash",
+  const result = await generateWithFallback({
+    model: MODEL_PREFS[0],
     contents: [
       {
         role: "user",
@@ -459,8 +627,7 @@ Retourne les informations sous forme de texte brut, sans structuration JSON.
 Ne réponds qu'avec les informations demandées, sans introduction ni conclusion.
 `;
 
-  const result = await genAI.models.generateContent({
-    model: "models/gemini-2.0-flash",
+  const result = await generateWithFallback({
     contents: [
       {
         role: "user",
@@ -510,8 +677,8 @@ ${rawText}
 Retourne uniquement un JSON strictement conforme, sans texte supplémentaire.
 `;
 
-  const result = await genAI.models.generateContent({
-    model: "models/gemini-2.0-flash",
+  const result = await generateWithFallback({
+    model: MODEL_PREFS[0],
     contents: [
       {
         role: "user",
@@ -569,8 +736,8 @@ export async function streamGeminiDetails(
 
   const prompt = `Donne-moi plus d'informations sur "${title}" (résumé, plateforme, acteurs, note, durée, etc). Sois concis, va à l'essentiel, en français, sans introduction ni conclusion.`;
 
-  const stream = await genAI.models.generateContentStream({
-    model: "models/gemini-2.0-flash",
+  const stream = await streamWithFallback({
+    model: MODEL_PREFS[0],
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nFournis des informations concises et utiles en français.`,
@@ -615,8 +782,8 @@ Exemples :
 Réponds uniquement avec le titre, sans guillemets ni explication.
 `;
 
-  const result = await genAI.models.generateContent({
-    model: "models/gemini-2.0-flash",
+  const result = await generateWithFallback({
+    model: MODEL_PREFS[0],
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu génères des titres de conversation courts (<=5 mots).`,
@@ -663,8 +830,8 @@ Exemples :
 Réponds uniquement avec le titre, sans guillemets ni explication.
 `;
 
-  const result = await genAI.models.generateContent({
-    model: "models/gemini-2.0-flash",
+  const result = await generateWithFallback({
+    model: MODEL_PREFS[0],
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       systemInstruction: `${FRENCH_SYSTEM_INSTRUCTION}\nTu génères des titres de conversation courts (<=5 mots).`,

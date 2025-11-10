@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/cactus-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Force a permissive referrer policy so cross-origin requests include the origin as Referer -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>Cactus - Plateforme de Téléprospection</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,6 +13,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Runtime emergency injection for Gemini key if Vite env failed.
+      // Set window.__INITIAL_GEMINI_KEY manually (only local dev) before React loads.
+      // Example: window.__INITIAL_GEMINI_KEY = 'AIza...'; then reload.
+      // This avoids bundling the key; still not for production.
+      window.__INITIAL_GEMINI_KEY = window.__INITIAL_GEMINI_KEY || '';
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
