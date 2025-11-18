@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { addDoc, collection, deleteDoc, doc, getCountFromServer, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 
-type NovItem = { id:string; name:string; size:number; updatedAt:Date|null; storagePath?:string; url?:string|null; b64?:string|null; pinned?: boolean };
+type NovItem = { id:string; name:string; size:number; updatedAt:Date|null; storagePath?:string; url?:string|null; b64?:string|null; pinned?: boolean; type?: 'pdf'|'video'; thumbnailUrl?: string|null; durationSec?: number|null };
 
 // Lightweight comments box for item discussion
 const CommentsBox: React.FC<{
@@ -54,6 +54,7 @@ const NouveautesPdfBanner: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<NovItem[]>([]);
+  const [filter, setFilter] = useState<'all'|'pdf'|'video'>('all');
   const [refreshKey, setRefreshKey] = useState<number>(0);
   // Timeline style (Facebook-like)
   const [visible, setVisible] = useState(6); // nombre d'éléments visibles
@@ -77,10 +78,10 @@ const NouveautesPdfBanner: React.FC = () => {
         try {
           const q = query(col, where('active','==', true), orderBy('updatedAt','desc'));
           const snap = await getDocs(q);
-          snap.forEach(d => { const v:any=d.data(); docs.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), updatedAt: v?.updatedAt?.toDate? v.updatedAt.toDate(): null, storagePath:v?.storagePath, url: typeof v?.url==='string'? v.url : null, b64: typeof v?.data==='string'? v.data : null, pinned: !!v?.pinned }); });
+          snap.forEach(d => { const v:any=d.data(); docs.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), updatedAt: v?.updatedAt?.toDate? v.updatedAt.toDate(): null, storagePath:v?.storagePath, url: typeof v?.url==='string'? v.url : null, b64: typeof v?.data==='string'? v.data : null, pinned: !!v?.pinned, type: v?.type==='video' ? 'video' : 'pdf', thumbnailUrl: typeof v?.thumbnailUrl==='string'? v.thumbnailUrl : null, durationSec: typeof v?.durationSec==='number'? v.durationSec : null }); });
         } catch {
           const snap = await getDocs(col);
-          snap.forEach(d => { const v:any=d.data(); if (v?.active){ docs.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), updatedAt: v?.updatedAt?.toDate? v.updatedAt.toDate(): null, storagePath:v?.storagePath, url: typeof v?.url==='string'? v.url : null, b64: typeof v?.data==='string'? v.data : null, pinned: !!v?.pinned }); } });
+          snap.forEach(d => { const v:any=d.data(); if (v?.active){ docs.push({ id:d.id, name:String(v?.name||'Sans nom'), size:Number(v?.size||0), updatedAt: v?.updatedAt?.toDate? v.updatedAt.toDate(): null, storagePath:v?.storagePath, url: typeof v?.url==='string'? v.url : null, b64: typeof v?.data==='string'? v.data : null, pinned: !!v?.pinned, type: v?.type==='video' ? 'video' : 'pdf', thumbnailUrl: typeof v?.thumbnailUrl==='string'? v.thumbnailUrl : null, durationSec: typeof v?.durationSec==='number'? v.durationSec : null }); } });
         }
         // Sort pinned first then by date desc
         docs.sort((a,b)=> (Number(b.pinned)-Number(a.pinned)) || ((b.updatedAt?.getTime()||0) - (a.updatedAt?.getTime()||0)) );
@@ -103,14 +104,18 @@ const NouveautesPdfBanner: React.FC = () => {
     }
   }, [items]);
 
-  const pageItems = useMemo(()=> items.slice(0, visible), [items, visible]);
+  const pageItems = useMemo(()=> {
+    const filtered = filter==='all' ? items : items.filter(i=> (i.type||'pdf')===filter);
+    return filtered.slice(0, visible);
+  }, [items, visible, filter]);
 
   const buildPreviewUrl = (it: NovItem, bust?: number) => {
     const versionToken = it.updatedAt ? it.updatedAt.getTime() : (it.storagePath ? Number((it.storagePath.split('/').pop()||Date.now())) : Date.now());
     if (typeof it.url === 'string' && it.url) {
-      const sep = it.url.includes('?') ? '&' : '?';
-      const v = bust ?? versionToken;
-      return `${it.url}${sep}v=${v}&response-content-disposition=inline&response-content-type=application/pdf`;
+  const sep = it.url.includes('?') ? '&' : '?';
+  const v = bust ?? versionToken;
+  if (it.type === 'video') return `${it.url}${sep}v=${v}`;
+  return `${it.url}${sep}v=${v}&response-content-disposition=inline&response-content-type=application/pdf`;
     }
     if (typeof it.b64 === 'string' && it.b64) {
       try {
@@ -234,7 +239,7 @@ const NouveautesPdfBanner: React.FC = () => {
             </div>
             <div className="flex flex-col">
               <h3 className="text-base font-semibold tracking-wide text-white flex items-center gap-2">
-                Nouveautés • PDF
+                Nouveautés • PDF & Vidéos
                 {items.some(it => isNew(it.updatedAt)) && <span className="text-[10px] uppercase bg-emerald-500/90 text-black px-2 py-[3px] rounded-full font-semibold tracking-wider shadow-sm">NEW</span>}
                 <span className="inline-flex items-center gap-1 text-[9px] font-medium text-emerald-200/70 bg-emerald-900/30 px-2 py-[2px] rounded-full border border-emerald-500/20">
                   <Sparkles className="h-3 w-3 text-emerald-300" /> Live
@@ -245,6 +250,11 @@ const NouveautesPdfBanner: React.FC = () => {
           </div>
           <div className="ml-auto flex items-center gap-2 text-[11px] text-white/60">
             <span className="hidden sm:inline">Derniers en premier</span>
+            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full p-0.5">
+              <button onClick={()=> setFilter('all')} className={`px-2 py-0.5 text-[11px] rounded-full ${filter==='all'?'bg-white/20 text-white':'text-white/70 hover:text-white'}`}>Tous</button>
+              <button onClick={()=> setFilter('pdf')} className={`px-2 py-0.5 text-[11px] rounded-full ${filter==='pdf'?'bg-white/20 text-white':'text-white/70 hover:text-white'}`}>PDF</button>
+              <button onClick={()=> setFilter('video')} className={`px-2 py-0.5 text-[11px] rounded-full ${filter==='video'?'bg-white/20 text-white':'text-white/70 hover:text-white'}`}>Vidéos</button>
+            </div>
           </div>
         </div>
 
@@ -257,7 +267,7 @@ const NouveautesPdfBanner: React.FC = () => {
           </div>
         ) : items.length === 0 ? (
           <div className="h-[200px] flex flex-col items-center justify-center textcenter border border-dashed border-white/15 rounded-xl bg-white/5 text-white/40">
-            <p className="text-xs">Aucun PDF Nouveautés publié ou activé pour l'instant.</p>
+            <p className="text-xs">Aucune nouveauté publiée ou activée pour l'instant.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -278,6 +288,7 @@ const NouveautesPdfBanner: React.FC = () => {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-white truncate" title={it.name}>{it.name}</span>
+                                <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-[1px] rounded-full border ${it.type==='video' ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-200' : 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'}`}>{it.type==='video' ? 'VIDÉO' : 'PDF'}</span>
                                 {it.pinned && (
                                   <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-[1px] rounded-full border border-amber-400/30 bg-amber-500/15 text-amber-200"><Pin className="h-3 w-3"/> épinglé</span>
                                 )}
@@ -292,9 +303,14 @@ const NouveautesPdfBanner: React.FC = () => {
                           </button>
                           {open && (
                             <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/40">
-                              {(() => { const url = buildPreviewUrl(it); return url ? (
+                              {(() => { const url = buildPreviewUrl(it); if (!url) return null; if (it.type==='video') {
+                                return (
+                                  <video controls className="w-full h-[420px] bg-black" poster={it.thumbnailUrl || undefined} src={url} />
+                                );
+                              }
+                              return (
                                 <iframe title={`Nouveautés ${it.name}`} className="w-full h-[420px] select-none" src={`${url.split('#')[0]}#toolbar=0&navpanes=0&scrollbar=0`} allow="fullscreen" allowFullScreen />
-                              ) : null; })()}
+                              ); })()}
                               <div className="p-2 flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
                                   <button
@@ -317,7 +333,7 @@ const NouveautesPdfBanner: React.FC = () => {
                                   <button onClick={()=> setRefreshKey(Date.now())} className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md bg-black/55 hover:bg-black/75 text-white border border-white/10">
                                     <RefreshCw className="h-3.5 w-3.5" /> Recharger
                                   </button>
-                                  {it.url && (
+                                  {it.url && (!it.type || it.type==='pdf') && (
                                     <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md bg-emerald-600/90 hover:bg-emerald-500 text-white">
                                       <Download className="h-3.5 w-3.5" /> Télécharger
                                     </a>

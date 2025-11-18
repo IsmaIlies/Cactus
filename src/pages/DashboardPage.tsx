@@ -17,13 +17,14 @@ import FaqPage from "./FaqPage";
 import NouveautesPage from "./NouveautesPage";
 import MySalesPage from "./MySalesPage";
 import { useRegion } from '../contexts/RegionContext';
+import { Menu, X } from "lucide-react";
 
 const DashboardPage: React.FC = () => {
   const location = useLocation();
   // Right sidebar enabled except on ModeTVCasino page
   const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(true);
 
-  // Ferme automatiquement la sidebar droite sur la page NouveautÃ©s (plein focus contenu)
+  // Ferme automatiquement la sidebar droite sur la page Nouveautés (plein focus contenu)
   React.useEffect(() => {
     if (location.pathname.startsWith('/dashboard/nouveautes')) {
       setIsRightSidebarOpen(false);
@@ -62,44 +63,82 @@ const DashboardPage: React.FC = () => {
   else if (p.startsWith(`${base}/nouveautes`)) activePage = "nouveautes";
   else if (p.startsWith(`${base}/settings`)) activePage = "settings";
 
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  React.useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
+
+  const pageTitleMap: Record<string,string> = {
+    home:'Dashboard', script:'Script', catalog:'Catalogue', sales:'Ventes', 'my-sales':'Mes ventes', ai:'Assistant IA', mrwhite:'Mr White', modetv:'Mode TV', mycover:'MyCover', offers:'Offres', faq:'FAQ & Suggestions', settings:'Paramètres', nouveautes:'Nouveautés'
+  };
+  const mobileTitle = pageTitleMap[activePage] || 'Dashboard';
+
   return (
-    <div className="flex h-screen bg-sand-50 overflow-hidden">
-      <Sidebar />
+    <div className="h-screen bg-sand-50 overflow-hidden flex flex-col md:flex-row">
+      {/* Mobile top bar */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-black/10 bg-gradient-to-r from-[#0b1f3f] to-[#0c2752] text-white backdrop-blur z-30">
+        <button
+          onClick={() => setSidebarOpen(v => !v)}
+          aria-label={sidebarOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+          aria-controls="app-sidebar"
+          aria-expanded={sidebarOpen}
+          className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-black/5 hover:bg-black/10 focus:outline-none focus:ring-2 focus:ring-cactus-500"
+        >
+          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+        <span className="text-sm font-semibold tracking-wide">{mobileTitle}</span>
+        <span className="w-10" />
+      </div>
+      {/* Sidebar */}
+      <aside
+        id="app-sidebar"
+        className={`fixed md:static inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 will-change-transform bg-cactus-800 shadow-xl md:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        role="navigation"
+        aria-label="Menu principal"
+      >
+        <Sidebar onCloseMobile={() => setSidebarOpen(false)} />
+      </aside>
+      {/* Overlay */}
+      {sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Fermer le menu"
+          className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
+        />
+      )}
       <div
         className={`flex-1 overflow-hidden transition-all duration-300 ${
           activePage !== 'modetv'
-            ? (isRightSidebarOpen ? 'mr-64' : 'mr-4')
+            ? (isRightSidebarOpen ? 'md:mr-64' : 'md:mr-6')
             : ''
         }`}
       >
-        <div className="h-full overflow-hidden">
+        <div className="h-full overflow-hidden space-y-6 md:space-y-8">
           <div 
             style={{ display: activePage === "home" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <DashboardHome />
           </div>
           <div 
             style={{ display: activePage === "script" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <CallScriptPage />
           </div>
           <div 
             style={{ display: activePage === "catalog" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <CatalogPage />
           </div>
           <div 
             style={{ display: activePage === "sales" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <SalesPage />
           </div>
           <div 
             style={{ display: activePage === "my-sales" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <MySalesPage />
           </div>
@@ -111,7 +150,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div 
             style={{ display: activePage === "mrwhite" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <MrWhitePage />
           </div>
@@ -122,25 +161,25 @@ const DashboardPage: React.FC = () => {
           </div>
           <div 
             style={{ display: activePage === "mycover" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
           >
             <MyCoverPage />
           </div>
           <div
             style={{ display: activePage === "offers" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6"
           >
             <OffersPage />
           </div>
         <div
           style={{ display: activePage === "faq" ? "block" : "none" }}
-          className="h-full overflow-auto p-6"
+          className="h-full overflow-auto p-4 sm:p-6"
         >
           <FaqPage />
         </div>
           <div
             style={{ display: activePage === "settings" ? "block" : "none" }}
-            className="h-full overflow-auto p-6"
+            className="h-full overflow-auto p-4 sm:p-6"
           >
             <SettingsPage />
           </div>

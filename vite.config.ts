@@ -39,6 +39,12 @@ export default defineConfig({
         // Allow querystrings (e.g., /api/leads-stats?date_start=YYYY-MM-DD&date_end=YYYY-MM-DD)
         rewrite: (path) => path.replace(/^\/api\/leads-stats/, '/leadsStats'),
       },
+      // Proxy for the forward endpoint used by the panel (injects token + client IP via CF)
+      '/api/leads-stats-forward': {
+        target: LEADS_FN_BASE,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/leads-stats-forward/, '/leadsStatsForward'),
+      },
       // Dev-only proxy to call the vendor API without CORS from the browser
       '/vendor/leads-stats': {
         target: 'https://orange-leads.mm.emitel.io',

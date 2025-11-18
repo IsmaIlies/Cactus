@@ -202,7 +202,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
     const buildProvider = () => {
       const p = new OAuthProvider('microsoft.com');
-      const tenant = "6bb49185-2aa4-4acf-b86c-c8c649d584d6"
+      const tenant = "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
+
       if (tenant) {
         try { p.setCustomParameters({ tenant }); } catch {}
       }
@@ -281,7 +282,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
       const buildProvider = () => {
         const p = new OAuthProvider('microsoft.com');
-        const tenant = "6bb49185-2aa4-4acf-b86c-c8c649d584d6";
+        const tenant = "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
         if (tenant) {
           try { p.setCustomParameters({ tenant }); } catch {}
         }

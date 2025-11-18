@@ -16,6 +16,37 @@ const cors = require('cors')({ origin: true });
 // Migré depuis functions.config() vers Firebase Secret Manager (post-2026 compliant).
 const LEADS_API_TOKEN = defineSecret('LEADS_API_TOKEN');
 
+// Sanitize token: trim and if pasted twice (e.g., ABCABC), keep first half
+function sanitizeToken(raw) {
+  const t = (raw || '').toString().trim();
+  if (!t) return '';
+  if (t.length % 2 === 0) {
+    const mid = t.length / 2;
+    const a = t.slice(0, mid);
+    const b = t.slice(mid);
+    if (a === b) return a;
+  }
+  return t;
+}
+
+async function fetchWithRetry(url, options, retries = 2, baseDelayMs = 800) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { ...options, timeout: options?.timeout ?? 25000 });
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw lastErr;
+    }
+  }
+}
+
 // Petite aide CORS pour l'endpoint leadsStats (autorise GET + préflight)
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin || '*';
@@ -64,7 +95,7 @@ exports.leadsStats = onRequest({
       params.date_end = date_end;
     }
 
-    const token = (LEADS_API_TOKEN && LEADS_API_TOKEN.value && LEADS_API_TOKEN.value()) || process.env.LEADS_API_TOKEN || '';
+    const token = sanitizeToken((LEADS_API_TOKEN && LEADS_API_TOKEN.value && LEADS_API_TOKEN.value()) || process.env.LEADS_API_TOKEN || '');
 
     // Si pas de configuration, retourner des zéros « ok » pour éviter de casser l’UI
     if (!token) {
@@ -100,6 +131,12 @@ exports.leadsStatsForward = onRequest({
   }
 
   try {
+    // Mode diagnostic: retourne l'IP de sortie pour whitelist chez le fournisseur
+    if (req.query && (req.query.diagnostic === '1' || req.query.diagnostic === 'true')) {
+      const ip = await getEgressIp();
+      return res.json({ ok: true, diagnostic: true, egressIp: ip || null });
+    }
+
     const baseUrl = process.env.LEADS_STATS_URL || 'https://orange-leads.mm.emitel.io/stats-lead.php';
     const url = new URL(baseUrl);
     const { date_start, date_end } = req.query || {};
@@ -110,14 +147,19 @@ exports.leadsStatsForward = onRequest({
       url.searchParams.set('date_end', date_end);
     }
 
-    const token = (LEADS_API_TOKEN && LEADS_API_TOKEN.value && LEADS_API_TOKEN.value()) || process.env.LEADS_API_TOKEN || '';
-    if (token) url.searchParams.set('token', token);
+    const token = sanitizeToken((LEADS_API_TOKEN && LEADS_API_TOKEN.value && LEADS_API_TOKEN.value()) || process.env.LEADS_API_TOKEN || '');
+    if (token) {
+      url.searchParams.set('token', token);
+    } else {
+      // Pas de token configuré: renvoyer une réponse "safe" pour ne pas casser l'UI
+      return res.status(200).json({ ok: false, error: 'LEADS_API_TOKEN manquant', dolead: 0, hipto: 0, mm: 0 });
+    }
 
     // Récupère la vraie IP du client (dernière du header X-Forwarded-For peut contenir une chaîne d'IPs)
     const xff = (req.headers['x-forwarded-for'] || '').toString();
     const clientIp = xff ? xff.split(',')[0].trim() : (req.headers['x-real-ip'] || req.ip || '').toString();
 
-    const upstream = await fetch(url.toString(), {
+    const upstream = await fetchWithRetry(url.toString(), {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -125,17 +167,24 @@ exports.leadsStatsForward = onRequest({
         'X-Forwarded-For': clientIp,
         'X-Real-IP': clientIp,
       },
-      timeout: 20_000,
+      timeout: 25_000,
     });
 
     const text = await upstream.text();
-    res.set('Content-Type', upstream.headers.get('content-type') || 'application/json');
-    // Retourne aussi l'IP client pour debug (en-tête non sensible)
+    const contentType = upstream.headers.get('content-type') || 'application/json';
+    res.set('Content-Type', contentType);
     res.set('X-Cactus-Client-IP', clientIp || '');
-    return res.status(upstream.status).send(text);
+
+    // Si l'amont répond en erreur, renvoyer 200 avec des zéros pour ne pas bloquer l'UI
+    if (!upstream.ok) {
+      console.warn('[leadsStatsForward] Upstream error status', upstream.status, text.slice(0, 200));
+      return res.status(200).json({ ok: false, error: `Upstream HTTP ${upstream.status}` , dolead: 0, hipto: 0, mm: 0 });
+    }
+    return res.status(200).send(text);
   } catch (e) {
     console.error('[leadsStatsForward] Error', e && e.stack ? e.stack : e);
-    return res.status(502).json({ error: e && e.message ? e.message : 'Proxy failure' });
+    // Réponse "safe" pour que l'UI continue de fonctionner
+    return res.status(200).json({ ok: false, error: e && e.message ? e.message : 'Proxy failure', dolead: 0, hipto: 0, mm: 0 });
   }
 });
 
@@ -155,13 +204,13 @@ async function fetchLeadStatsFromApi(params, token) {
   // Le token est requis par la spec en query string
   if (token) url.searchParams.set('token', token);
 
-  const upstream = await fetch(url.toString(), {
+  const upstream = await fetchWithRetry(url.toString(), {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
       // Ne pas envoyer Authorization: Bearer ici, l'API attend le token en query
     },
-    timeout: 20_000,
+    timeout: 25_000,
   });
 
   let payload = null;

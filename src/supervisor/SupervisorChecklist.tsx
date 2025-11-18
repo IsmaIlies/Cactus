@@ -2,9 +2,10 @@ import React from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { collection, onSnapshot, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
-import { approveEntry, rejectEntry, updateEntryFields } from '../services/hoursService';
+import { approveEntry, updateEntryFields, deleteEntry } from '../services/hoursService';
 import { useParams } from 'react-router-dom';
 import { Calendar, Download, RefreshCw, User as UserIcon, CheckCircle2, XCircle, Clock as ClockIcon, ChevronDown, ChevronRight } from 'lucide-react';
+import { AgentSelect } from '../components/AgentSelect';
 import './styles/supervisor-checklist-ux.css';
 
 type Row = {
@@ -175,11 +176,39 @@ const SupervisorChecklist: React.FC = () => {
     return ['__ALL__', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [rowsPendingCache, rowsHistoryCache]);
 
+  // Build stats per agent (period + mission filtered, but before agent self-filter)
+  const agentStats = React.useMemo(() => {
+    const mission = missionForArea(area);
+    const prefix = `${period}-`;
+    const stats: Record<string, { total: number; pending: number; approved: number; rejected: number }> = {};
+    const source = [...rowsPendingCache, ...rowsHistoryCache];
+    source.forEach(r => {
+      if (mission && !(((r.mission || '').toUpperCase() === mission) || !r.mission)) return;
+      if (!((r as any).period === period || (r.day || '').startsWith(prefix))) return;
+      const name = r.userDisplayName || r.userEmail || '__UNKNOWN__';
+      if (!stats[name]) stats[name] = { total: 0, pending: 0, approved: 0, rejected: 0 };
+      stats[name].total++;
+      const st = (r.reviewStatus || '').toLowerCase();
+      if (st === 'pending') stats[name].pending++;
+      else if (st === 'approved') stats[name].approved++;
+      else if (st === 'rejected') stats[name].rejected++;
+    });
+    // Add ALL synthetic
+    let allPending = 0, allApproved = 0, allRejected = 0, allTotal = 0;
+    Object.values(stats).forEach(s => { allPending += s.pending; allApproved += s.approved; allRejected += s.rejected; allTotal += s.total; });
+    stats['__ALL__'] = { total: allTotal, pending: allPending, approved: allApproved, rejected: allRejected };
+    return stats;
+  }, [rowsPendingCache, rowsHistoryCache, area, period]);
+
   const onApprove = async (id: string) => {
     try { await approveEntry(id); } catch (e) { console.error(e); }
   };
-  const onReject = async (id: string) => {
-    try { await rejectEntry(id); } catch (e) { console.error(e); }
+  const onDelete = async (id: string) => {
+    try {
+      const ok = confirm('Supprimer définitivement cette checklist ?');
+      if (!ok) return;
+      await deleteEntry(id);
+    } catch (e) { console.error(e); }
   };
 
   // batch actions for selection toolbar
@@ -189,11 +218,15 @@ const SupervisorChecklist: React.FC = () => {
       try { await approveEntry(id); } catch (e) { console.error(e); }
     }
   };
-  const rejectSelected = async () => {
+  const deleteSelected = async () => {
     const ids = Object.entries(selected).filter(([,v]) => v).map(([k]) => k);
+    if (ids.length === 0) return;
+    const ok = confirm(`Supprimer définitivement ${ids.length} checklist(s) ?`);
+    if (!ok) return;
     for (const id of ids) {
-      try { await rejectEntry(id); } catch (e) { console.error(e); }
+      try { await deleteEntry(id); } catch (e) { console.error(e); }
     }
+    setSelected({});
   };
 
   const beginEdit = (r: Row) => {
@@ -231,27 +264,54 @@ const SupervisorChecklist: React.FC = () => {
   };
 
   const exportCsv = () => {
-    const headers = ['Jour','Agent','Projet','Notes','Espace','Statut','Matin','Après-midi'];
+    // New detailed layout (especially requested for pending view) matching Excel header screenshot
+    const headers = ['Période','Jour','Agent','Matin début','Matin fin','Après-midi début','Après-midi fin','Durée (hhmn)','Total (min)','Opération','Brief','Mission','Espace','Statut'];
+    const delim = ';'; // FR Excel usually expects semicolon
     const esc = (s: any) => {
       const t = (s ?? '').toString().replaceAll('"', '""');
       return `"${t}"`;
     };
-    const lines = [headers.join(',')];
+    const lines: string[] = [headers.join(delim)];
     visibleRows.forEach(r => {
       const agent = r.userDisplayName || r.userEmail || '';
-      const espace = `${r.mission || ''}/${r.region || ''}`;
-      const matin = `${r.includeMorning ? (r.morningStart || '') + '-' + (r.morningEnd || '') : ''}`;
-      const am = `${r.includeAfternoon ? (r.afternoonStart || '') + '-' + (r.afternoonEnd || '') : ''}`;
+      const matinDebut = r.includeMorning ? (r.morningStart || '') : '';
+      const matinFin = r.includeMorning ? (r.morningEnd || '') : '';
+      const apDebut = r.includeAfternoon ? (r.afternoonStart || '') : '';
+      const apFin = r.includeAfternoon ? (r.afternoonEnd || '') : '';
+      const toMin = (h: string | undefined) => {
+        if (!h || !/^\d{2}:\d{2}$/.test(h)) return 0;
+        const [H,M] = h.split(':').map(Number); return H*60+M;
+      };
+      let minutes = 0;
+      if (r.includeMorning) minutes += Math.max(0, toMin(r.morningEnd) - toMin(r.morningStart));
+      if (r.includeAfternoon) minutes += Math.max(0, toMin(r.afternoonEnd) - toMin(r.afternoonStart));
+      const hh = String(Math.floor(minutes/60)).padStart(2,'0');
+      const mm = String(minutes % 60).padStart(2,'0');
+      const duree = `${hh}h${mm}`;
       lines.push([
-        esc(r.day), esc(agent), esc(r.project || ''), esc(r.notes || ''), esc(espace), esc(r.reviewStatus || ''), esc(matin), esc(am)
-      ].join(','));
+        esc((r as any).period || period),
+        esc(r.day),
+        esc(agent),
+        esc(matinDebut),
+        esc(matinFin),
+        esc(apDebut),
+        esc(apFin),
+        esc(duree),
+        esc(String(minutes)),
+        esc(r.project || ''),
+        esc(r.notes || ''),
+        esc(r.mission || ''),
+        esc(r.region || ''),
+        esc(r.reviewStatus || ''),
+      ].join(delim));
     });
-    const csv = lines.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const csv = lines.join('\r\n'); // CRLF line endings
+    const bom = '\ufeff'; // UTF-8 BOM for Excel accent detection
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `checklists_${area || 'ALL'}_${period}_${view}.csv`;
+    a.download = `checklists_${area || 'ALL'}_${period}_${view}_detail.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -380,44 +440,67 @@ const SupervisorChecklist: React.FC = () => {
           </div>
           <span className={`px-3 py-1 rounded-full text-xs ${theme.badge} badge-pulse`}>PERIODE {monthLabel.toUpperCase()}</span>
           <div className="flex-1" />
-          <button onClick={exportCsv} className={`btn-primary-gradient inline-flex items-center gap-2`}>
+          <button onClick={exportCsv} className={`btn-primary-gradient inline-flex items-center gap-2`} title="Exporter la vue filtrée en CSV">
             <Download className="w-4 h-4" /> Exporter en CSV
           </button>
         </div>
-        <div className="mt-3 flex items-center gap-3 flex-wrap text-sm">
-          <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-white/5 border border-white/10 text-white">
-            <Calendar className="w-4 h-4" />
-            <input aria-label="Période" type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="bg-transparent outline-none text-white" />
-          </span>
-          <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-white/5 border border-white/10 text-white">
-            <UserIcon className="w-4 h-4" />
-            <select aria-label="Agent" value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} className="outline-none bg-white text-black rounded px-2 py-1">
-              {uniqueAgents.map(a => (
-                <option key={a} value={a} style={{ color: '#000', backgroundColor: '#fff' }}>
-                  {a==='__ALL__' ? 'Tous les agents' : a}
-                </option>
-              ))}
-            </select>
-          </span>
-          <button onClick={() => setRefreshNonce(v => v + 1)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-white/10 border border-white/20 hover:bg-white/15">
-            <RefreshCw className="w-4 h-4" /> Rafraichir
-          </button>
-          <div className="flex-1" />
-          <div className="flex items-center gap-2">
-            <button onClick={() => setView('pending')} className={`px-3 py-1.5 rounded-full border ${view==='pending' ? `${theme.primaryBtn} text-white border-white/20` : 'bg-white/10 border-white/20 hover:bg-white/15'}`}>En cours ({countFiltered.pending})</button>
-            <button onClick={() => setView('history')} className={`px-3 py-1.5 rounded-full border ${view==='history' ? 'bg-white/20 border-white/40' : 'bg-white/10 border-white/20 hover:bg-white/15'}`}>Historique validé ({countFiltered.history})</button>
+        {/* Barre de statistiques et filtres améliorée */}
+        <div className="mt-4 grid gap-3 w-full text-xs sm:text-sm md:grid-cols-[auto_auto_1fr_auto] items-start">
+          {/* Stats */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/5 border border-white/10 text-white" title="Entrées visibles après filtres">
+              <ClockIcon className="w-4 h-4" /> {visibleRows.length} entrée(s)
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-100" title="Entrées à valider">
+              <CheckCircle2 className="w-4 h-4" /> {countFiltered.pending} en cours
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/15 border border-blue-500/30 text-blue-100" title="Entrées validées">
+              <Calendar className="w-4 h-4" /> {countFiltered.history - rejectedCount} validées
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-500/15 border border-red-500/30 text-red-200" title="Entrées refusées du mois">
+              <XCircle className="w-4 h-4" /> {rejectedCount} refusées
+            </span>
+            <span className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded bg-gradient-to-r from-white/5 to-white/10 border border-white/10 text-white" title="Somme (heures) des entrées visibles">
+              <ClockIcon className="w-4 h-4" /> {totalHours}
+            </span>
+          </div>
+          {/* Filtres */}
+          <div className="flex items-center gap-2 flex-wrap col-span-2 md:col-span-1">
+            <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-white/5 border border-white/10 text-white">
+              <Calendar className="w-4 h-4" />
+              <input aria-label="Période" type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="bg-transparent outline-none text-white" />
+            </span>
+            <span className="inline-flex items-center gap-2 px-2 py-[3px] rounded bg-white/5 border border-white/10 text-white">
+              <UserIcon className="w-4 h-4" />
+              <AgentSelect
+                agents={uniqueAgents}
+                value={selectedAgent}
+                onChange={setSelectedAgent}
+                stats={agentStats}
+                className=""
+              />
+            </span>
+            <button onClick={() => setRefreshNonce(v => v + 1)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-white/10 border border-white/20 hover:bg-white/15" title="Recharger les données Firestore">
+              <RefreshCw className="w-4 h-4" /> Rafraîchir
+            </button>
+          </div>
+          {/* Onglets */}
+          <div className="flex items-center gap-2 justify-end flex-wrap">
+            <button onClick={() => setView('pending')} className={`px-3 py-1.5 rounded-full border text-xs md:text-sm transition ${view==='pending' ? `${theme.primaryBtn} text-white border-white/20 shadow` : 'bg-white/10 border-white/20 hover:bg-white/15'}`}>En cours ({countFiltered.pending})</button>
+            <button onClick={() => setView('history')} className={`px-3 py-1.5 rounded-full border text-xs md:text-sm transition ${view==='history' ? 'bg-white/20 border-white/40 shadow-inner' : 'bg-white/10 border-white/20 hover:bg-white/15'}`}>Historique validé ({countFiltered.history - rejectedCount})</button>
             {view === 'history' && (
               <button
                 onClick={() => setShowRejected(v => !v)}
-                className={`px-2 py-1 text-xs rounded-full border bg-white/10 border-white/20 hover:bg-white/15 whitespace-nowrap`}
+                className={`px-2 py-1 text-xs rounded-full border ${showRejected ? 'bg-red-500/25 border-red-400/40 text-red-100' : 'bg-white/10 border-white/20 hover:bg-white/15'} whitespace-nowrap transition`}
+                title={showRejected ? 'Masquer les entrées refusées' : 'Afficher les entrées refusées'}
               >
                 {showRejected ? 'Cacher refusées' : `Afficher refusées (${rejectedCount})`}
               </button>
             )}
             <a
               href={`/dashboard/superviseur/${area || ''}/archives`}
-              className="ml-2 px-3 py-1.5 rounded-full border border-emerald-500/40 bg-emerald-700/30 text-emerald-100 hover:brightness-110"
-              title="Voir les archives"
+              className="px-3 py-1.5 rounded-full border border-emerald-500/40 bg-emerald-700/30 text-emerald-100 hover:brightness-110 text-xs md:text-sm"
+              title="Voir les archives des mois précédents"
             >
               ARCHIVES
             </a>
@@ -564,7 +647,7 @@ const SupervisorChecklist: React.FC = () => {
                       <>
                         <button onClick={() => beginEdit(r)} className="px-3 py-1.5 rounded bg-white/10 border border-white/20 text-xs font-semibold">Modifier</button>
                         <button onClick={() => onApprove(r._docId)} className="px-3 py-1.5 rounded bg-emerald-500 text-white text-xs font-semibold hover:brightness-105 glow-focus">Valider</button>
-                        <button onClick={() => onReject(r._docId)} className="px-3 py-1.5 rounded bg-red-500 text-white text-xs font-semibold hover:brightness-105">Refuser</button>
+                        <button onClick={() => onDelete(r._docId)} className="px-3 py-1.5 rounded bg-red-600 text-white text-xs font-semibold hover:brightness-110">Supprimer</button>
                       </>
                     )}
                   </div>
@@ -619,7 +702,7 @@ const SupervisorChecklist: React.FC = () => {
             <div className="flex items-center gap-3">
               <span className="text-xs opacity-80">{Object.values(selected).filter(Boolean).length} sélectionné(s)</span>
               <button onClick={approveSelected} className="px-3 py-1.5 rounded bg-emerald-500 text-white text-xs font-semibold hover:brightness-105 glow-focus">Valider</button>
-              <button onClick={rejectSelected} className="px-3 py-1.5 rounded bg-red-500 text-white text-xs font-semibold hover:brightness-105">Refuser</button>
+              <button onClick={deleteSelected} className="px-3 py-1.5 rounded bg-red-600 text-white text-xs font-semibold hover:brightness-110">Supprimer</button>
               <button onClick={() => setSelected({})} className="px-3 py-1.5 rounded bg-white/10 border border-white/20 text-xs">Effacer</button>
             </div>
           </div>

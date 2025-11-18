@@ -1,8 +1,10 @@
 import React from 'react';
+import { Wrench, Check, X } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, getDocs, orderBy, query as fsQuery, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query as fsQuery, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import SupervisorPresenceFR from './SupervisorPresenceFR';
 
 type Sale = {
   id: string;
@@ -16,6 +18,10 @@ type Sale = {
   orderNumber?: string;
   campaign?: string;
   region?: string;
+  // Infos client (si présentes dans Firestore)
+  clientFirstName?: string;
+  clientLastName?: string;
+  clientPhone?: string;
 };
 
 const OFFER_OPTIONS = [
@@ -96,6 +102,11 @@ const SupervisorSales: React.FC = () => {
   const [usingFallback, setUsingFallback] = React.useState(false);
   const [sales, setSales] = React.useState<Sale[]>([]);
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  // Edition de date (inline)
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingDate, setEditingDate] = React.useState<string>('');
+  const [saving, setSaving] = React.useState<boolean>(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   // ===== LEADS state & helpers =====
   type LeadRow = {
@@ -754,6 +765,49 @@ const SupervisorSales: React.FC = () => {
     a.click(); URL.revokeObjectURL(url);
   };
 
+  // Helpers pour input datetime-local
+  const toDateTimeLocal = (dLike: any): string => {
+    const d = toDate(dLike);
+    if (!d) return '';
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const HH = pad(d.getHours());
+    const MM = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
+  };
+
+  const beginEditDate = (s: Sale) => {
+    setEditingId(s.id);
+    setEditingDate(toDateTimeLocal(s.date));
+    setSaveError(null);
+  };
+
+  const cancelEditDate = () => {
+    setEditingId(null);
+    setEditingDate('');
+    setSaveError(null);
+  };
+
+  const saveEditDate = async (id: string) => {
+    if (!editingDate) return;
+    try {
+      setSaving(true);
+      setSaveError(null);
+      const newDate = new Date(editingDate);
+      if (isNaN(newDate.getTime())) throw new Error('Date invalide');
+      await updateDoc(doc(db, 'sales', id), { date: Timestamp.fromDate(newDate) });
+      // Mise à jour locale immédiate
+      setSales(prev => prev.map(s => s.id === id ? { ...s, date: Timestamp.fromDate(newDate) } : s));
+      setEditingId(null);
+    } catch (e: any) {
+      setSaveError(e?.message || 'Erreur enregistrement');
+    } finally {
+      setSaving(false);
+    }
+  };
+
 
   // Vue LEADS: pas de filtres Canal+, affiche le tableau LEADS demandé
   if (isLeads) {
@@ -898,6 +952,10 @@ const SupervisorSales: React.FC = () => {
     <div className="relative">
       <div className="space-y-4 animate-fade-in">
   <p className="text-slate-300">{`Ventes Canal+ (${region || ''})`} — mise à jour toutes 60s</p>
+
+      {region === 'FR' && (
+        <SupervisorPresenceFR />
+      )}
 
       {/* KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1063,6 +1121,7 @@ const SupervisorSales: React.FC = () => {
                     </button>
                   </th>
                   <th className="text-left p-3">VENDEUR</th>
+                  <th className="text-left p-3">CLIENT</th>
                   <th className="text-left p-3">N° COMMANDE</th>
                 </tr>
               </thead>
@@ -1070,7 +1129,7 @@ const SupervisorSales: React.FC = () => {
                 {loading && (
                   Array.from({length:8}).map((_,i) => (
                     <tr key={i} className="border-t border-white/10">
-                      {[120,140,110].map((w, idx) => (
+                      {[120,140,180,110].map((w, idx) => (
                         <td key={idx} className="p-3">
                           <div className="h-4 rounded bg-white/10 overflow-hidden relative" style={{width: w}}>
                             <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer-move" />
@@ -1084,17 +1143,62 @@ const SupervisorSales: React.FC = () => {
                   const d = toDate(s.date);
                   const cat = getStatusCategory(s);
                   const raw = getRawStatus(s);
+                  const clientName = `${s.clientFirstName || ''} ${s.clientLastName || ''}`.trim() || '—';
                   return (
                     <tr key={s.id} className="border-t border-white/10 hover:bg-white/5 even:bg-white/[0.03] animate-fade-in" style={{animationDelay: `${Math.min(idx,30)*30}ms`}} title={`Statut: ${cat} | Brut: ${raw || '—'} | Consent: ${s.consent || '—'}`}>
-                      <td className="p-3 whitespace-nowrap text-white">{fmtDate(d)}</td>
+                      <td className="p-3 whitespace-nowrap text-white">
+                        {editingId === s.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="datetime-local"
+                              value={editingDate}
+                              onChange={(e)=>setEditingDate(e.target.value)}
+                              className="bg-slate-800 border border-white/10 text-slate-100 rounded p-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-cactus-500"
+                            />
+                            <button
+                              onClick={()=>saveEditDate(s.id)}
+                              disabled={saving}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded bg-cactus-600 text-white hover:bg-cactus-500 disabled:opacity-60"
+                              title="Enregistrer la date"
+                              aria-label="Enregistrer"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={cancelEditDate}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded bg-white/10 border border-white/10 text-blue-100 hover:bg-white/20"
+                              title="Annuler"
+                              aria-label="Annuler"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span>{fmtDate(d)}</span>
+                            <button
+                              onClick={()=>beginEditDate(s)}
+                              className="inline-flex items-center justify-center h-7 w-7 rounded border border-white/10 text-blue-200 hover:bg-white/10"
+                              title="Modifier la date"
+                              aria-label="Modifier la date"
+                            >
+                              <Wrench className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                        {editingId === s.id && saveError && (
+                          <div className="text-[11px] text-rose-300 mt-1">{saveError}</div>
+                        )}
+                      </td>
                       <td className="p-3 text-white">{sellerName(s)}</td>
+                      <td className="p-3 text-white">{clientName}</td>
                       <td className="p-3 text-white">{s.orderNumber || '—'}</td>
                     </tr>
                   );
                 })}
                 {!loading && filtered.length === 0 && (
                   <tr className="border-t border-white/10">
-                    <td className="p-3 text-blue-200" colSpan={3}>Aucune vente pour les filtres courants.</td>
+                    <td className="p-3 text-blue-200" colSpan={4}>Aucune vente pour les filtres courants.</td>
                   </tr>
                 )}
               </tbody>

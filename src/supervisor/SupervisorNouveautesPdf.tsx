@@ -14,8 +14,8 @@ const SupervisorNouveautesPdf: React.FC = () => {
         <div className="bg-white/10 rounded-lg border border-white/10 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Gestion des PDF Nouveautés</h2>
-              <p className="text-blue-200 text-sm">Uploader, activer et gérer l’historique des PDF visibles par les agents FR.</p>
+              <h2 className="text-lg font-semibold">Gestion des Nouveautés (PDF & Vidéos)</h2>
+              <p className="text-blue-200 text-sm">Uploader, activer et gérer l’historique des PDF et des vidéos visibles par les agents FR.</p>
             </div>
           </div>
           <div className="mt-4">

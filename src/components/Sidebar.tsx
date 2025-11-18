@@ -17,7 +17,11 @@ import React from "react";
 
 // reserved for future supervisor-specific entries if needed
 
-const Sidebar = () => {
+interface SidebarProps {
+  onCloseMobile?: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
   const { user, logout } = useAuth();
   const [showNewNouveautes, setShowNewNouveautes] = React.useState<boolean>(false);
 
@@ -60,9 +64,18 @@ const Sidebar = () => {
 
   try {
     return (
-  <div className="bg-cactus-800 text-white h-screen flex flex-col w-64 shrink-0 overflow-hidden">
-        <div className="p-6 border-b border-cactus-700">
+  <div className="bg-cactus-800 text-white h-screen md:h-full flex flex-col w-64 shrink-0 overflow-y-auto overscroll-contain pb-24">
+        <div className="p-6 border-b border-cactus-700 flex items-center justify-between">
           <h1 className="text-3xl font-bold">Cactus</h1>
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              aria-label="Fermer le menu"
+              className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded-md bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-cactus-400"
+            >
+              <span className="text-lg leading-none">×</span>
+            </button>
+          )}
         </div>
 
   <nav className="flex-1 overflow-y-auto py-6 space-y-1">
@@ -253,7 +266,7 @@ const Sidebar = () => {
         FAQ & Suggestions
       </NavLink>
       </nav>
-  <div className="p-4 border-t border-cactus-700 space-y-4 mt-auto sticky bottom-0 bg-cactus-800/95 backdrop-blur supports-[backdrop-filter]:bg-cactus-800/80">
+  <div className="p-4 border-t border-cactus-700 space-y-4 mt-auto md:sticky md:bottom-0 bg-cactus-800/95 backdrop-blur supports-[backdrop-filter]:bg-cactus-800/80">
         <Link
           to={`${base}/settings`}
           className="flex items-center p-3 rounded-lg bg-cactus-700 hover:bg-cactus-600 transition-colors"

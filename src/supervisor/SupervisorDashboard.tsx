@@ -612,17 +612,17 @@ const SupervisorDashboard: React.FC = () => {
   const periodLabel = periodDays === 7 ? 'Ventes 7j' : 'Ventes (période)';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 md:space-y-8 max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6">
       {/* Filtres avancés */}
-      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0b1f3f]/60 via-[#0c2752]/50 to-[#0a2752]/50 p-3 sm:p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1f3f]/70 via-[#0c2752]/60 to-[#0a2752]/60 p-4 sm:p-5 flex flex-col gap-4 shadow-[0_12px_32px_-8px_rgba(8,28,60,0.55)]">
+        <div className="flex items-center gap-3 flex-wrap leading-relaxed">
           <label className="text-blue-200">Période :</label>
           <input type="date" value={draftStart} onChange={e => setDraftStart(e.target.value)} className="rounded px-2 py-1 bg-[#0a1430] text-white border border-white/10" max={draftEnd} />
           <span className="text-blue-200">au</span>
           <input type="date" value={draftEnd} onChange={e => setDraftEnd(e.target.value)} className="rounded px-2 py-1 bg-[#0a1430] text-white border border-white/10" min={draftStart} max={todayStr} />
           <span className="ml-2 inline-flex items-center rounded-full border border-white/10 bg-white/10 px-2 py-1 text-xs text-blue-100">{periodDays} j</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap leading-relaxed">
           <label className="text-blue-200">Région :</label>
           <select value={regionOverride} onChange={(e)=>{ const v = e.target.value as any; setRegionOverride(v); try { if (v) localStorage.setItem('activeRegion', v); } catch {} }} className="rounded px-2 py-1 bg-[#0a1430] text-white border border-white/10">
             <option value="">Auto ({(effectiveArea==='LEADS'?'LEADS':effectiveArea)})</option>
@@ -652,7 +652,7 @@ const SupervisorDashboard: React.FC = () => {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {dateError && <span className="text-rose-300 text-xs mr-2">{dateError}</span>}
           <button onClick={applyDates} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-gradient-to-r from-cyan-500/70 to-blue-500/70 hover:from-cyan-500 hover:to-blue-500 border border-white/10 shadow-[0_8px_24px_rgba(56,189,248,0.35)]">Appliquer</button>
         </div>
@@ -661,7 +661,7 @@ const SupervisorDashboard: React.FC = () => {
       {/* Smart alerts */}
       <AlertsPanel alerts={alerts} />
       {/* Record de ventes sur une journée */}
-      <div className="bg-white/10 rounded-lg p-4 border border-white/10 flex flex-col items-start mb-2">
+      <div className="bg-white/10 rounded-xl md:rounded-2xl p-5 border border-white/10 flex flex-col items-start mb-4 backdrop-blur-sm">
         <h3 className="text-lg font-semibold mb-1">🏆 Record de ventes sur une journée</h3>
         <p className="text-blue-100">
           {recordDay
@@ -670,45 +670,45 @@ const SupervisorDashboard: React.FC = () => {
             : "Calcul en cours…"}
         </p>
       </div>
-  <div className={`grid grid-cols-1 sm:grid-cols-2 ${effectiveArea === 'CIV' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
+  <div className={`grid grid-cols-1 sm:grid-cols-2 ${effectiveArea === 'CIV' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-5 md:gap-6`}>
         {effectiveArea === 'CIV' && (
           <div className="bg-white/10 rounded-lg p-4 border border-white/10">
             <p className="text-blue-200 text-sm">Ventes CIV (mois)</p>
             <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : <CountUp end={kpi.monthSales} duration={0.6} />}</p>
           </div>
         )}
-        <div className="bg-white/10 rounded-lg p-4 border border-white/10">
+        <div className="bg-white/10 rounded-xl p-5 border border-white/10 shadow-sm">
           <p className="text-blue-200 text-sm">Ventes jour</p>
           <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : <CountUp end={kpi.daySales} duration={0.6} />}</p>
         </div>
-        <div className="bg-white/10 rounded-lg p-4 border border-white/10">
+        <div className="bg-white/10 rounded-xl p-5 border border-white/10 shadow-sm">
           <p className="text-blue-200 text-sm">{periodLabel}</p>
           <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : <CountUp end={kpi.weekSales} duration={0.6} />}</p>
         </div>
-        <div className="bg-white/10 rounded-lg p-4 border border-white/10">
+        <div className="bg-white/10 rounded-xl p-5 border border-white/10 shadow-sm">
           <p className="text-blue-200 text-sm">Taux conv.</p>
           <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : kpi.conversion}</p>
         </div>
         {/* Carte "Top vendeur" retirée à la demande */}
       </div>
       {effectiveArea === 'LEADS' && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white/10 rounded-lg p-4 border border-white/10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6">
+          <div className="bg-white/10 rounded-xl p-5 border border-white/10">
             <p className="text-blue-200 text-sm">Opportunity (jour)</p>
             <p className="text-3xl font-extrabold">{loading ? '…' : leadDayByOrigin.opportunity}</p>
           </div>
-          <div className="bg-white/10 rounded-lg p-4 border border-white/10">
+          <div className="bg-white/10 rounded-xl p-5 border border-white/10">
             <p className="text-blue-200 text-sm">Dolead (jour)</p>
             <p className="text-3xl font-extrabold">{loading ? '…' : leadDayByOrigin.doleadd}</p>
           </div>
-          <div className="bg-white/10 rounded-lg p-4 border border-white/10">
+          <div className="bg-white/10 rounded-xl p-5 border border-white/10">
             <p className="text-blue-200 text-sm">MM (jour)</p>
             <p className="text-3xl font-extrabold">{loading ? '…' : leadDayByOrigin.mm}</p>
           </div>
         </div>
       )}
       {/* Historique période - pleine largeur */}
-      <div className="bg-white/10 rounded-2xl border border-white/10 p-6">
+      <div className="bg-white/10 rounded-3xl border border-white/10 p-6 md:p-7 shadow-[0_18px_46px_-10px_rgba(30,64,175,0.35)]">
         <div className="flex flex-row justify-between items-center mb-2">
           <div>
             <h2 className="text-white text-2xl font-bold leading-tight mb-0">Historique période</h2>
@@ -726,7 +726,7 @@ const SupervisorDashboard: React.FC = () => {
       </div>
 
       {/* Top vendeurs - sous le graphe */}
-      <div className="bg-white/10 rounded-lg border border-white/10 p-4">
+      <div className="bg-white/10 rounded-xl border border-white/10 p-5">
         <p className="text-blue-200 text-sm mb-2">Top vendeurs</p>
         {error && <div className="text-rose-300 text-sm">{error}</div>}
         <ul className="space-y-2 text-sm">
@@ -740,15 +740,15 @@ const SupervisorDashboard: React.FC = () => {
   {/* Historique des records (jours/agents/mois) */}
   <RecordsHistory days={recordDays} agents={recordAgents} months={recordMonths} />
       {/* Répartition des offres (jour) */}
-      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#071227]/70 via-[#050c1a]/70 to-[#030711]/70 p-6 backdrop-blur-xl shadow-[0_24px_60px_rgba(8,20,40,0.55)]">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#071227]/75 via-[#050c1a]/70 to-[#030711]/75 p-6 md:p-7 backdrop-blur-xl shadow-[0_28px_70px_-12px_rgba(8,20,40,0.65)] space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Répartition des offres (jour)</h2>
             <p className="text-sm text-blue-100/70">CANAL+, Ciné Séries, Sport, 100%</p>
           </div>
         </div>
-        <div className="mt-4 grid gap-6 md:grid-cols-2">
-          <div className="h-[280px] rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="mt-5 grid gap-6 md:gap-7 md:grid-cols-2">
+          <div className="h-[300px] rounded-2xl border border-white/10 bg-white/5 p-5">
             <ChartComponent
               type="doughnut"
               data={{
@@ -774,7 +774,7 @@ const SupervisorDashboard: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 content-start">
+          <div className="grid grid-cols-2 gap-4 content-start">
             <div className="relative rounded-xl border border-white/10 bg-white/5 px-4 py-3">
               <span className="absolute left-0 right-0 top-0 h-1 rounded-t-xl" style={{ background: `linear-gradient(90deg, ${COLORS.canalGradientFrom}, ${COLORS.canalGradientTo})` }} />
               <p className="text-[11px] uppercase tracking-[0.3em] text-blue-200/60">CANAL+</p>
@@ -800,8 +800,8 @@ const SupervisorDashboard: React.FC = () => {
       </div>
       {/* Tableau ventes du jour par agent Canal+ (style inspiré du screen fourni) */}
       {/* Analyses supplémentaires: Statuts (période) & Progression par agent */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:shadow-[0_10px_30px_rgba(56,189,248,0.15)] transition duration-300">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mt-10">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 hover:shadow-[0_14px_36px_rgba(56,189,248,0.18)] transition duration-300">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-white text-lg font-semibold">Répartition des statuts par jour (période)</h3>
           </div>
@@ -813,7 +813,7 @@ const SupervisorDashboard: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 hover:shadow-[0_10px_30px_rgba(167,139,250,0.15)] transition duration-300">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 hover:shadow-[0_14px_36px_rgba(167,139,250,0.18)] transition duration-300">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-white text-lg font-semibold">Progression par agent (période)</h3>
           </div>
@@ -828,7 +828,7 @@ const SupervisorDashboard: React.FC = () => {
       </div>
 
       {/* Tableau ventes du jour par agent Canal+ (style inspiré du screen fourni) */}
-      <div className="bg-[#172635] rounded-2xl border border-[#22334a] p-6 mt-8 shadow-lg">
+      <div className="bg-[#172635] rounded-3xl border border-[#22334a] p-6 md:p-7 mt-10 shadow-[0_22px_54px_-10px_rgba(15,35,55,0.6)]">
         <div className="flex flex-row justify-between items-center mb-2">
           <div>
             <h2 className="text-white text-2xl font-bold leading-tight mb-0">Ventes du jour par agent</h2>
@@ -836,29 +836,29 @@ const SupervisorDashboard: React.FC = () => {
           </div>
           <span className="text-[#b2becd] text-sm font-medium">Actualisation automatique</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-base text-blue-100">
+        <div className="overflow-x-auto mt-4">
+          <table className="min-w-full text-sm md:text-base text-blue-100">
             <thead>
-              <tr className="border-b border-[#22334a] bg-[#1e3147]">
-                <th className="py-2 px-4 text-left tracking-widest font-semibold text-blue-200">AGENT</th>
-                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">CANAL+</th>
-                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">CINÉ SÉRIES</th>
-                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">SPORT</th>
-                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">100% CANAL</th>
-                <th className="py-2 px-4 text-center tracking-widest font-semibold text-blue-200">TOTAL</th>
+              <tr className="border-b border-[#22334a] bg-[#1e3147] text-xs md:text-sm">
+                <th className="py-3 px-4 text-left tracking-wider font-semibold text-blue-200">AGENT</th>
+                <th className="py-3 px-4 text-center tracking-wider font-semibold text-blue-200">CANAL+</th>
+                <th className="py-3 px-4 text-center tracking-wider font-semibold text-blue-200">CINÉ SÉRIES</th>
+                <th className="py-3 px-4 text-center tracking-wider font-semibold text-blue-200">SPORT</th>
+                <th className="py-3 px-4 text-center tracking-wider font-semibold text-blue-200">100% CANAL</th>
+                <th className="py-3 px-4 text-center tracking-wider font-semibold text-blue-200">TOTAL</th>
               </tr>
             </thead>
             <tbody>
               {canalDayByAgent.length === 0
-                ? [<tr key="empty"><td colSpan={6} className="py-4 px-4 text-center text-blue-300">Aucun résultat</td></tr>]
-                : canalDayByAgent.map((row) => (
-                    <tr key={row.agent} className="border-b border-[#22334a] hover:bg-[#22334a]/40 transition-colors">
-                      <td className="py-2 px-4 font-semibold text-white">{row.agent}</td>
-                      <td className="py-2 px-4 text-center">{row.canal}</td>
-                      <td className="py-2 px-4 text-center">{row.cine}</td>
-                      <td className="py-2 px-4 text-center">{row.sport}</td>
-                      <td className="py-2 px-4 text-center">{row.cent}</td>
-                      <td className="py-2 px-4 text-center font-bold text-white">{row.total}</td>
+                ? [<tr key="empty"><td colSpan={6} className="py-6 px-4 text-center text-blue-300">Aucun résultat</td></tr>]
+                : canalDayByAgent.map((row, idx) => (
+                    <tr key={row.agent} className={`border-b border-[#22334a] hover:bg-[#22334a]/40 transition-colors ${idx % 2 === 0 ? 'bg-[#1a2b40]/40' : ''}`}> 
+                      <td className="py-3 px-4 font-semibold text-white whitespace-nowrap">{row.agent}</td>
+                      <td className="py-3 px-4 text-center">{row.canal}</td>
+                      <td className="py-3 px-4 text-center">{row.cine}</td>
+                      <td className="py-3 px-4 text-center">{row.sport}</td>
+                      <td className="py-3 px-4 text-center">{row.cent}</td>
+                      <td className="py-3 px-4 text-center font-bold text-white">{row.total}</td>
                     </tr>
                   ))}
             </tbody>

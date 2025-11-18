@@ -223,10 +223,12 @@ service cloud.firestore {
 
     // --- Heures (checklists) ---
     function isHoursSupervisor() {
-      // Temporary supervisor gate by email OR admin custom claim
+      // Supervisor gate by admin claim OR approved supervisor emails
       return hasAdminRole() || (
         request.auth != null && (
-          request.auth.token.email == 'i.brai@mars-marketing.fr'
+          request.auth.token.email == 'i.brai@mars-marketing.fr' ||
+          request.auth.token.email == 'i.boultame@mars-marketing.fr' ||
+          request.auth.token.email == 'j.allione@mars-marketing.fr'
         )
       );
     }
@@ -249,7 +251,8 @@ service cloud.firestore {
           isHoursSupervisor()
         )
         && request.resource.data.updatedAt is timestamp;
-      allow delete: if false;
+  // Allow supervisors/admins to delete checklist entries
+  allow delete: if isHoursSupervisor();
     }
 
     // Optional aggregation per user/period

@@ -817,8 +817,13 @@ const DashboardHome = () => {
             </span>
           </div>
         </div>
-        <TeamSales members={teamSalesTodayData} />
-        <RecentSales sales={recentSalesData} />
+        {/* Force full-width on mobile, split on lg+ */}
+        <div className="col-span-full lg:col-span-1">
+          <TeamSales members={teamSalesTodayData} />
+        </div>
+        <div className="col-span-full lg:col-span-1">
+          <RecentSales sales={recentSalesData} />
+        </div>
       </div>
 
       <PerformanceTable salespeople={performanceData} />

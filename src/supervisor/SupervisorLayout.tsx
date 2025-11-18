@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone, History, BarChart3 } from 'lucide-react';
+import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone, History, BarChart3, Menu, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const titleFor = (area?: string) => {
@@ -30,10 +30,34 @@ const SupervisorLayout: React.FC = () => {
     }
   }, [area, base, location.pathname, navigate]);
 
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const closeSidebar = () => setSidebarOpen(false);
+  const toggleSidebar = () => setSidebarOpen(o => !o);
+
+  React.useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeSidebar();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-blue-950 via-blue-900 to-blue-950 text-white">
+    <div className="min-h-screen flex flex-col md:flex-row bg-gradient-to-br from-blue-950 via-blue-900 to-blue-950 text-white">
+      {/* Mobile top bar */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0b1f3f]/80 backdrop-blur z-30">
+        <button onClick={toggleSidebar} aria-label="Ouvrir le menu" aria-controls="supervisor-sidebar" aria-expanded={sidebarOpen} className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+        <h1 className="text-sm font-semibold tracking-wide">{titleFor(area)}</h1>
+      </div>
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 border-r border-white/10 bg-gradient-to-b from-[#0b1f3f] via-[#0c2752] to-[#0a2752] backdrop-blur-xl flex flex-col overflow-hidden">
+      <aside
+        id="supervisor-sidebar"
+        className={`fixed md:static inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 will-change-transform border-r border-white/10 bg-gradient-to-b from-[#0b1f3f] via-[#0c2752] to-[#0a2752] backdrop-blur-xl flex flex-col overflow-hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        role="navigation"
+        aria-label="Menu superviseur"
+      >
         <div className="p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="relative h-10 w-10">
@@ -179,7 +203,7 @@ const SupervisorLayout: React.FC = () => {
                     <span className="absolute inset-0 rounded-lg border border-white/10 opacity-0 transition group-hover:opacity-100" />
                     <FileDown className="relative h-4 w-4" aria-hidden="true" />
                   </span>
-                  Nouveautés PDF
+                  Nouveautés (PDF & Vidéos)
                 </NavLink>
               )}
               {/* Lien Export retiré (FR/CIV) */}
@@ -232,12 +256,19 @@ const SupervisorLayout: React.FC = () => {
           </button>
         </div>
       </aside>
-
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <button
+          onClick={closeSidebar}
+          aria-label="Fermer le menu"
+          className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
+        />
+      )}
       {/* Main content */}
-      <main className="flex-1 p-4 sm:p-6">
+      <main className="flex-1 p-4 sm:p-6 md:ml-0">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">{titleFor(area)}</h2>
+            <h2 className="text-2xl font-bold hidden md:block">{titleFor(area)}</h2>
             {!hideSpaceSwitch && (
               <div className="flex items-center gap-2">
                 <button

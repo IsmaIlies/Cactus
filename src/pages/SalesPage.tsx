@@ -405,7 +405,8 @@ const filteredSales = normalizedQuery
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Ventes — LEADS</h1>
+          {/* Mobile smaller title, larger from md */}
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">Ventes — LEADS</h1>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-600">Mode:</span>
             <select value={mode} onChange={e => setMode(e.target.value as any)} className="border rounded px-2 py-1 text-sm">
@@ -431,13 +432,14 @@ const filteredSales = normalizedQuery
         </div>
       </div>
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
+        {/* Title resized for mobile readability */}
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-6">
           Nouvelle Vente
         </h1>
 
         <form
           onSubmit={handleSubmit}
-          className="bg-gradient-to-br from-cactus-50 via-white to-cactus-100 rounded-xl shadow-lg p-6 border border-cactus-200"
+          className="bg-gradient-to-br from-cactus-50 via-white to-cactus-100 rounded-xl shadow-none md:shadow-lg p-6 border border-cactus-200"
         >
           <div className="space-y-6">
             <div>
@@ -600,7 +602,8 @@ const filteredSales = normalizedQuery
 
       {/* Historique des ventes filtrées */}
       <div className="max-w-5xl mx-auto">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+        {/* Smaller mobile subtitle */}
+        <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4">
           Ventes du mois sélectionné
         </h2>
         <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
@@ -624,7 +627,9 @@ const filteredSales = normalizedQuery
             {filteredSales.length} résultat{filteredSales.length > 1 ? 's' : ''}
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-x-auto">
+        <div className="bg-white rounded-lg shadow-none md:shadow-sm border border-gray-100 overflow-x-auto">
+          {/* Inner min-width wrapper to allow horizontal scroll <360px */}
+          <div className="min-w-[360px]">
           <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -757,6 +762,7 @@ const filteredSales = normalizedQuery
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>

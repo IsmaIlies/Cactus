@@ -29,6 +29,7 @@ const LoginPage = () => {
     "olivier@evenmedia.fr",
     "m.maimoun@mars-marketing.fr",
     "s.karabagli@mars-marketing.fr",
+    "a.gouet@mars-marketing.fr",
   ]; // temporary
   type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
   const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);

@@ -1,27 +1,32 @@
 import React, { useState } from "react";
 
+// Use WebP by default with PNG fallback (files converted in /public by a script)
 const offers = [
   {
     title: "CANAL+",
-  img: "/Offre canal +.png",
-    alt: "Offre Canal+"
+    webp: "/offre-canal-plus.webp",
+    png: "/Offre canal +.png",
+    alt: "Offre Canal+",
   },
   {
     title: "CANAL+ CINÉ SERIES",
-  img: "/Offre canal+ ciné series.png",
-    alt: "Offre Canal+ Ciné Séries"
+    webp: "/offre-canal-plus-cine-series.webp",
+    png: "/Offre canal+ ciné series.png",
+    alt: "Offre Canal+ Ciné Séries",
   },
   {
     title: "CANAL+ SPORT",
-  img: "/Offre canal+ sport.png",
-    alt: "Offre Canal+ Sport"
+    webp: "/offre-canal-plus-sport.webp",
+    png: "/Offre canal+ sport.png",
+    alt: "Offre Canal+ Sport",
   },
   {
     title: "100% CANAL+",
-  // % in filename must be encoded in URL, otherwise request may break
-  img: "/Offre canal+ 100%25.png",
-    alt: "Offre 100% Canal+"
-  }
+    webp: "/offre-100-canal-plus.webp",
+    // Fallback PNG source; original filename contains %
+    png: "/Offre canal+ 100%25.png",
+    alt: "Offre 100% Canal+",
+  },
 ];
 
 const OffersPage = () => {
@@ -33,12 +38,16 @@ const OffersPage = () => {
         {offers.map((offer, idx) => (
           <div key={idx} className="bg-white rounded-lg shadow p-4 flex flex-col items-center">
             <h2 className="text-xl font-bold mb-4 text-center text-black !text-black">{offer.title}</h2>
-            <img
-              src={offer.img}
-              alt={offer.alt}
-              className="w-full h-auto rounded cursor-pointer transition-transform hover:scale-105"
-              onClick={() => setZoomedImg(offer.img)}
-            />
+            <picture>
+              <source srcSet={offer.webp} type="image/webp" />
+              <img
+                src={offer.png}
+                alt={offer.alt}
+                className="w-full h-auto rounded cursor-pointer transition-transform hover:scale-105"
+                onClick={() => setZoomedImg(offer.webp || offer.png)}
+                loading="lazy"
+              />
+            </picture>
           </div>
         ))}
       </div>
@@ -53,6 +62,7 @@ const OffersPage = () => {
             alt="Zoom Canal+"
             className="max-w-full max-h-full rounded-lg shadow-lg border-4 border-white"
             style={{ cursor: 'default' }}
+            loading="eager"
           />
         </div>
       )}
