@@ -30,6 +30,34 @@ export const getAttendance = async (date: string): Promise<AttendanceDoc | null>
   };
 };
 
+// Get attendance docs between two dates (inclusive). Dates are YYYY-MM-DD.
+export const getAttendancesInRange = async (startDate: string, endDate: string): Promise<AttendanceDoc[]> => {
+  const toDate = (s: string) => {
+    const [y, m, d] = s.split('-').map((n) => parseInt(n, 10));
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const toYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  let start = toDate(startDate);
+  let end = toDate(endDate);
+  // Ensure start <= end
+  if (start > end) {
+    const tmp = new Date(start.getTime());
+    start = end;
+    end = tmp;
+  }
+
+  const days: string[] = [];
+  const cur = new Date(start.getTime());
+  while (cur <= end) {
+    days.push(toYMD(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  const results = await Promise.all(days.map(async (d) => (await getAttendance(d)) || { region: 'FR', date: d, entries: {} }));
+  return results;
+};
+
 export const subscribeAttendance = (
   date: string,
   cb: (doc: AttendanceDoc | null) => void

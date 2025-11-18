@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckSquare, PlusSquare, Users } from "lucide-react";
+import { CheckSquare, PlusSquare, Users, Download } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   AttendanceDoc,
@@ -10,6 +10,7 @@ import {
   setPresence,
   subscribeAttendance,
   patchEntryName,
+  getAttendancesInRange,
 } from "../services/attendanceService";
 
 const pad = (n: number) => n.toString().padStart(2, "0");
@@ -22,6 +23,13 @@ const SupervisorPresenceFR: React.FC = () => {
   const [attendance, setAttendance] = React.useState<AttendanceDoc | null>(null);
   const [roster, setRoster] = React.useState<RosterItem[]>([]);
   const [newName, setNewName] = React.useState("");
+  // History controls
+  const daysAgo = (n: number) => {
+    const d = new Date(); d.setDate(d.getDate()-n); return d;
+  };
+  const [histStart, setHistStart] = React.useState<string>(() => toYMD(daysAgo(13))); // 14 jours glissants
+  const [histEnd, setHistEnd] = React.useState<string>(() => toYMD(new Date()));
+  const [history, setHistory] = React.useState<Array<{date: string; amCount: number; pmCount: number; amNames: string[]; pmNames: string[]}>>([]);
 
   // Load roster, ensure doc, then subscribe
   React.useEffect(() => {
@@ -60,6 +68,49 @@ const SupervisorPresenceFR: React.FC = () => {
     if (raw) return raw;
     if (e.agentId && rosterMap[e.agentId]) return rosterMap[e.agentId].trim();
     return e.agentId ? `(${e.agentId})` : `inconnu_${Math.random().toString(36).slice(2,7)}`;
+  };
+
+  // Load history for range and compute AM/PM lists
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const docs = await getAttendancesInRange(histStart, histEnd);
+      const rows = docs.map((doc) => {
+        const entries = doc?.entries || {};
+        const list = Object.entries(entries).map(([id, e]: any) => ({ id, ...e }));
+        const label = (e: any) => {
+          const nm = (e.name || '').toString().trim();
+          if (nm) return nm;
+          if (e.agentId && rosterMap[e.agentId]) return rosterMap[e.agentId].trim();
+          if (e.agentId) return `(${e.agentId})`;
+          return `inconnu_${Math.random().toString(36).slice(2,7)}`;
+        };
+        const am = list.filter(e => !!e.am).map(label).sort((a,b)=>a.localeCompare(b,'fr'));
+        const pm = list.filter(e => !!e.pm).map(label).sort((a,b)=>a.localeCompare(b,'fr'));
+        return { date: doc.date, amCount: am.length, pmCount: pm.length, amNames: am, pmNames: pm };
+      }).sort((a,b)=> a.date.localeCompare(b.date));
+      if (!cancelled) setHistory(rows);
+    })();
+    return () => { cancelled = true; };
+  }, [histStart, histEnd, rosterMap]);
+
+  const exportCsv = () => {
+    const esc = (s: string) => '"' + s.replace(/"/g, '""') + '"';
+    let csv = 'date,am_count,pm_count,am_names,pm_names\n';
+    history.forEach(h => {
+      const am = esc(h.amNames.join(', '));
+      const pm = esc(h.pmNames.join(', '));
+      csv += `${h.date},${h.amCount},${h.pmCount},${am},${pm}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `presence_fr_history_${histStart}_to_${histEnd}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
   const amList = Object.values(entries)
     .filter(e => e.am)
@@ -196,6 +247,56 @@ const SupervisorPresenceFR: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Historique AM/PM */}
+      <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-white">
+            <CheckSquare className="h-5 w-5 text-blue-200" />
+            <h3 className="font-semibold">Historique présence (AM / PM)</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="date" value={histStart} onChange={(e)=>setHistStart(e.target.value)} className="bg-slate-800 border border-white/10 text-slate-100 rounded p-2 text-sm" />
+            <span className="text-blue-200">→</span>
+            <input type="date" value={histEnd} onChange={(e)=>setHistEnd(e.target.value)} className="bg-slate-800 border border-white/10 text-slate-100 rounded p-2 text-sm" />
+            <button onClick={exportCsv} className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-white/10 border border-white/10 text-blue-100 hover:bg-white/20" title="Exporter en CSV">
+              <Download className="h-4 w-4" /> Export CSV
+            </button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="sticky top-0 bg-slate-900/70 backdrop-blur border-b border-white/10 text-blue-200">
+              <tr>
+                <th className="text-left p-3">Date</th>
+                <th className="text-left p-3">AM (noms)</th>
+                <th className="text-left p-3">PM (noms)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr className="border-t border-white/10"><td colSpan={3} className="p-3 text-blue-200">Aucun historique sur la période.</td></tr>
+              ) : history.map((h) => (
+                <tr key={h.date} className="border-t border-white/10 hover:bg-white/5">
+                  <td className="p-3 text-white whitespace-nowrap">{h.date}</td>
+                  <td className="p-3 text-blue-100">
+                    <span className="text-white font-semibold mr-2">{h.amCount}</span>
+                    {h.amNames.length > 0 && (
+                      <span className="text-[11px] text-blue-200">{h.amNames.join(' · ')}</span>
+                    )}
+                  </td>
+                  <td className="p-3 text-blue-100">
+                    <span className="text-white font-semibold mr-2">{h.pmCount}</span>
+                    {h.pmNames.length > 0 && (
+                      <span className="text-[11px] text-blue-200">{h.pmNames.join(' · ')}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Ancienne section détaillée remplacée par les listes au-dessus */}
