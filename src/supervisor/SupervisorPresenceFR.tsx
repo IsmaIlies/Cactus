@@ -9,6 +9,7 @@ import {
   getRoster,
   setPresence,
   subscribeAttendance,
+  patchEntryName,
 } from "../services/attendanceService";
 
 const pad = (n: number) => n.toString().padStart(2, "0");
@@ -22,20 +23,55 @@ const SupervisorPresenceFR: React.FC = () => {
   const [roster, setRoster] = React.useState<RosterItem[]>([]);
   const [newName, setNewName] = React.useState("");
 
+  // Load roster, ensure doc, then subscribe
   React.useEffect(() => {
     let unsub: any;
     (async () => {
-      await ensureAttendanceDoc(dateStr);
-      unsub = subscribeAttendance(dateStr, setAttendance);
       const list = await getRoster();
       setRoster(list);
+      await ensureAttendanceDoc(dateStr);
+      unsub = subscribeAttendance(dateStr, setAttendance);
     })();
     return () => { if (unsub) unsub(); };
   }, [dateStr]);
 
+  // Backfill missing names in attendance from roster
+  React.useEffect(() => {
+    if (!attendance || roster.length === 0) return;
+    const entries = attendance.entries || {};
+    const tasks: Promise<any>[] = [];
+    roster.forEach(r => {
+      const e = entries[r.id];
+      if (e && (!e.name || e.name.trim().length === 0) && r.name && r.name.trim().length > 0) {
+        tasks.push(patchEntryName(attendance.date, r.id, r.name.trim()));
+      }
+    });
+    if (tasks.length > 0) {
+      Promise.all(tasks).catch(() => {/* ignore */});
+    }
+  }, [attendance, roster]);
+
   const entries = attendance?.entries || {};
-  const presentAM = Object.values(entries).filter((e) => e.am).length;
-  const presentPM = Object.values(entries).filter((e) => e.pm).length;
+  // Map roster ids to names for quick lookup
+  const rosterMap = React.useMemo(() => Object.fromEntries(roster.map(r => [r.id, r.name])), [roster]);
+  // Sanitize names (prefer roster name, avoid undefined duplicate keys warnings)
+  const sanitize = (e: any) => {
+    const raw = (e.name || '').toString().trim();
+    if (raw) return raw;
+    if (e.agentId && rosterMap[e.agentId]) return rosterMap[e.agentId].trim();
+    return e.agentId ? `(${e.agentId})` : `inconnu_${Math.random().toString(36).slice(2,7)}`;
+  };
+  const amList = Object.values(entries)
+    .filter(e => e.am)
+    .map(e => ({ label: sanitize(e), id: e.agentId || sanitize(e) }))
+    .sort((a,b)=>a.label.localeCompare(b.label,'fr'));
+  const pmList = Object.values(entries)
+    .filter(e => e.pm)
+    .map(e => ({ label: sanitize(e), id: e.agentId || sanitize(e) }))
+    .sort((a,b)=>a.label.localeCompare(b.label,'fr'));
+  const presentAM = amList.length;
+  const presentPM = pmList.length;
+  const phraseCount = (n:number) => `Il y a ${n} personne${n>1?'s':''} présente${n>1?'s':''}`;
 
   const handleToggle = async (name: string, part: "am" | "pm", checked: boolean) => {
     const id = slug(name);
@@ -69,13 +105,33 @@ const SupervisorPresenceFR: React.FC = () => {
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-blue-100 text-sm mb-4">
-        <span className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
-          AM: <strong className="text-white ml-1">{presentAM}</strong>
-        </span>
-        <span className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
-          PM: <strong className="text-white ml-1">{presentPM}</strong>
-        </span>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-blue-100 text-sm mb-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
+            AM: <strong className="text-white ml-1">{presentAM}</strong>
+          </div>
+          <div className="text-[11px] text-blue-300/80">{phraseCount(presentAM)} pour le matin</div>
+          {presentAM > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {amList.map(n => (
+                <span key={`am_badge_${n.id}`} className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 text-[11px]">{n.label}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
+            PM: <strong className="text-white ml-1">{presentPM}</strong>
+          </div>
+          <div className="text-[11px] text-blue-300/80">{phraseCount(presentPM)} pour l'après‑midi</div>
+          {presentPM > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {pmList.map(n => (
+                <span key={`pm_badge_${n.id}`} className="px-2 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-400/30 text-indigo-200 text-[11px]">{n.label}</span>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <input
             value={newName}
@@ -142,26 +198,7 @@ const SupervisorPresenceFR: React.FC = () => {
         </table>
       </div>
 
-      <div className="mt-4 text-xs text-blue-200">
-        <div className="mb-1">Présents AM:</div>
-        <div className="flex flex-wrap gap-2">
-          {Object.values(entries).filter(e => e.am).map((e) => (
-            <span key={`am_${e.name}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-blue-100">
-              <CheckSquare className="h-3 w-3 text-cactus-400" /> {e.name}
-            </span>
-          ))}
-          {presentAM === 0 && <span className="text-blue-300">—</span>}
-        </div>
-        <div className="mt-3 mb-1">Présents PM:</div>
-        <div className="flex flex-wrap gap-2">
-          {Object.values(entries).filter(e => e.pm).map((e) => (
-            <span key={`pm_${e.name}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-blue-100">
-              <CheckSquare className="h-3 w-3 text-cactus-400" /> {e.name}
-            </span>
-          ))}
-          {presentPM === 0 && <span className="text-blue-300">—</span>}
-        </div>
-      </div>
+      {/* Ancienne section détaillée remplacée par les listes au-dessus */}
     </div>
   );
 };

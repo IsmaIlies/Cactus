@@ -40,7 +40,20 @@ export const subscribeAttendance = (
       cb(null);
     } else {
       const data = snap.data() as any;
-      cb({ region: "FR", date: data.date || date, entries: data.entries || {} });
+      const rawEntries = (data.entries || {}) as Record<string, any>;
+      const normalized: Record<string, AttendanceEntry> = {};
+      Object.keys(rawEntries).forEach((k) => {
+        const e = rawEntries[k] || {};
+        normalized[k] = {
+          name: typeof e.name === "string" ? e.name : "",
+          am: !!e.am,
+          pm: !!e.pm,
+          updatedAt: e.updatedAt,
+          updatedBy: e.updatedBy,
+          agentId: e.agentId || k,
+        };
+      });
+      cb({ region: "FR", date: data.date || date, entries: normalized });
     }
   });
 };
@@ -64,18 +77,32 @@ export const setPresence = async (
   const ref = doc(db, "attendance", docId(date));
   await setDoc(ref, { region: "FR", date }, { merge: true });
   const path = `entries.${agentId}`;
-  const partial: any = {};
-  partial[path] = {
-    name,
+  const baseEntry: any = {
+    // Only set name if non-empty to avoid overwriting existing stored name
+    ...(name && name.trim().length > 0 ? { name } : {}),
     am: false,
     pm: false,
     updatedAt: Timestamp.fromDate(new Date()),
-    updatedBy,
     agentId,
   };
+  // Only include updatedBy if defined (Firestore rejects undefined)
+  if (updatedBy) baseEntry.updatedBy = updatedBy;
+  const partial: any = { [path]: baseEntry };
   await setDoc(ref, partial, { merge: true });
   const fieldPath = `entries.${agentId}.${part}` as any;
-  await updateDoc(ref, { [fieldPath]: isPresent, [`entries.${agentId}.updatedAt`]: Timestamp.fromDate(new Date()), [`entries.${agentId}.updatedBy`]: updatedBy });
+  const updates: any = {
+    [fieldPath]: isPresent,
+    [`entries.${agentId}.updatedAt`]: Timestamp.fromDate(new Date()),
+  };
+  if (updatedBy) updates[`entries.${agentId}.updatedBy`] = updatedBy;
+  await updateDoc(ref, updates);
+};
+
+// Patch helper: update missing names from roster
+export const patchEntryName = async (date: string, agentId: string, name: string) => {
+  if (!name || !name.trim()) return;
+  const ref = doc(db, "attendance", docId(date));
+  await setDoc(ref, { [`entries.${agentId}.name`]: name }, { merge: true });
 };
 
 // Simple roster storage in settings/canal_fr_roster (array of {id,name,active})

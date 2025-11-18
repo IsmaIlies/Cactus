@@ -21,11 +21,13 @@ const offers = [
     alt: "Offre Canal+ Sport",
   },
   {
-    title: "100% CANAL+",
-    webp: "/offre-100-canal-plus.webp",
-    // Fallback PNG source; original filename contains %
-    png: "/Offre canal+ 100%25.png",
-    alt: "Offre 100% Canal+",
+    title: "LA TOTALE",
+    webp: "/offre-la-totale.webp",
+    // PNG que vous allez déposer dans /public (nom exact conseillé: LA TOTALE.png)
+    png: "/LA TOTALE.png",
+    // Si la nouvelle image n'est pas encore présente, on retombera sur l'ancienne
+    fallback: "/offre-100-canal-plus.webp",
+    alt: "Offre LA TOTALE",
   },
 ];
 
@@ -44,8 +46,15 @@ const OffersPage = () => {
                 src={offer.png}
                 alt={offer.alt}
                 className="w-full h-auto rounded cursor-pointer transition-transform hover:scale-105"
-                onClick={() => setZoomedImg(offer.webp || offer.png)}
+                onClick={() => setZoomedImg((offer as any).webp || offer.png)}
                 loading="lazy"
+                onError={(e) => {
+                  const f = (offer as any).fallback as string | undefined;
+                  if (f) {
+                    e.currentTarget.onerror = null as any;
+                    e.currentTarget.src = f;
+                  }
+                }}
               />
             </picture>
           </div>
