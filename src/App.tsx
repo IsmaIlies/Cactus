@@ -41,6 +41,7 @@ import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
 import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
 import SupervisorLeadsSalesHistoryPage from "./pages/SupervisorLeadsSalesHistoryPage";
 import SupervisorLeadsAgentStatsPage from "./pages/SupervisorLeadsAgentStatsPage";
+import SupervisorLeadSaleReassignPage from "./pages/SupervisorLeadSaleReassignPage";
 
 function App() {
   return (
@@ -104,6 +105,7 @@ function App() {
           <Route path="leads-plus" element={<SupervisorLeadsPlusPage />} />
           <Route path="historique-ventes" element={<SupervisorLeadsSalesHistoryPage />} />
           <Route path="stat-agent" element={<SupervisorLeadsAgentStatsPage />} />
+          <Route path="reassign" element={<SupervisorLeadSaleReassignPage />} />
           <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
           <Route path="ecoutes" element={<SupervisorLeadsEcoutesPage />} />
           <Route path="export" element={<SupervisorLeadsExportPage />} />

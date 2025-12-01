@@ -408,7 +408,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
         </div>
       </section>
 
-      <LeadInflowConversionPanel />
+      {/* Module Ventes / Reçus (Jour) supprimé */}
 
       <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#071227]/70 via-[#050c1a]/70 to-[#030711]/70 p-6 backdrop-blur-xl text-white shadow-[0_24px_60px_rgba(8,20,40,0.55)]">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

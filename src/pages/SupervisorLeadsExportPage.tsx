@@ -102,6 +102,7 @@ const OFFER_FILTERS = [
   { value: "internet sosh", label: "Internet Sosh" },
   { value: "mobile", label: "Mobile" },
   { value: "mobile sosh", label: "Mobile Sosh" },
+  { value: "autres", label: "Autres" },
 ] as const;
 
 const EDITABLE_FIELDS = [

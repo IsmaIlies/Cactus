@@ -8,6 +8,8 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  doc,
+  updateDoc,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "../../firebase";
@@ -158,6 +160,24 @@ export const saveLeadSale = async (payload: LeadSaleInput) => {
     }
     await addDoc(collection(db, COLLECTION_PATH), doc);
   }
+};
+
+// --- Reassign a sale to another agent (supervisor/admin usage) ---
+// Updates the createdBy nested fields so that agent-centric queries (based on userId)
+// will reflect the new ownership. Requires Firestore rules to allow supervisors to perform this.
+export const reassignLeadSale = async (
+  saleId: string,
+  newAgent: { userId: string; displayName: string; email: string }
+) => {
+  if (!saleId || !newAgent?.userId) {
+    throw new Error("Paramètres invalides pour reassignLeadSale");
+  }
+  const ref = doc(db, COLLECTION_PATH, saleId);
+  await updateDoc(ref, {
+    "createdBy.userId": newAgent.userId,
+    "createdBy.displayName": newAgent.displayName,
+    "createdBy.email": newAgent.email,
+  });
 };
 
 export type LeadKpiSnapshot = {

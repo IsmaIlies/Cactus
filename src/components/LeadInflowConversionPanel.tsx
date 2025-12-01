@@ -247,7 +247,7 @@ const LeadInflowConversionPanel: React.FC<LeadInflowConversionPanelProps> = ({ c
           );
         })}
       </div>
-      <p className="mt-4 text-[11px] text-blue-200/50">Si les reçus sont à 0, vérifie la collection Firestore <code className='font-mono'>leads_inflow</code> ou importe les leads du jour/mois.</p>
+      {/* Info removed as requested */}
     </section>
   );
 };

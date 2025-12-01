@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { Link } from "react-router-dom";
 import { doc, getDoc, getFirestore } from "firebase/firestore";
 import { Eye, EyeOff, Save, X } from "lucide-react";
+import { auth } from "../firebase";
 
 const SettingsPage = () => {
   // Accessibilité : états pour le dark mode, taille de police et contraste
@@ -13,6 +15,7 @@ const SettingsPage = () => {
     updateUserDisplayName,
     updateUserProfile,
     updateUserPassword,
+    linkMicrosoft,
   } = useAuth();
 
   // États pour les formulaires
@@ -40,6 +43,10 @@ const SettingsPage = () => {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [msEmailHint, setMsEmailHint] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  // Bouton toujours visible: on déduira juste s'il est déjà migré
 
   // Ajout : état pour la photo de profil
 
@@ -63,6 +70,8 @@ const SettingsPage = () => {
     loadUserProfile();
   }, [user]);
 
+  const alreadyMigrated = (user?.email || '').toLowerCase().endsWith('@orange.mars-marketing.fr');
+
   // Réinitialiser les valeurs quand l'utilisateur change
   useEffect(() => {
     if (user) {
@@ -74,6 +83,62 @@ const SettingsPage = () => {
   const showMessage = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 5000);
+  };
+
+  const handleLinkMicrosoft = async () => {
+    setLinking(true);
+    try {
+      const hint = msEmailHint.trim() || user?.email || "";
+      const ok = await linkMicrosoft(hint);
+      if (ok) {
+        showMessage("success", "Compte Microsoft synchronisé avec succès.");
+      } else {
+        showMessage("error", "Échec de la synchronisation Microsoft.");
+      }
+    } catch (e:any) {
+      showMessage("error", e?.message || "Échec de la synchronisation.");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleMigrateEmail = async () => {
+    if (!user?.email) return;
+    const localPart = user.email.split('@')[0];
+    setMigrating(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Utilisateur non authentifié');
+      const resp = await fetch('/api/update-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ localPart })
+      });
+      const data = await resp.json();
+      if (resp.ok && data?.ok) {
+        const newEmail = data.newEmail || `${localPart}@orange.mars-marketing.fr`;
+        setEmail(newEmail);
+        showMessage('success', `Email migré vers ${newEmail}`);
+      } else if (resp.ok && data?.skipped) {
+        showMessage('success', `Déjà migré: ${data.email}`);
+      } else if (resp.status === 412) {
+        showMessage('error', 'Provider Microsoft non lié.');
+      } else if (resp.status === 409) {
+        showMessage('error', 'Nouvel email déjà utilisé.');
+      } else if (resp.status === 404) {
+        showMessage('error', 'Utilisateur introuvable.');
+      } else {
+        showMessage('error', data?.error || 'Migration impossible (erreur inconnue).');
+      }
+    } catch (e:any) {
+      const msg = e?.message || 'Erreur migration email';
+      showMessage('error', msg);
+    } finally {
+      setMigrating(false);
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -640,6 +705,46 @@ const SettingsPage = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Section Synchronisation Microsoft */}
+      <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-medium text-gray-900">Synchroniser avec Microsoft (@orange)</h2>
+        </div>
+        <p className="text-sm text-gray-600 mb-3">
+          Liez votre compte Microsoft d’entreprise pour vous connecter en un clic. Cette opération lie Microsoft à votre compte actuel (même UID), sans créer de doublon.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+          <input
+            type="email"
+            value={msEmailHint}
+            onChange={(e)=> setMsEmailHint(e.target.value)}
+            placeholder="prenom.nom@orange.mars-marketing.fr"
+            className="input-field"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleLinkMicrosoft}
+              disabled={linking}
+              className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {linking? 'Synchronisation…' : 'Synchroniser mon compte Microsoft'}
+            </button>
+            <button
+              type="button"
+              onClick={handleMigrateEmail}
+              disabled={migrating || alreadyMigrated}
+              className="px-4 py-2 rounded-md bg-cactus-600 text-white hover:bg-cactus-700 disabled:opacity-50"
+            >
+              {alreadyMigrated ? 'Email déjà migré' : (migrating ? 'Migration…' : 'Migrer email vers @orange')}
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          1) Synchronisez Microsoft avec votre email @orange. 2) Cliquez sur "Migrer email" pour remplacer l'adresse @mars par @orange (UID conservé). {alreadyMigrated && '✔ Migration effectuée.'}
+        </p>
       </div>
 
     </div>

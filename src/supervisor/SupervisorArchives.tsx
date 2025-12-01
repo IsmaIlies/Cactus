@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { collection, onSnapshot, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Calendar, Download, CheckCircle2 } from 'lucide-react';
+import { buildChecklistCsv } from './utils/checklistCsv';
 
 type Row = {
   _docId: string;
@@ -21,6 +22,7 @@ type Row = {
   morningEnd?: string;
   afternoonStart?: string;
   afternoonEnd?: string;
+  supervisor?: string | null;
 };
 
 const missionForArea = (area?: string) => {
@@ -121,61 +123,84 @@ const SupervisorArchives: React.FC = () => {
   const toHoursLabel = (mins: number) => `${String(Math.floor(mins/60)).padStart(2,'0')}h${String(mins%60).padStart(2,'0')}`;
 
   const exportCsv = () => {
-    // Excel (FR) friendly export: semicolon separator, FR date format, UTF-8 BOM, CRLF
-    const headers = [
-      'Période','Jour','Agent',
-      'Matin début','Matin fin','Après-midi début','Après-midi fin',
-      'Durée (hhmm)','Total (min)','Opération','Brief','Mission','Espace','Statut'
+    const data = visibleRows.map((r) => ({
+      date: r.day,
+      agentName: r.userDisplayName || r.userEmail || '',
+      agentEmail: r.userEmail || undefined,
+      supervisor: r.supervisor || '',
+      morningStart: r.includeMorning ? r.morningStart : '',
+      morningEnd: r.includeMorning ? r.morningEnd : '',
+      afternoonStart: r.includeAfternoon ? r.afternoonStart : '',
+      afternoonEnd: r.includeAfternoon ? r.afternoonEnd : '',
+      includeMorning: !!r.includeMorning,
+      includeAfternoon: !!r.includeAfternoon,
+      project: r.project || '',
+      notes: r.notes || '',
+      mission: r.mission || '',
+      region: r.region || '',
+      status: 'approved',
+    }));
+
+    const HEADERS = [
+      'Adresse de messagerie','Nom','JOURNEE','Superviseur',
+      'Prise de poste MATIN :','Fin de poste MATIN :','Prise de poste APRES MIDI :','Fin de poste APRES MIDI :',
+      'PROD','BRIEF','TOTAL HEURES JOURNEE','OPERATION','CHECK','SEMAINE','MOIS'
     ];
-    const sep = ';';
-    const esc = (s: any) => `"${(s ?? '').toString().replaceAll('"','""')}"`;
-    const toFR = (iso?: string) => {
-      if (!iso) return '';
-      // iso expected YYYY-MM-DD; fallback: try Date parse
-      try {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-          const [y,m,d] = iso.split('-').map(Number); return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
+
+    const { csv, filename } = buildChecklistCsv(data, period, {
+      filenameBase: `archives_${area || 'ALL'}_${period}`,
+      includeTotalMinutesColumn: false,
+      customSchema: {
+        headers: HEADERS,
+        secondHeader: [
+          'NOM PRENOM', 'Identifiant HERMES', '01/09/2025', 'Julien',
+          '09:00', '13:00', '14:00', '17:00',
+          '6', '1', '7', 'ORANGE CANAL 210', '', '36', '9'
+        ],
+        mapRow: (norm) => {
+          const [dd, mm, yyyy] = norm.date.split('/').map((x) => parseInt(x, 10));
+          const jsDate = new Date(yyyy, mm - 1, dd);
+          const week = (() => {
+            const d = new Date(Date.UTC(jsDate.getFullYear(), jsDate.getMonth(), jsDate.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+            return String(weekNo);
+          })();
+          const month = String(jsDate.getMonth() + 1);
+
+          const [mStart, mEnd] = norm.morning ? norm.morning.split('->').map(s => s.trim()) : ['', ''];
+          const [aStart, aEnd] = norm.afternoon ? norm.afternoon.split('->').map(s => s.trim()) : ['', ''];
+
+          const prod = norm.durationDecFR;
+          const total = norm.durationDecFR;
+
+          return {
+            'Adresse de messagerie': norm.agent,
+            'Nom': norm.agentEmail || norm.agent,
+            'JOURNEE': norm.date,
+            'Superviseur': norm.supervisor || '',
+            'Prise de poste MATIN :': mStart || '',
+            'Fin de poste MATIN :': mEnd || '',
+            'Prise de poste APRES MIDI :': aStart || '',
+            'Fin de poste APRES MIDI :': aEnd || '',
+            'PROD': prod,
+            'BRIEF': norm.brief,
+            'TOTAL HEURES JOURNEE': total,
+            'OPERATION': norm.project,
+            'CHECK': 'OK',
+            'SEMAINE': week,
+            'MOIS': month,
+          };
         }
-        const dt = new Date(iso);
-        const d = String(dt.getDate()).padStart(2,'0');
-        const m = String(dt.getMonth()+1).padStart(2,'0');
-        const y = dt.getFullYear();
-        if (!y || isNaN(y)) return iso;
-        return `${d}/${m}/${y}`;
-      } catch { return iso; }
-    };
-    const statusToFR = (s?: string) => {
-      const v = (s || '').toLowerCase();
-      if (v === 'approved') return 'Validé';
-      if (v === 'rejected') return 'Refusé';
-      if (v === 'pending' || v === 'submitted') return 'En attente';
-      return s || '';
-    };
-    const lines: string[] = [];
-    lines.push(headers.join(sep));
-    visibleRows.forEach(r => {
-      const agent = r.userDisplayName || r.userEmail || '';
-      const matinDeb = r.includeMorning ? (r.morningStart || '') : '';
-      const matinFin = r.includeMorning ? (r.morningEnd || '') : '';
-      const apmDeb = r.includeAfternoon ? (r.afternoonStart || '') : '';
-      const apmFin = r.includeAfternoon ? (r.afternoonEnd || '') : '';
-      const mins = (r.includeMorning? minutesBetween(r.morningStart, r.morningEnd):0) + (r.includeAfternoon? minutesBetween(r.afternoonStart, r.afternoonEnd):0);
-      const mission = r.mission || '';
-      const espace = r.region || '';
-  const statut = statusToFR(r.reviewStatus || 'Approved');
-      lines.push([
-        esc(period), esc(toFR(r.day)), esc(agent),
-        esc(matinDeb), esc(matinFin), esc(apmDeb), esc(apmFin),
-        esc(toHoursLabel(mins)), esc(mins), esc(r.project||''), esc(r.notes||''), esc(mission), esc(espace), esc(statut)
-      ].join(sep));
+      }
     });
-    const csvBody = lines.join('\r\n');
-    const BOM = '\uFEFF';
-    const csv = BOM + csvBody;
+
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `archives_${area || 'ALL'}_${period}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
   const monthLabel = React.useMemo(() => {

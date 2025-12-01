@@ -25,7 +25,10 @@ import {
   linkWithCredential,
   linkWithPopup,
   linkWithRedirect,
+  signInWithCustomToken,
 } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { firebaseApp } from "../firebase";
 import { doc, setDoc, getFirestore } from "firebase/firestore";
 
 import { getIdTokenResult } from "firebase/auth";
@@ -44,8 +47,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean; // <-- ajoute cette ligne
   login: (email: string, password: string) => Promise<{ success: boolean; code?: string; message?: string }>;
-  loginWithMicrosoft: () => Promise<boolean>;
-  linkMicrosoft: () => Promise<boolean>;
+  loginWithMicrosoft: (emailHint?: string) => Promise<boolean>;
+  linkMicrosoft: (emailHint?: string) => Promise<boolean>;
   register: (userData: RegisterData) => Promise<{ success: boolean; code?: string; message?: string }>;
   logout: () => void;
   updateUserEmail: (
@@ -198,27 +201,90 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  const loginWithMicrosoft = async (): Promise<boolean> => {
+  const loginWithMicrosoft = async (emailHint?: string): Promise<boolean> => {
     const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
     const buildProvider = () => {
       const p = new OAuthProvider('microsoft.com');
-      const tenant = "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
-
-      if (tenant) {
-        try { p.setCustomParameters({ tenant }); } catch {}
+      const tenant = ((import.meta as any)?.env?.VITE_MICROSOFT_TENANT_ID as string) || "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
+      // Fusionner tenant + login_hint en une seule fois pour ne pas écraser tenant
+      const params: Record<string,string> = {};
+      if (tenant) params.tenant = tenant;
+      if (emailHint && /@/.test(emailHint)) params.login_hint = emailHint;
+      if (Object.keys(params).length) {
+        try { p.setCustomParameters(params); } catch {}
       }
       // p.addScope('User.Read'); // Optionnel
       return p;
     };
 
     try {
+      // Pré-liaison sans créer de doublon: si l'utilisateur a saisi un email @orange
+      // et qu'un compte legacy @mars existe, on se connecte d'abord via CustomToken
+      // sur l'UID historique puis on link le provider Microsoft avec linkWithPopup.
+      if (emailHint && emailHint.toLowerCase().endsWith('@orange.mars-marketing.fr')) {
+        try {
+          const local = emailHint.split('@')[0];
+          const legacyEmail = `${local}@mars-marketing.fr`;
+          const functions = getFunctions(firebaseApp, 'europe-west9');
+          const mintToken = httpsCallable(functions, 'mintCustomTokenByEmail');
+          const resp: any = await mintToken({ email: legacyEmail }).catch(() => null);
+          if (resp && resp.data && resp.data.token && resp.data.uid) {
+            if (auth.currentUser && auth.currentUser.uid !== resp.data.uid) {
+              try { await signOut(auth); } catch {}
+            }
+            const cur = auth.currentUser;
+            if (!cur || cur.uid !== resp.data.uid) {
+              await signInWithCustomToken(auth, resp.data.token);
+            }
+            // Lier Microsoft à l'UID legacy directement, pas de doublon créé
+            await linkWithPopup(auth.currentUser!, buildProvider());
+            const u = auth.currentUser!;
+            setUser({ id: u.uid, displayName: u.displayName || '', email: u.email || (emailHint || ''), emailVerified: u.emailVerified });
+            return true;
+          }
+        } catch (e) {
+          // Si la pré-liaison échoue, on retombera sur le flux standard ci-dessous
+        }
+      }
+
       if (method === 'redirect') {
         await signInWithRedirect(auth, buildProvider());
         return true; // onAuthStateChanged gérera l'état au retour
       }
       // Par défaut, popup puis fallback redirect si bloqué
-      const result = await signInWithPopup(auth, buildProvider());
+      const provider = buildProvider();
+      const result = await signInWithPopup(auth, provider);
       const u = result.user;
+      // If domain changed (@orange) and an old account exists (@mars), link to preserve old UID
+      try {
+        const email = (u.email || '').toLowerCase();
+          const functions = getFunctions(firebaseApp, 'europe-west9');
+        const credFromResult = OAuthProvider.credentialFromResult?.(result) as any;
+        if (email && email.endsWith('@orange.mars-marketing.fr')) {
+          const local = email.split('@')[0];
+          const legacyEmail = `${local}@mars-marketing.fr`;
+          const mintToken = httpsCallable(functions, 'mintCustomTokenByEmail');
+          const resp: any = await mintToken({ email: legacyEmail }).catch(() => null);
+          if (resp && resp.data && resp.data.uid && resp.data.token && resp.data.uid !== u.uid && credFromResult) {
+            // Se déconnecter de l'utilisateur SSO créé, puis se connecter via Custom Token
+            try { await signOut(auth); } catch {}
+            await signInWithCustomToken(auth, resp.data.token);
+            if (auth.currentUser) {
+              await linkWithCredential(auth.currentUser, credFromResult);
+              const linked = auth.currentUser;
+              setUser({
+                id: linked.uid,
+                displayName: linked.displayName || '',
+                email: linked.email || email,
+                emailVerified: linked.emailVerified,
+              });
+              return true;
+            }
+          }
+        }
+      } catch (e) {
+        // Non-blocking: keep the default success path if migration not applicable
+      }
       setUser({
         id: u.uid,
         displayName: u.displayName || '',
@@ -262,6 +328,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
                 return true;
               }
             }
+            // No password on the legacy account: try custom-token linking flow
+            try {
+              const functions = getFunctions(firebaseApp, 'europe-west9');
+              const mintToken = httpsCallable(functions, 'mintCustomTokenByEmail');
+              const resp: any = await mintToken({ email });
+              if (resp && resp.data && resp.data.token && pendingCred) {
+                await signInWithCustomToken(auth, resp.data.token);
+                if (auth.currentUser) {
+                  await linkWithCredential(auth.currentUser, pendingCred);
+                  const u2 = auth.currentUser;
+                  setUser({ id: u2.uid, displayName: u2.displayName || '', email: u2.email || email, emailVerified: u2.emailVerified });
+                  return true;
+                }
+              }
+            } catch (e) {
+              // ignore and fallthrough
+            }
           }
           // Autres providers (ex: google.com): guider l'utilisateur
           try { console.warn('[auth] Compte existe avec un autre provider. Email:', email, 'methods:', await fetchSignInMethodsForEmail(auth, email || '')); } catch {}
@@ -276,15 +359,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   // Link Microsoft SSO to an already signed-in account (email/password users)
-  const linkMicrosoft = async (): Promise<boolean> => {
+  const linkMicrosoft = async (emailHint?: string): Promise<boolean> => {
     try {
       if (!auth.currentUser) return false;
       const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
       const buildProvider = () => {
         const p = new OAuthProvider('microsoft.com');
-        const tenant = "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
-        if (tenant) {
-          try { p.setCustomParameters({ tenant }); } catch {}
+        const tenant = ((import.meta as any)?.env?.VITE_MICROSOFT_TENANT_ID as string) || "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
+        const params: Record<string,string> = {};
+        if (tenant) params.tenant = tenant;
+        if (emailHint && /@/.test(emailHint)) params.login_hint = emailHint;
+        if (Object.keys(params).length) {
+          try { p.setCustomParameters(params); } catch {}
         }
         return p;
       };
@@ -306,6 +392,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return true;
     } catch (err: any) {
       const code: string = err?.code || 'auth/unknown';
+      // Gestion du cas credential-already-in-use
+      if (code === 'auth/credential-already-in-use' && err?.customData?.credential) {
+        try {
+          // On connecte l’utilisateur avec le compte Microsoft existant
+          const signInResult = await signInWithCredential(auth, err.customData.credential);
+          const u = signInResult.user;
+          if (u) {
+            setUser({
+              id: u.uid,
+              displayName: u.displayName || '',
+              email: u.email || '',
+              emailVerified: u.emailVerified,
+            });
+          }
+          return true;
+        } catch (err2: any) {
+          if (localStorage.getItem('authDebug') === '1') {
+            console.warn('[auth] linkMicrosoft credential-already-in-use fallback failed', err2?.code, err2);
+          }
+          return false;
+        }
+      }
       if (localStorage.getItem('authDebug') === '1') {
         console.warn('[auth] linkMicrosoft failed', code, err);
       }

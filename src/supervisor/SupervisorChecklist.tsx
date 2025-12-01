@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { collection, onSnapshot, query, where, Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
 import { approveEntry, updateEntryFields, deleteEntry } from '../services/hoursService';
+import { buildChecklistCsv } from './utils/checklistCsv';
 import { useParams } from 'react-router-dom';
 import { Calendar, Download, RefreshCw, User as UserIcon, CheckCircle2, XCircle, Clock as ClockIcon, ChevronDown, ChevronRight } from 'lucide-react';
 import { AgentSelect } from '../components/AgentSelect';
@@ -18,6 +19,7 @@ type Row = {
   reviewStatus?: string;
   mission?: string | null;
   region?: string | null;
+  supervisor?: string | null;
   createdAt?: any;
   includeMorning?: boolean;
   includeAfternoon?: boolean;
@@ -53,6 +55,7 @@ const SupervisorChecklist: React.FC = () => {
   });
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editDraft, setEditDraft] = React.useState<Partial<Row>>({});
+  const [showCustomSupervisor, setShowCustomSupervisor] = React.useState(false);
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
   const listRef = React.useRef<HTMLDivElement | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
@@ -176,6 +179,12 @@ const SupervisorChecklist: React.FC = () => {
     return ['__ALL__', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [rowsPendingCache, rowsHistoryCache]);
 
+  // Build a suggestion list of supervisors from existing data (free-text still allowed)
+  // Fixed supervisor list per user request
+  const supervisorSuggestions = React.useMemo(() => [
+    'Sabrina', 'Arthur', 'Ismael', 'Laetitia', 'Maurice', 'Samia'
+  ], []);
+
   // Build stats per agent (period + mission filtered, but before agent self-filter)
   const agentStats = React.useMemo(() => {
     const mission = missionForArea(area);
@@ -234,6 +243,7 @@ const SupervisorChecklist: React.FC = () => {
     setEditDraft({
       project: r.project || '',
       notes: r.notes || '',
+      supervisor: r.supervisor || '',
       includeMorning: !!r.includeMorning,
       includeAfternoon: !!r.includeAfternoon,
       morningStart: r.morningStart || '',
@@ -241,19 +251,24 @@ const SupervisorChecklist: React.FC = () => {
       afternoonStart: r.afternoonStart || '',
       afternoonEnd: r.afternoonEnd || '',
     });
+    // If current supervisor is not in suggestions and not empty, show custom input
+    const sv = (r.supervisor || '').trim();
+    setShowCustomSupervisor(!!sv && !supervisorSuggestions.includes(sv));
   };
   const cancelEdit = () => { setEditingId(null); setEditDraft({}); };
   const commitEdit = async (id: string) => {
     const patch: any = {
-      project: editDraft.project ?? '',
-      notes: (editDraft.notes || '')?.trim() || undefined,
+      project: (editDraft.project ?? '').toString(),
       includeMorning: !!editDraft.includeMorning,
       includeAfternoon: !!editDraft.includeAfternoon,
       morningStart: editDraft.morningStart || '',
       morningEnd: editDraft.morningEnd || '',
       afternoonStart: editDraft.afternoonStart || '',
       afternoonEnd: editDraft.afternoonEnd || '',
+      supervisor: (editDraft as any).supervisor ?? '',
     };
+    const trimmedNotes = (editDraft.notes ?? '').toString().trim();
+    if (trimmedNotes.length > 0) patch.notes = trimmedNotes; // Avoid passing undefined to Firestore
     try {
       await updateEntryFields(id, patch);
       cancelEdit();
@@ -264,54 +279,88 @@ const SupervisorChecklist: React.FC = () => {
   };
 
   const exportCsv = () => {
-    // New detailed layout (especially requested for pending view) matching Excel header screenshot
-    const headers = ['Période','Jour','Agent','Matin début','Matin fin','Après-midi début','Après-midi fin','Durée (hhmn)','Total (min)','Opération','Brief','Mission','Espace','Statut'];
-    const delim = ';'; // FR Excel usually expects semicolon
-    const esc = (s: any) => {
-      const t = (s ?? '').toString().replaceAll('"', '""');
-      return `"${t}"`;
-    };
-    const lines: string[] = [headers.join(delim)];
-    visibleRows.forEach(r => {
-      const agent = r.userDisplayName || r.userEmail || '';
-      const matinDebut = r.includeMorning ? (r.morningStart || '') : '';
-      const matinFin = r.includeMorning ? (r.morningEnd || '') : '';
-      const apDebut = r.includeAfternoon ? (r.afternoonStart || '') : '';
-      const apFin = r.includeAfternoon ? (r.afternoonEnd || '') : '';
-      const toMin = (h: string | undefined) => {
-        if (!h || !/^\d{2}:\d{2}$/.test(h)) return 0;
-        const [H,M] = h.split(':').map(Number); return H*60+M;
-      };
-      let minutes = 0;
-      if (r.includeMorning) minutes += Math.max(0, toMin(r.morningEnd) - toMin(r.morningStart));
-      if (r.includeAfternoon) minutes += Math.max(0, toMin(r.afternoonEnd) - toMin(r.afternoonStart));
-      const hh = String(Math.floor(minutes/60)).padStart(2,'0');
-      const mm = String(minutes % 60).padStart(2,'0');
-      const duree = `${hh}h${mm}`;
-      lines.push([
-        esc((r as any).period || period),
-        esc(r.day),
-        esc(agent),
-        esc(matinDebut),
-        esc(matinFin),
-        esc(apDebut),
-        esc(apFin),
-        esc(duree),
-        esc(String(minutes)),
-        esc(r.project || ''),
-        esc(r.notes || ''),
-        esc(r.mission || ''),
-        esc(r.region || ''),
-        esc(r.reviewStatus || ''),
-      ].join(delim));
+    const data = visibleRows.map((r) => ({
+      date: r.day,
+      agentName: r.userDisplayName || r.userEmail || '',
+      agentEmail: r.userEmail || undefined,
+      supervisor: r.supervisor || '',
+      morningStart: r.includeMorning ? r.morningStart : '',
+      morningEnd: r.includeMorning ? r.morningEnd : '',
+      afternoonStart: r.includeAfternoon ? r.afternoonStart : '',
+      afternoonEnd: r.includeAfternoon ? r.afternoonEnd : '',
+      includeMorning: !!r.includeMorning,
+      includeAfternoon: !!r.includeAfternoon,
+      project: r.project || '',
+      notes: r.notes || '',
+      mission: r.mission || '',
+      region: r.region || '',
+      status: r.reviewStatus || (view === 'pending' ? 'pending' : 'approved'),
+    }));
+
+    const HEADERS = [
+      'Adresse de messagerie','Nom','JOURNEE','Superviseur',
+      'Prise de poste MATIN :','Fin de poste MATIN :','Prise de poste APRES MIDI :','Fin de poste APRES MIDI :',
+      'PROD','BRIEF','TOTAL HEURES JOURNEE','OPERATION','CHECK','SEMAINE','MOIS'
+    ];
+
+    const { csv, filename } = buildChecklistCsv(data, period, {
+      filenameBase: `checklists_${area || 'ALL'}_${period}_${view}_detail`,
+      includeTotalMinutesColumn: false,
+      customSchema: {
+        headers: HEADERS,
+        secondHeader: [
+          'NOM PRENOM', 'Identifiant HERMES', '01/09/2025', 'Julien',
+          '09:00', '13:00', '14:00', '17:00',
+          '6', '1', '7', 'ORANGE CANAL 210', '', '36', '9'
+        ],
+        mapRow: (norm) => {
+          // Compute week and month from date dd/mm/yyyy
+          const [dd, mm, yyyy] = norm.date.split('/').map((x) => parseInt(x, 10));
+          const jsDate = new Date(yyyy, mm - 1, dd);
+          const week = (() => {
+            const d = new Date(Date.UTC(jsDate.getFullYear(), jsDate.getMonth(), jsDate.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+            return String(weekNo);
+          })();
+          const month = String(jsDate.getMonth() + 1);
+
+          // Split morning/afternoon ranges back to start/end
+          const [mStart, mEnd] = norm.morning ? norm.morning.split('->').map(s => s.trim()) : ['', ''];
+          const [aStart, aEnd] = norm.afternoon ? norm.afternoon.split('->').map(s => s.trim()) : ['', ''];
+
+          // PROD: decimal hours FR; TOTAL HEURES JOURNEE: same total for now
+          const prod = norm.durationDecFR;
+          const total = norm.durationDecFR;
+
+          return {
+            'Adresse de messagerie': norm.agent,
+            'Nom': norm.agentEmail || norm.agent,
+            'JOURNEE': norm.date,
+            'Superviseur': norm.supervisor || '',
+            'Prise de poste MATIN :': mStart || '',
+            'Fin de poste MATIN :': mEnd || '',
+            'Prise de poste APRES MIDI :': aStart || '',
+            'Fin de poste APRES MIDI :': aEnd || '',
+            'PROD': prod,
+            'BRIEF': norm.brief,
+            'TOTAL HEURES JOURNEE': total,
+            'OPERATION': norm.project === 'CANAL 210' ? 'ORANGE CANAL 210' : norm.project,
+            'CHECK': 'OK',
+            'SEMAINE': week,
+            'MOIS': month,
+          };
+        }
+      }
     });
-    const csv = lines.join('\r\n'); // CRLF line endings
-    const bom = '\ufeff'; // UTF-8 BOM for Excel accent detection
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `checklists_${area || 'ALL'}_${period}_${view}_detail.csv`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -518,6 +567,7 @@ const SupervisorChecklist: React.FC = () => {
               <th className={`text-left p-3`}>Matin</th>
               <th className={`text-left p-3`}>Après-midi</th>
               <th className={`text-left p-3`}>Opération</th>
+              <th className={`text-left p-3`}>Superviseur</th>
               <th className={`text-left p-3`}>Brief</th>
               <th className={`text-left p-3`}>Durée</th>
               <th className={`text-left p-3`}>Statut</th>
@@ -529,7 +579,7 @@ const SupervisorChecklist: React.FC = () => {
             {loading && (
               [...Array(6)].map((_, i) => (
                 <tr key={i} className="border-t border-white/10">
-                  <td className={`p-3`} colSpan={11}>
+                  <td className={`p-3`} colSpan={12}>
                     <div className="shimmer-line" />
                   </td>
                 </tr>
@@ -537,7 +587,7 @@ const SupervisorChecklist: React.FC = () => {
             )}
             {!loading && visibleRows.length === 0 && (
               <tr>
-                <td colSpan={11} className="p-6">
+                <td colSpan={12} className="p-6">
                   <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.03] p-8 text-center text-blue-100 anim-pop">
                     <div className="mx-auto w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
                       <XCircle className="w-6 h-6" />
@@ -607,12 +657,62 @@ const SupervisorChecklist: React.FC = () => {
                 </td>
                 <td className={`p-3`}>
                   {editingId === r._docId ? (
-                    <input value={editDraft.project || ''} onChange={(e) => setEditDraft((d) => ({ ...d, project: (e.target as HTMLInputElement).value }))} className="bg-white/5 border border-white/20 rounded-md px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-emerald-400/30" />
+                    (() => {
+                      const OPTIONS = ['Canal 214','Canal 210','Canal 211'];
+                      // If current value isn't in the list, include it as first option
+                      const current = (editDraft.project || '').toString();
+                      const list = OPTIONS.includes(current) ? OPTIONS : [current, ...OPTIONS];
+                      return (
+                        <select
+                          value={current}
+                          onChange={(e) => setEditDraft(d => ({ ...d, project: (e.target as HTMLSelectElement).value }))}
+                          className="bg-slate-900 text-blue-100 border border-white/20 rounded-md px-2 py-1 w-52 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 shadow-sm"
+                          style={{backgroundColor:'#101828'}} // fallback for dark
+                        >
+                          {list.filter(Boolean).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      );
+                    })()
                   ) : (r.project || '—')}
                 </td>
-                <td className={`p-3 max-w-[200px]`}>
+                <td className={`p-3`}>
                   {editingId === r._docId ? (
-                    <input value={editDraft.notes || ''} onChange={(e) => setEditDraft((d) => ({ ...d, notes: (e.target as HTMLInputElement).value }))} className="bg-white/5 border border-white/20 rounded-md px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400/30" />
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={(!showCustomSupervisor && (editDraft as any).supervisor) || ''}
+                        onChange={(e) => {
+                          const v = (e.target as HTMLSelectElement).value;
+                          if (v === '__OTHER__') { setShowCustomSupervisor(true); setEditDraft(d => ({ ...d, supervisor: '' })); }
+                          else { setShowCustomSupervisor(false); setEditDraft(d => ({ ...d, supervisor: v })); }
+                        }}
+                        className="bg-slate-900 text-blue-100 border border-white/20 rounded-md px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 shadow-sm"
+                        style={{backgroundColor:'#101828'}} // fallback for dark
+                      >
+                        <option value="">— Choisir un superviseur —</option>
+                        {supervisorSuggestions.map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                        <option value="__OTHER__">Autre…</option>
+                      </select>
+                      {showCustomSupervisor && (
+                        <input
+                          value={(editDraft as any).supervisor || ''}
+                          onChange={(e) => setEditDraft(d => ({ ...d, supervisor: (e.target as HTMLInputElement).value }))}
+                          placeholder="Nom superviseur"
+                          className="bg-slate-900 text-blue-100 border border-white/20 rounded-md px-2 py-1 w-48 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 shadow-sm"
+                          style={{backgroundColor:'#101828'}} // fallback for dark
+                        />
+                      )}
+                    </div>
+                  ) : (r.supervisor || '—')}
+                </td>
+                <td className={`p-3 max-w-[320px]`}>
+                  {editingId === r._docId ? (
+                    <textarea
+                      value={editDraft.notes || ''}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, notes: (e.target as HTMLTextAreaElement).value }))}
+                      className="bg-white/5 border border-white/20 rounded-md px-2 py-2 w-full h-24 min-h-[6rem] resize-vertical focus:outline-none focus:ring-2 focus:ring-emerald-400/30"
+                    />
                   ) : (<span className="block truncate" title={r.notes || ''}>{r.notes || '—'}</span>)}
                 </td>
                 <td className={`p-3 whitespace-nowrap`}>
@@ -662,7 +762,7 @@ const SupervisorChecklist: React.FC = () => {
                   exit={{ opacity: 0, y: -6 }}
                   className="detail-row"
                 >
-                  <td colSpan={11} className="p-0">
+                  <td colSpan={12} className="p-0">
                     <div className="px-6 py-4 bg-white/[0.05] border-t border-white/10 anim-collapse">
                       <div className="flex flex-wrap items-start gap-6">
                         <div className="min-w-[240px]">

@@ -67,6 +67,9 @@ const SalesPage = () => {
   });
 
   const [sales, setSales] = useState<Sale[]>([]);
+  const [salesLoading, setSalesLoading] = useState<boolean>(false);
+  const [salesError, setSalesError] = useState<string | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<SaleFormData>({
     orderNumber: "",
@@ -106,11 +109,13 @@ const SalesPage = () => {
     { id: "canal-100", name: "CANAL+ 100%" },
   ];
 
-  useEffect(() => {
-    const fetchSales = async () => {
+  const fetchSales = React.useCallback(async () => {
+    try {
+      setSalesLoading(true);
+      setSalesError(null);
       const auth = getAuth();
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) { setSales([]); return; }
       // Filtrer par user + region active (si définie)
       const baseConstraints: any[] = [where("userId", "==", user.uid)];
       if (region) baseConstraints.push(where('region', '==', region));
@@ -158,9 +163,17 @@ const SalesPage = () => {
         });
       });
       setSales(userSales);
-    };
-    fetchSales();
+      setLastRefreshedAt(new Date());
+    } catch (err: any) {
+      setSalesError(err?.message || 'Erreur lors du chargement des ventes');
+    } finally {
+      setSalesLoading(false);
+    }
   }, [region]);
+
+  useEffect(() => {
+    fetchSales();
+  }, [fetchSales]);
 
   const formatSaleDate = (dLike: Sale["date"]) => {
     if (!dLike) return "-";
@@ -224,7 +237,9 @@ const SalesPage = () => {
     try {
       const docRef = await addDoc(collection(db, "sales"), newSale);
       const savedSale = { id: docRef.id, ...newSale };
-      setSales([savedSale, ...sales]);
+      // Mise à jour immédiate locale (optimiste) + re-synchronisation Firestore pour cohérence
+      setSales(prev => [savedSale, ...prev]);
+      fetchSales();
 
       try {
         const sendSaleNotification = httpsCallable(
@@ -239,7 +254,7 @@ const SalesPage = () => {
         console.error("Erreur lors de l'appel de la fonction sendSaleNotification :", error);
       }
 
-  setFormData({
+      setFormData({
         orderNumber: "",
         offer: "",
   basketStatus: "ATT",
@@ -248,7 +263,7 @@ const SalesPage = () => {
         clientLastName: "",
         clientPhone: "",
       });
-  setPhoneError("");
+      setPhoneError("");
     } catch (error) {
       console.error("Erreur lors de l’ajout de la vente : ", error);
     }
@@ -408,7 +423,6 @@ const filteredSales = normalizedQuery
           {/* Mobile smaller title, larger from md */}
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Ventes — LEADS</h1>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Mode:</span>
             <select value={mode} onChange={e => setMode(e.target.value as any)} className="border rounded px-2 py-1 text-sm">
               <option value="canal">Canal+</option>
               <option value="leads">Leads</option>
@@ -424,11 +438,6 @@ const filteredSales = normalizedQuery
     <div className="space-y-8">
       <div className="flex items-center justify-end">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Mode:</span>
-          <select value={mode} onChange={e => setMode(e.target.value as any)} className="border rounded px-2 py-1 text-sm">
-            <option value="canal">Canal+</option>
-            <option value="leads">Leads</option>
-          </select>
         </div>
       </div>
       <div className="max-w-2xl mx-auto">
@@ -457,6 +466,7 @@ const filteredSales = normalizedQuery
                 <option value="214">Campagne 214</option>
                 <option value="210">Campagne 210</option>
                 <option value="211">Campagne 211</option>
+                <option value="216">Campagne 216</option>
                   {/* <option value="autre">Autre</option> */}
               </select>
             </div>
@@ -627,6 +637,9 @@ const filteredSales = normalizedQuery
             {filteredSales.length} résultat{filteredSales.length > 1 ? 's' : ''}
           </div>
         </div>
+        {salesError && (
+          <div className="mb-3 text-sm text-red-600">{salesError}</div>
+        )}
         <div className="bg-white rounded-lg shadow-none md:shadow-sm border border-gray-100 overflow-x-auto">
           {/* Inner min-width wrapper to allow horizontal scroll <360px */}
           <div className="min-w-[360px]">
@@ -653,6 +666,8 @@ const filteredSales = normalizedQuery
                       <span className="inline-block px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[10px] font-semibold border border-green-100" title="Campagne 214">214</span>
                     ) : sale.campaign === '210' ? (
                       <span className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-100" title="Campagne 210">210</span>
+                    ) : sale.campaign === '216' ? (
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-semibold border border-purple-100" title="Campagne 216">216</span>
                     ) : null}
                   </td>
                   <td className="px-3 md:px-4 py-2 whitespace-nowrap max-w-[120px]">

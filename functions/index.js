@@ -345,13 +345,13 @@ exports.top14Schedule = onRequest({ region: 'europe-west9', timeoutSeconds: 15 }
 // =============================================================
 exports.justwatchProxy = onRequest({ region: 'europe-west9', timeoutSeconds: 15, memory: '256MiB' }, async (req, res) => {
   const allowedOrigins = [
-    'https://cactus-tech.fr',
-    'https://www.cactus-tech.fr',
+    'http://cactus-labs.fr',
+    'https://cactus-labs.fr',
     'http://localhost:5173',
-  'http://127.0.0.1:5173',
+    'http://127.0.0.1:5173',
   // Dev fallback port sometimes used if 5173 busy
-  'http://localhost:5174',
-  'http://127.0.0.1:5174'
+    'http://localhost:5174',
+    'http://127.0.0.1:5174'
   ];
   const origin = req.headers.origin;
   const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
@@ -667,6 +667,275 @@ exports.getAdminUserStats = onCall({ region: "europe-west9" }, async (req) => {
     windowHours: ADMIN_ACTIVITY_WINDOW_HOURS,
     updatedAt: new Date(now).toISOString(),
   };
+});
+
+// =============================================================
+// Auth migration helpers
+// - mintCustomTokenByEmail: returns a Custom Token for an existing user
+//   Useful to link a new Microsoft SSO credential to an existing UID
+//   even when emails/domains changed (e.g., mars-marketing.fr -> orange.mars-marketing.fr)
+// =============================================================
+exports.mintCustomTokenByEmail = onCall({ region: 'europe-west9' }, async (req) => {
+  const { email } = req.data || {};
+  if (!email || typeof email !== 'string') {
+    throw new HttpsError('invalid-argument', 'email requis');
+  }
+  const dbEmail = email.trim().toLowerCase();
+  const candidates = [dbEmail];
+  // If called with the new domain, also try legacy mars-marketing.fr
+  if (dbEmail.endsWith('@orange.mars-marketing.fr')) {
+    const local = dbEmail.split('@')[0];
+    candidates.push(`${local}@mars-marketing.fr`);
+  }
+  if (dbEmail.endsWith('@mars-marketing.fr')) {
+    const local = dbEmail.split('@')[0];
+    candidates.push(`${local}@orange.mars-marketing.fr`);
+  }
+
+  let found = null;
+  for (const e of candidates) {
+    try {
+      // getUserByEmail throws if not found
+      const rec = await admin.auth().getUserByEmail(e);
+      found = rec;
+      break;
+    } catch (e2) {
+      // continue
+    }
+  }
+  if (!found) {
+    throw new HttpsError('not-found', 'Aucun utilisateur pour cet email (ni alias)');
+  }
+  try {
+    const token = await admin.auth().createCustomToken(found.uid, { migrated: true });
+    return { ok: true, uid: found.uid, token, email: found.email };
+  } catch (e) {
+    throw new HttpsError('internal', 'Echec création custom token');
+  }
+});
+
+// =============================================================
+// updatePrimaryEmailIfMicrosoftLinked
+// Admin-only callable: migrate a user's primary email from @mars-marketing.fr
+// to @orange.mars-marketing.fr but only if the Microsoft provider is already
+// linked (garantie SSO et UID inchangé). Prevents accidental UID duplication.
+// =============================================================
+exports.updatePrimaryEmailIfMicrosoftLinked = onCall({ region: 'europe-west9' }, async (req) => {
+  const { auth } = req;
+  if (!auth || !auth.token) {
+    throw new HttpsError('unauthenticated', 'Authentification requise');
+  }
+
+  const { localPart, force } = req.data || {};
+  let lpInput = typeof localPart === 'string' ? localPart.trim().toLowerCase() : '';
+  // Fallback: prendre localPart depuis l'email courant si non fourni
+  const callerEmail = (auth.token.email || '').toLowerCase();
+  if (!lpInput && callerEmail.includes('@')) {
+    lpInput = callerEmail.split('@')[0];
+  }
+  if (!lpInput) {
+    throw new HttpsError('invalid-argument', 'localPart requis ou impossible à déduire');
+  }
+  if (/[^a-z0-9._-]/.test(lpInput)) {
+    throw new HttpsError('invalid-argument', 'localPart invalide');
+  }
+
+  const legacyEmail = `${lpInput}@mars-marketing.fr`;
+  const newEmail = `${lpInput}@orange.mars-marketing.fr`;
+
+  // Récupérer l'utilisateur (legacy ou déjà migré)
+  let userRecord = null;
+  let alreadyMigrated = false;
+  try {
+    userRecord = await admin.auth().getUserByEmail(legacyEmail);
+  } catch (e1) {
+    try {
+      userRecord = await admin.auth().getUserByEmail(newEmail);
+      alreadyMigrated = true;
+    } catch (e2) {
+      throw new HttpsError('not-found', 'Utilisateur introuvable (legacy ou migré)');
+    }
+  }
+
+  const callerIsAdmin = isAdminFromToken(auth.token);
+  const callerIsSelf = auth.uid === userRecord.uid;
+  if (!callerIsAdmin && !callerIsSelf) {
+    throw new HttpsError('permission-denied', 'Opération réservée au compte lui-même ou aux administrateurs');
+  }
+
+  // Si déjà migré et c'est le même UID -> pas d'action
+  if (alreadyMigrated) {
+    return { ok: true, skipped: true, uid: userRecord.uid, email: userRecord.email };
+  }
+
+  // Vérifier provider Microsoft lié (sécurité migration) sauf si admin force
+  const hasMicrosoft = Array.isArray(userRecord.providerData) && userRecord.providerData.some(p => p && p.providerId === 'microsoft.com');
+  if (!hasMicrosoft && !callerIsAdmin && !force) {
+    throw new HttpsError('failed-precondition', 'Provider Microsoft non lié. Liez Microsoft avant de migrer.');
+  }
+
+  // Vérifier collision nouvel email
+  try {
+    const existingNew = await admin.auth().getUserByEmail(newEmail);
+    if (existingNew && existingNew.uid !== userRecord.uid) {
+      throw new HttpsError('already-exists', 'Nouvel email déjà utilisé par un autre UID');
+    }
+    if (existingNew && existingNew.uid === userRecord.uid) {
+      return { ok: true, skipped: true, uid: userRecord.uid, email: existingNew.email };
+    }
+  } catch (e) { /* si non trouvé: OK */ }
+
+  try {
+    await admin.auth().updateUser(userRecord.uid, { email: newEmail });
+  } catch (e) {
+    if (e && e.code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'Nouvel email déjà utilisé');
+    }
+    throw new HttpsError('internal', 'Echec mise à jour email');
+  }
+
+  try {
+    await admin.firestore().collection('users').doc(userRecord.uid).set({ email: newEmail, migratedEmailAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  } catch (e) {
+    console.warn('[updatePrimaryEmailIfMicrosoftLinked] Firestore update failed', e);
+  }
+
+  return { ok: true, uid: userRecord.uid, oldEmail: legacyEmail, newEmail };
+});
+
+// HTTP wrapper with CORS for updatePrimaryEmailIfMicrosoftLinked
+// Allows calling via fetch POST when httpsCallable is not used.
+exports.updatePrimaryEmailIfMicrosoftLinkedHttp = onRequest({ region: 'europe-west9' }, async (req, res) => {
+  const allowedOrigins = [
+    'https://cactus-tech.fr',
+    'https://www.cactus-tech.fr',
+    'https://cactus-labs.fr',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174'
+  ];
+  const reqOrigin = req.headers.origin;
+  const allowOrigin = allowedOrigins.includes(reqOrigin) ? reqOrigin : allowedOrigins[0];
+  const setCors = () => {
+    res.set({
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Vary': 'Origin',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400'
+    });
+  };
+
+  // Preflight
+  if (req.method === 'OPTIONS') {
+    setCors();
+    return res.status(204).send('');
+  }
+
+  if (req.method !== 'POST') {
+    setCors();
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
+
+  setCors();
+  try {
+    // Emulate callable auth using Firebase Auth ID token from Authorization: Bearer
+    const authHeader = req.headers.authorization || '';
+    const m = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!m) {
+      setCors();
+      return res.status(401).json({ error: 'Token Firebase requis (Authorization: Bearer <idToken>)' });
+    }
+    const idToken = m[1];
+    let decoded;
+    try {
+      decoded = await admin.auth().verifyIdToken(idToken);
+    } catch (e) {
+      setCors();
+      return res.status(401).json({ error: 'Token invalide', details: e && e.message });
+    }
+
+    const body = (() => {
+      if (typeof req.body === 'object') return req.body;
+      try { return JSON.parse(req.rawBody?.toString('utf8') || '{}'); } catch { return {}; }
+    })();
+
+    const { localPart, force } = body || {};
+    let lpInput = typeof localPart === 'string' ? localPart.trim().toLowerCase() : '';
+    const callerEmail = (decoded.email || '').toLowerCase();
+    if (!lpInput && callerEmail.includes('@')) lpInput = callerEmail.split('@')[0];
+    if (!lpInput) return res.status(400).json({ error: 'localPart requis ou impossible à déduire' });
+    if (/[^a-z0-9._-]/.test(lpInput)) return res.status(400).json({ error: 'localPart invalide' });
+
+    const legacyEmail = `${lpInput}@mars-marketing.fr`;
+    const newEmail = `${lpInput}@orange.mars-marketing.fr`;
+
+    let userRecord = null;
+    let alreadyMigrated = false;
+    try {
+      userRecord = await admin.auth().getUserByEmail(legacyEmail);
+    } catch (e1) {
+      try {
+        userRecord = await admin.auth().getUserByEmail(newEmail);
+        alreadyMigrated = true;
+      } catch (e2) {
+        return res.status(404).json({ error: 'Utilisateur introuvable (legacy ou migré)' });
+      }
+    }
+
+    const callerIsAdmin = isAdminFromToken(decoded);
+    const callerIsSelf = decoded.uid === userRecord.uid;
+    if (!callerIsAdmin && !callerIsSelf) {
+      setCors();
+      return res.status(403).json({ error: 'Opération réservée au compte lui-même ou aux administrateurs' });
+    }
+
+    if (alreadyMigrated) {
+      return res.json({ ok: true, skipped: true, uid: userRecord.uid, email: userRecord.email });
+    }
+
+    const hasMicrosoft = Array.isArray(userRecord.providerData) && userRecord.providerData.some(p => p && p.providerId === 'microsoft.com');
+    if (!hasMicrosoft && !callerIsAdmin && !force) {
+      setCors();
+      return res.status(412).json({ error: 'Provider Microsoft non lié. Liez Microsoft avant de migrer.' });
+    }
+
+    try {
+      const existingNew = await admin.auth().getUserByEmail(newEmail);
+      if (existingNew && existingNew.uid !== userRecord.uid) {
+        setCors();
+        return res.status(409).json({ error: 'Nouvel email déjà utilisé par un autre UID' });
+      }
+      if (existingNew && existingNew.uid === userRecord.uid) {
+        return res.json({ ok: true, skipped: true, uid: userRecord.uid, email: existingNew.email });
+      }
+    } catch (e) { /* non trouvé OK */ }
+
+    try {
+      await admin.auth().updateUser(userRecord.uid, { email: newEmail });
+    } catch (e) {
+      if (e && e.code === 'auth/email-already-exists') {
+        setCors();
+        return res.status(409).json({ error: 'Nouvel email déjà utilisé' });
+      }
+      setCors();
+      return res.status(500).json({ error: 'Echec mise à jour email', details: e && e.message });
+    }
+
+    try {
+      await admin.firestore().collection('users').doc(userRecord.uid).set({ email: newEmail, migratedEmailAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    } catch (e) {
+      console.warn('[updatePrimaryEmailIfMicrosoftLinkedHttp] Firestore update failed', e);
+    }
+
+    return res.json({ ok: true, uid: userRecord.uid, oldEmail: legacyEmail, newEmail });
+  } catch (err) {
+    console.error('[updatePrimaryEmailIfMicrosoftLinkedHttp] Error', err);
+    setCors();
+    return res.status(500).json({ error: 'Internal error', details: err && err.message });
+  }
 });
 
 const LEADS_MISSION = "ORANGE_LEADS";

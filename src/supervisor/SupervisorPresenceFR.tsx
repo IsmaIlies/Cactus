@@ -27,9 +27,11 @@ const SupervisorPresenceFR: React.FC = () => {
   const daysAgo = (n: number) => {
     const d = new Date(); d.setDate(d.getDate()-n); return d;
   };
-  const [histStart, setHistStart] = React.useState<string>(() => toYMD(daysAgo(13))); // 14 jours glissants
+  // Par défaut: aujourd'hui → aujourd'hui
+  const [histStart, setHistStart] = React.useState<string>(() => toYMD(new Date()));
   const [histEnd, setHistEnd] = React.useState<string>(() => toYMD(new Date()));
   const [history, setHistory] = React.useState<Array<{date: string; amCount: number; pmCount: number; amNames: string[]; pmNames: string[]}>>([]);
+  const [saving, setSaving] = React.useState(false);
 
   // Load roster, ensure doc, then subscribe
   React.useEffect(() => {
@@ -70,39 +72,66 @@ const SupervisorPresenceFR: React.FC = () => {
     return e.agentId ? `(${e.agentId})` : `inconnu_${Math.random().toString(36).slice(2,7)}`;
   };
 
-  // Load history for range and compute AM/PM lists
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const docs = await getAttendancesInRange(histStart, histEnd);
-      const rows = docs.map((doc) => {
-        const entries = doc?.entries || {};
-        const list = Object.entries(entries).map(([id, e]: any) => ({ id, ...e }));
-        const label = (e: any) => {
-          const nm = (e.name || '').toString().trim();
-          if (nm) return nm;
-          if (e.agentId && rosterMap[e.agentId]) return rosterMap[e.agentId].trim();
-          if (e.agentId) return `(${e.agentId})`;
-          return `inconnu_${Math.random().toString(36).slice(2,7)}`;
-        };
-        const am = list.filter(e => !!e.am).map(label).sort((a,b)=>a.localeCompare(b,'fr'));
-        const pm = list.filter(e => !!e.pm).map(label).sort((a,b)=>a.localeCompare(b,'fr'));
-        return { date: doc.date, amCount: am.length, pmCount: pm.length, amNames: am, pmNames: pm };
-      }).sort((a,b)=> a.date.localeCompare(b.date));
-      if (!cancelled) setHistory(rows);
-    })();
-    return () => { cancelled = true; };
+  // Helper to (re)compute history for current range
+  const fetchHistory = React.useCallback(async () => {
+    const docs = await getAttendancesInRange(histStart, histEnd);
+    const rows = docs.map((doc) => {
+      const entries = doc?.entries || {};
+      const list = Object.entries(entries).map(([id, e]: any) => ({ id, ...e }));
+      const label = (e: any) => {
+        const nm = (e.name || '').toString().trim();
+        if (nm) return nm;
+        const theId = e.agentId || e.id;
+        if (theId && rosterMap[theId]) return rosterMap[theId].trim();
+        if (theId) return `(${theId})`;
+        return `inconnu_${Math.random().toString(36).slice(2,7)}`;
+      };
+      const am = list.filter(e => !!e.am).map(label).sort((a,b)=>a.localeCompare(b,'fr'));
+      const pm = list.filter(e => !!e.pm).map(label).sort((a,b)=>a.localeCompare(b,'fr'));
+      return { date: doc.date, amCount: am.length, pmCount: pm.length, amNames: am, pmNames: pm };
+    }).sort((a,b)=> a.date.localeCompare(b.date));
+    setHistory(rows);
   }, [histStart, histEnd, rosterMap]);
 
+  // Load history for range and compute AM/PM lists
+  React.useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  const saveAndRefresh = async () => {
+    try {
+      setSaving(true);
+      // Backfill names for the selected day to ensure persistence
+      const todayEntries = Object.entries(entries);
+      const tasks: Promise<any>[] = [];
+      todayEntries.forEach(([id, e]: any) => {
+        const nm = (e?.name || '').toString().trim();
+        const rosterName = rosterMap[id];
+        if ((!nm || nm.length === 0) && rosterName && rosterName.trim()) {
+          tasks.push(patchEntryName(dateStr, id, rosterName.trim()));
+        }
+      });
+      if (tasks.length) await Promise.all(tasks);
+      await fetchHistory();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const exportCsv = () => {
-    const esc = (s: string) => '"' + s.replace(/"/g, '""') + '"';
-    let csv = 'date,am_count,pm_count,am_names,pm_names\n';
+    const esc = (s: string) => '"' + (s || '').replace(/"/g, '""') + '"';
+    const sep = ';'; // Excel FR s'attend à ';' (A;B;C;D)
+    // Long format: one row per (date, name) with AM/PM flags
+    let csv = ['date','name','am','pm'].join(sep) + '\n';
     history.forEach(h => {
-      const am = esc(h.amNames.join(', '));
-      const pm = esc(h.pmNames.join(', '));
-      csv += `${h.date},${h.amCount},${h.pmCount},${am},${pm}\n`;
+      const uniqueNames = Array.from(new Set([...(h.amNames || []), ...(h.pmNames || [])]));
+      uniqueNames.forEach((name) => {
+        const am = (h.amNames || []).includes(name) ? '1' : '0';
+        const pm = (h.pmNames || []).includes(name) ? '1' : '0';
+        const row = [esc(h.date), esc(name), am, pm];
+        csv += row.join(sep) + '\n';
+      });
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // Ajout d'un BOM pour un meilleur support Excel
+    const blob = new Blob(["\ufeff", csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -247,6 +276,11 @@ const SupervisorPresenceFR: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <button onClick={saveAndRefresh} disabled={saving} className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-cactus-600/90 hover:bg-cactus-600 text-white disabled:opacity-50">
+          {saving ? 'Sauvegarde…' : 'Sauvegarder'}
+        </button>
       </div>
 
       {/* Historique AM/PM */}

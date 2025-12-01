@@ -20,8 +20,9 @@ const LoginPage = () => {
   const [showDiag, setShowDiag] = useState(false);
   // Option B: whitelist temporary supervisor access based on email typed on login screen
   const SUPERVISOR_WHITELIST = [
-    "i.brai@mars-marketing.fr",
+    "i.brai@orange.mars-marketing.fr",
     "l.raynaud@mars-marketing.fr",
+    "l.raynaud@orange.mars-marketing.fr",
     "m.demauret@mars-marketing.fr",
     "i.boultame@mars-marketing.fr",
     "j.allione@mars-marketing.fr",
@@ -29,7 +30,10 @@ const LoginPage = () => {
     "olivier@evenmedia.fr",
     "m.maimoun@mars-marketing.fr",
     "s.karabagli@mars-marketing.fr",
+    "s.karabagli@orange.mars-marketing.fr",
     "a.gouet@mars-marketing.fr",
+    "i.brai@mars-marketing.fr",
+
   ]; // temporary
   type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
   const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);
@@ -189,7 +193,8 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      const success = await loginWithMicrosoft();
+      // Passer l'email saisi comme login_hint et pour tentative de pré-liaison
+      const success = await loginWithMicrosoft(normalizedEmail);
       if (success) {
         localStorage.setItem('activeRegion', selectedRegion);
         localStorage.setItem('activeMission', mission);

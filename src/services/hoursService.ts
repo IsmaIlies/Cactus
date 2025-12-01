@@ -190,7 +190,7 @@ export async function submitAgentHours(entry: AgentHoursEntry) {
 
 export async function updateEntryFields(docId: string, patch: Partial<Pick<HoursEntry,
   'morningStart' | 'morningEnd' | 'afternoonStart' | 'afternoonEnd' | 'includeMorning' | 'includeAfternoon' | 'project' | 'notes' | 'day'
->>) {
+>> & { supervisor?: string }) {
   const ref = doc(db, HOURS_ENTRIES, docId);
   await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() } as DocumentData);
 }

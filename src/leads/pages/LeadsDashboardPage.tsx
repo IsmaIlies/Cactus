@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { auth } from "../../firebase";
 import ChartComponent from "../../components/ChartComponent";
 import {
   LeadKpiSnapshot,
@@ -127,13 +129,82 @@ const lineChartOptions = {
 };
 
 const LeadsDashboardPage: React.FC = () => {
-  const [data, setData] = React.useState<LeadKpiSnapshot>(initialSnapshot);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedOrigin, setSelectedOrigin] = React.useState<"opportunity" | "dolead" | "mm">("opportunity");
-  const [series, setSeries] = React.useState<LeadDailySeriesEntry[]>([]);
-  const [monthlyTotals, setMonthlyTotals] = React.useState({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
-  const [recentSales, setRecentSales] = React.useState<RecentLeadSale[]>([]);
+  const [data, setData] = useState<LeadKpiSnapshot>(initialSnapshot);
+  const [loading, setLoading] = useState(true);
+  const [selectedOrigin, setSelectedOrigin] = useState<"opportunity" | "dolead" | "mm">("opportunity");
+  const [series, setSeries] = useState<LeadDailySeriesEntry[]>([]);
+  const [monthlyTotals, setMonthlyTotals] = useState({ mobiles: 0, box: 0, mobileSosh: 0, internetSosh: 0 });
+  const [recentSales, setRecentSales] = useState<RecentLeadSale[]>([]);
 
+  // Migration pop-up logic (copied from DashboardHome)
+  const { user, linkMicrosoft, reloadUser } = useAuth();
+  const [msEmailHint, setMsEmailHint] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  // DEBUG: Forcer l'affichage du pop-up migration pour tous les utilisateurs non migrés ou non liés Microsoft
+  const [hideMigrationPrompt, setHideMigrationPrompt] = useState<boolean>(false);
+  const dismissMigrationPrompt = () => {
+    setHideMigrationPrompt(true);
+  };
+  // Provider detection (via Firebase Auth)
+  const hasMicrosoftProvider = !!auth.currentUser && Array.isArray(auth.currentUser.providerData) && auth.currentUser.providerData.some((p:any) => p && p.providerId === 'microsoft.com');
+  // Afficher tant que l'un des deux n'est pas fait (email @orange OU Microsoft lié)
+  const needsMigration = !!user && ( !(user.email || '').toLowerCase().endsWith('@orange.mars-marketing.fr') || !hasMicrosoftProvider );
+  const handleLinkMicrosoft = async () => {
+    setActionMsg(null);
+    setLinking(true);
+    try {
+      const hint = (msEmailHint || user?.email || '').trim();
+      const ok = await linkMicrosoft(hint);
+      if (ok) {
+        setActionMsg('Compte Microsoft synchronisé.');
+      } else {
+        setActionMsg("Échec de la synchronisation Microsoft.");
+      }
+    } catch (e:any) {
+      setActionMsg(e?.message || 'Erreur de synchronisation.');
+    } finally {
+      setLinking(false);
+    }
+  };
+  const handleMigrateEmail = async () => {
+    if (!user?.email) return;
+    setActionMsg(null);
+    setMigrating(true);
+    try {
+      const localPart = (user.email || '').split('@')[0];
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Utilisateur non authentifié');
+      const resp = await fetch('/api/update-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ localPart })
+      });
+      const data = await resp.json();
+      if (resp.ok && (data?.ok || data?.skipped)) {
+        try { await reloadUser(); } catch {}
+        setActionMsg(data?.ok ? 'Email migré avec succès.' : 'Déjà migré.');
+      } else if (resp.status === 412) {
+        setActionMsg('Provider Microsoft non lié.');
+      } else if (resp.status === 409) {
+        setActionMsg('Nouvel email déjà utilisé.');
+      } else if (resp.status === 404) {
+        setActionMsg('Utilisateur introuvable.');
+      } else {
+        setActionMsg(data?.error || 'Migration impossible.');
+      }
+    } catch (e:any) {
+      setActionMsg(e?.message || 'Erreur migration email');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  // Migration overlay will be rendered in main return
   React.useEffect(() => {
     const unsubscribe = subscribeToLeadKpis((snapshot) => {
       setData(snapshot);
@@ -218,7 +289,88 @@ const LeadsDashboardPage: React.FC = () => {
   }, [recentSales]);
 
   return (
-    <div className="space-y-6 text-white">
+    <>
+      {/* ...existing code... */}
+      {needsMigration && !hideMigrationPrompt && (
+        <div className="fixed top-0 left-0 w-full z-50 flex items-start justify-center p-6" role="dialog" aria-modal="true" aria-labelledby="migration-title">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative w-full max-w-3xl bg-gradient-to-br from-white via-cactus-50 to-cactus-100 border border-cactus-300 shadow-2xl rounded-2xl overflow-hidden animate-[fadeIn_0.4s_ease] mt-4" tabIndex={-1}>
+            <div className="px-8 pt-8 pb-6">
+              <div className="flex items-start justify-between mb-4">
+                <h2 id="migration-title" className="text-2xl font-bold text-cactus-800 flex items-center gap-3" tabIndex={0}>
+                  <span className="text-3xl">🔄</span>
+                  Migration du compte requise
+                </h2>
+                <button onClick={dismissMigrationPrompt} className="text-gray-400 hover:text-gray-600 transition" aria-label="Fermer">
+                  ✕
+                </button>
+              </div>
+              <p className="text-sm md:text-base text-gray-700 leading-relaxed mb-4">
+                Pour bénéficier des nouvelles intégrations Microsoft (agenda, identité unifiée, sécurité renforcée),
+                migre vers <strong>@orange.mars-marketing.fr</strong> et lie ton compte Microsoft ici.<br />
+                <span className="text-xs text-cactus-700 font-semibold">Tu peux aussi le faire dans les réglages (engrenage en bas à gauche).</span>
+              </p>
+              <div className="grid md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white/70 border border-cactus-200 rounded-lg p-4 flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-cactus-700 flex items-center gap-2">✅ Avantages</h3>
+                  <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+                    <li>Accès unifié Microsoft</li>
+                    <li>Moins de doublons de comptes</li>
+                    <li>Sécurité renforcée</li>
+                  </ul>
+                </div>
+                <div className="bg-white/70 border border-cactus-200 rounded-lg p-4 flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-cactus-700 flex items-center gap-2">🛠 Étapes</h3>
+                  <div className="text-xs text-gray-600 space-y-3">
+                    <div className="mb-2">
+                      <div className="font-bold text-cactus-700 mb-1">Étape 1 : Synchroniser le compte Microsoft</div>
+                      <input
+                        type="email"
+                        value={msEmailHint}
+                        onChange={(e)=> setMsEmailHint(e.target.value)}
+                        placeholder="prenom.nom@orange.mars-marketing.fr"
+                        className="w-full rounded-md border border-cactus-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cactus-400"
+                        aria-label="Email professionnel @orange"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleLinkMicrosoft}
+                        disabled={linking}
+                        className="mt-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 w-full"
+                      >{linking? 'Synchronisation…' : 'Synchroniser mon compte Microsoft'}</button>
+                    </div>
+                    <div>
+                      <div className="font-bold text-cactus-700 mb-1">Étape 2 : Migrer l'email</div>
+                      <button
+                        type="button"
+                        onClick={handleMigrateEmail}
+                        disabled={migrating}
+                        className="px-4 py-2 rounded-md bg-cactus-600 text-black hover:bg-cactus-700 disabled:opacity-50 w-full"
+                      >{migrating ? 'Migration…' : 'Migrer email vers @orange'}</button>
+                    </div>
+                    {actionMsg && <div className="text-[11px] text-cactus-700 mt-2">{actionMsg}</div>}
+                  </div>
+                </div>
+                <div className="bg-white/70 border border-cactus-200 rounded-lg p-4 flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-cactus-700 flex items-center gap-2">💡 Astuce</h3>
+                  <p className="text-xs text-gray-600">Utilise le même préfixe que ton ancien email pour éviter toute perte d'historique (ex: <code className="font-mono">prenom.nom</code>).</p>
+                </div>
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="text-xs text-gray-500">Cette fenêtre disparaîtra une fois la migration et la synchronisation Microsoft effectuées.</div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={dismissMigrationPrompt}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm"
+                  >Plus tard</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6 text-white">
       <div className="flex items-center gap-3">
         <span className="text-4xl" role="img" aria-label="trophy">🏆</span>
         <div>
@@ -380,7 +532,8 @@ const LeadsDashboardPage: React.FC = () => {
           </table>
         </div>
       </section>
-    </div>
+      </div>
+    </>
   );
 };
 

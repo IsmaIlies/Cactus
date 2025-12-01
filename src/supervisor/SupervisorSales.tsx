@@ -4,7 +4,6 @@ import { useParams } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, getDocs, orderBy, query as fsQuery, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
-import SupervisorPresenceFR from './SupervisorPresenceFR';
 
 type Sale = {
   id: string;
@@ -953,9 +952,7 @@ const SupervisorSales: React.FC = () => {
       <div className="space-y-4 animate-fade-in">
   <p className="text-slate-300">{`Ventes Canal+ (${region || ''})`} — mise à jour toutes 60s</p>
 
-      {region === 'FR' && (
-        <SupervisorPresenceFR />
-      )}
+      {/* Presence module intentionally removed from Sales page */}
 
       {/* KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

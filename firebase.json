@@ -44,6 +44,11 @@
       "functionRegion": "europe-west9"
       },
       {
+        "source": "/api/update-email",
+        "function": "updatePrimaryEmailIfMicrosoftLinkedHttp",
+        "functionRegion": "europe-west9"
+      },
+      {
         "source": "/api/leads-stats-forward",
         "function": "leadsStatsForward",
         "functionRegion": "europe-west1"

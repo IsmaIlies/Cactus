@@ -102,6 +102,23 @@ const SupervisorDashboard: React.FC = () => {
     </svg>
   );
 
+  // KPI card UI aligned with Leads dashboard aesthetics
+  const KpiCard: React.FC<{ label: string; value: React.ReactNode; subtitle?: string; gradient?: string; accent?: string }>
+    = ({ label, value, subtitle = 'Période', gradient = 'from-[#0a152a] via-[#09172f] to-[#071326]', accent = 'text-blue-200' }) => (
+      <article className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br ${gradient} p-5 shadow-[0_18px_45px_rgba(8,20,60,0.45)]`}> 
+        <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_20%_20%,rgba(96,165,250,0.22),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(59,130,246,0.18),transparent_60%)]" />
+        <div className="relative flex h-full flex-col gap-3">
+          <div className="flex items-baseline justify-between">
+            <h3 className={`text-sm font-semibold ${accent}`}>{label}</h3>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.4em] text-blue-100/70">{subtitle}</span>
+          </div>
+          <div className="flex items-end gap-2">
+            <p className="text-4xl font-bold text-white leading-none">{value}</p>
+          </div>
+        </div>
+      </article>
+    );
+
   React.useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -359,13 +376,21 @@ const SupervisorDashboard: React.FC = () => {
           salesByDay[okey][index]++;
         }
         const datasets = offers.map(o => ({
-          label: o.label,
-          data: salesByDay[o.key],
-          borderColor: o.color,
-          backgroundColor: o.bg,
-          pointBackgroundColor: o.color,
-          fill: true,
-          tension: 0.35,
+           label: o.label,
+           data: salesByDay[o.key],
+           borderColor: o.color,
+           backgroundColor: o.bg,
+           pointBackgroundColor: o.color,
+           pointRadius: 5,
+           pointHoverRadius: 7,
+           pointBorderWidth: 2,
+           borderWidth: 3,
+           fill: true,
+           tension: 0.35,
+           shadowOffsetX: 0,
+           shadowOffsetY: 2,
+           shadowBlur: 8,
+           shadowColor: o.color,
         }));
         const chartData = { labels, datasets };
         const chartOptions = {
@@ -657,11 +682,10 @@ const SupervisorDashboard: React.FC = () => {
           <button onClick={applyDates} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white bg-gradient-to-r from-cyan-500/70 to-blue-500/70 hover:from-cyan-500 hover:to-blue-500 border border-white/10 shadow-[0_8px_24px_rgba(56,189,248,0.35)]">Appliquer</button>
         </div>
       </div>
-      <p className="text-blue-200">{subtitle} • Région: {(regionOverride || (effectiveArea as string))}</p>
       {/* Smart alerts */}
       <AlertsPanel alerts={alerts} />
       {/* Record de ventes sur une journée */}
-      <div className="bg-white/10 rounded-xl md:rounded-2xl p-5 border border-white/10 flex flex-col items-start mb-4 backdrop-blur-sm">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a] via-[#09172f] to-[#071326] p-5 mb-6 flex flex-col items-start">
         <h3 className="text-lg font-semibold mb-1">🏆 Record de ventes sur une journée</h3>
         <p className="text-blue-100">
           {recordDay
@@ -670,26 +694,34 @@ const SupervisorDashboard: React.FC = () => {
             : "Calcul en cours…"}
         </p>
       </div>
-  <div className={`grid grid-cols-1 sm:grid-cols-2 ${effectiveArea === 'CIV' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-5 md:gap-6`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${effectiveArea === 'CIV' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-5 md:gap-6`}>
         {effectiveArea === 'CIV' && (
-          <div className="bg-white/10 rounded-lg p-4 border border-white/10">
-            <p className="text-blue-200 text-sm">Ventes CIV (mois)</p>
-            <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : <CountUp end={kpi.monthSales} duration={0.6} />}</p>
-          </div>
+          <KpiCard
+            label="Ventes (mois)"
+            subtitle="CIV"
+            gradient="from-[#102338] via-[#0d1c2c] to-[#081221]"
+            accent="text-cyan-200"
+            value={loading ? <Spinner size={20} /> : <CountUp end={kpi.monthSales} duration={0.6} />}
+          />
         )}
-        <div className="bg-white/10 rounded-xl p-5 border border-white/10 shadow-sm">
-          <p className="text-blue-200 text-sm">Ventes jour</p>
-          <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : <CountUp end={kpi.daySales} duration={0.6} />}</p>
-        </div>
-        <div className="bg-white/10 rounded-xl p-5 border border-white/10 shadow-sm">
-          <p className="text-blue-200 text-sm">{periodLabel}</p>
-          <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : <CountUp end={kpi.weekSales} duration={0.6} />}</p>
-        </div>
-        <div className="bg-white/10 rounded-xl p-5 border border-white/10 shadow-sm">
-          <p className="text-blue-200 text-sm">Taux conv.</p>
-          <p className="text-3xl font-extrabold flex items-center min-h-[2rem]">{loading ? <Spinner size={20} /> : kpi.conversion}</p>
-        </div>
-        {/* Carte "Top vendeur" retirée à la demande */}
+        <KpiCard
+          label="Ventes jour"
+          accent="text-emerald-200"
+          gradient="from-[#101b29] via-[#0a1320] to-[#050a13]"
+          value={loading ? <Spinner size={20} /> : <CountUp end={kpi.daySales} duration={0.6} />}
+        />
+        <KpiCard
+          label={periodLabel}
+          accent="text-blue-200"
+          gradient="from-[#0a152a] via-[#09172f] to-[#071326]"
+          value={loading ? <Spinner size={20} /> : <CountUp end={kpi.weekSales} duration={0.6} />}
+        />
+        <KpiCard
+          label="Taux conv."
+          accent="text-purple-200"
+          gradient="from-[#140f2a] via-[#1a1235] to-[#0d0a1f]"
+          value={loading ? '…' : kpi.conversion}
+        />
       </div>
       {effectiveArea === 'LEADS' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6">
@@ -708,7 +740,7 @@ const SupervisorDashboard: React.FC = () => {
         </div>
       )}
       {/* Historique période - pleine largeur */}
-      <div className="bg-white/10 rounded-3xl border border-white/10 p-6 md:p-7 shadow-[0_18px_46px_-10px_rgba(30,64,175,0.35)]">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a] via-[#09172f] to-[#071326] p-6 md:p-7 shadow-[0_18px_46px_-10px_rgba(30,64,175,0.35)]">
         <div className="flex flex-row justify-between items-center mb-2">
           <div>
             <h2 className="text-white text-2xl font-bold leading-tight mb-0">Historique période</h2>
@@ -726,7 +758,7 @@ const SupervisorDashboard: React.FC = () => {
       </div>
 
       {/* Top vendeurs - sous le graphe */}
-      <div className="bg-white/10 rounded-xl border border-white/10 p-5">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a] via-[#09172f] to-[#071326] p-5 mb-6">
         <p className="text-blue-200 text-sm mb-2">Top vendeurs</p>
         {error && <div className="text-rose-300 text-sm">{error}</div>}
         <ul className="space-y-2 text-sm">
@@ -737,8 +769,10 @@ const SupervisorDashboard: React.FC = () => {
           {!loading && topSellers.length === 0 && <li className="text-blue-300">—</li>}
         </ul>
       </div>
-  {/* Historique des records (jours/agents/mois) */}
-  <RecordsHistory days={recordDays} agents={recordAgents} months={recordMonths} />
+      {/* Historique des records (jours/agents/mois) */}
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a] via-[#09172f] to-[#071326] p-4 md:p-5 mb-6">
+        <RecordsHistory days={recordDays} agents={recordAgents} months={recordMonths} />
+      </div>
       {/* Répartition des offres (jour) */}
       <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#071227]/75 via-[#050c1a]/70 to-[#030711]/75 p-6 md:p-7 backdrop-blur-xl shadow-[0_28px_70px_-12px_rgba(8,20,40,0.65)] space-y-6">
         <div className="flex items-center justify-between">
@@ -748,22 +782,24 @@ const SupervisorDashboard: React.FC = () => {
           </div>
         </div>
         <div className="mt-5 grid gap-6 md:gap-7 md:grid-cols-2">
-          <div className="h-[300px] rounded-2xl border border-white/10 bg-white/5 p-5">
-            <ChartComponent
-              type="doughnut"
-              data={{
-                labels: ['CANAL+','CANAL+ Ciné Séries','CANAL+ Sport','CANAL+ 100%'],
-                datasets: [{
-                  data: [dayOffers.canal, dayOffers.cine, dayOffers.sport, dayOffers.cent],
-                  backgroundColor: [COLORS.canalSolid, COLORS.cine, COLORS.sport, COLORS.cent],
-                  borderWidth: 0,
-                }],
-              }}
-              options={{
-                plugins: { legend: { display: false } },
-                cutout: '60%'
-              }}
-            />
+          <div className="h-[300px] rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col">
+            <div className="flex-1 flex items-center justify-center">
+              <ChartComponent
+                type="doughnut"
+                data={{
+                  labels: ['CANAL+','CANAL+ Ciné Séries','CANAL+ Sport','CANAL+ 100%'],
+                  datasets: [{
+                    data: [dayOffers.canal, dayOffers.cine, dayOffers.sport, dayOffers.cent],
+                    backgroundColor: [COLORS.canalSolid, COLORS.cine, COLORS.sport, COLORS.cent],
+                    borderWidth: 0,
+                  }],
+                }}
+                options={{
+                  plugins: { legend: { display: false } },
+                  cutout: '60%'
+                }}
+              />
+            </div>
             {/* Légende custom pour un contrôle total des couleurs */}
             <div className="mt-3 flex flex-wrap gap-3 text-xs text-blue-100/80">
               {[{label:'CANAL+', color:COLORS.canalSolid}, {label:'CANAL+ Ciné Séries', color:COLORS.cine}, {label:'CANAL+ Sport', color:COLORS.sport}, {label:'CANAL+ 100%', color:COLORS.cent}].map(i => (
@@ -801,7 +837,7 @@ const SupervisorDashboard: React.FC = () => {
       {/* Tableau ventes du jour par agent Canal+ (style inspiré du screen fourni) */}
       {/* Analyses supplémentaires: Statuts (période) & Progression par agent */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mt-10">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 hover:shadow-[0_14px_36px_rgba(56,189,248,0.18)] transition duration-300">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a] via-[#09172f] to-[#071326] p-5 md:p-6 mb-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-white text-lg font-semibold">Répartition des statuts par jour (période)</h3>
           </div>
@@ -813,7 +849,7 @@ const SupervisorDashboard: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 hover:shadow-[0_14px_36px_rgba(167,139,250,0.18)] transition duration-300">
+        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0a152a] via-[#09172f] to-[#071326] p-5 md:p-6 mb-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-white text-lg font-semibold">Progression par agent (période)</h3>
           </div>
