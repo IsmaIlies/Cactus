@@ -613,6 +613,7 @@ const DashboardHome = () => {
     setMigrating(true);
     try {
       const localPart = (user.email || '').split('@')[0];
+      const targetEmail = (msEmailHint || '').trim().toLowerCase();
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) {
         throw new Error('Utilisateur non authentifié');
@@ -623,7 +624,7 @@ const DashboardHome = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ localPart })
+        body: JSON.stringify(targetEmail ? { targetEmail } : { localPart })
       });
       const data = await resp.json();
       if (resp.ok && (data?.ok || data?.skipped)) {

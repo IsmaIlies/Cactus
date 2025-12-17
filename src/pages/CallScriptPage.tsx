@@ -13,6 +13,7 @@ import {
 import CallScriptStep5 from "../components/CallScriptStep5";
 import OfferSuggestionStep from "../components/OfferSuggestionStep";
 import TeleSalesAssistant from "../components/TeleSalesAssistant";
+import CallDecisionFlow, { FlowNode } from "../components/CallDecisionFlow";
 
 export interface CallData {
   clientInfo: {
@@ -49,6 +50,9 @@ const CallScriptPage = () => {
   const [isCallActive, setIsCallActive] = useState(false);
   const [, setCallDuration] = useState(0);
   const [showInfoPopup, setShowInfoPopup] = useState(true);
+  const [mode, setMode] = useState<'wizard' | 'flow'>('flow');
+  const [navDir, setNavDir] = useState<'left' | 'right'>('right');
+
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -83,7 +87,7 @@ const CallScriptPage = () => {
             {/* Infos client en lecture seule */}
 
             <div className="bg-white rounded p-3 border border-blue-100">
-              <p className="text-gray-800 mb-3">
+              <p className="text-black mb-3">
                 "Bonjour{" "}
                 <span className="bg-yellow-200 px-1 rounded font-medium">
                   M./Mme ...
@@ -94,7 +98,7 @@ const CallScriptPage = () => {
                 </span>{" "}
                 , conseiller Orange.
               </p>
-              <p className="text-gray-800">
+              <p className="text-black">
                 Je vous appelle très rapidement 
                 sur votre usage et divertissement audiovisuel."
               </p>
@@ -106,7 +110,7 @@ const CallScriptPage = () => {
             </h3>
 
             <div className="space-y-3">
-              <button className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-orange-100 p-2 rounded-full">
                     <MessageSquare className="w-4 h-4 text-orange-600" />
@@ -115,7 +119,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       Réponse principale
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Oh je vous prends juste 2 petites minutes, c'est promis !
                       C'est important, vous êtes un abonné fidèle et on veut
                       continuer à vous proposer du contenu pertinent."
@@ -124,7 +128,7 @@ const CallScriptPage = () => {
                 </div>
               </button>
 
-              <button className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-orange-100 p-2 rounded-full">
                     <MessageSquare className="w-4 h-4 text-orange-600" />
@@ -133,7 +137,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       Alternative
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Je comprends parfaitement, c'est justement pour ça que je
                       vais être très bref. Juste 2 minutes pour faire le point."
                     </p>
@@ -142,7 +146,7 @@ const CallScriptPage = () => {
   {/* ...existing code... */}
               </button>
 
-              <button className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-orange-100 p-2 rounded-full">
                     <Phone className="w-4 h-4 text-orange-600" />
@@ -151,7 +155,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       Proposition de rappel
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Aucun souci, à quelle heure puis-je vous rappeler
                       aujourd'hui ?"
                     </p>
@@ -183,7 +187,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       Réponse principale
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Oh je vous prends juste 2 petites minutes, c'est promis !
                       C'est important, vous êtes un abonné fidèle et on veut
                       vous informer sur les services exclusifs auxquels vous
@@ -202,7 +206,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       Alternative 1
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Je comprends parfaitement, c'est justement pour ça que je
                       vais être très bref. Juste 2 minutes pour vous faire
                       économiser sur vos services TV."
@@ -220,7 +224,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       Proposition de rappel
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Aucun souci, à quelle heure puis-je vous rappeler
                       aujourd'hui ? C'est vraiment important pour vos
                       économies."
@@ -244,7 +248,7 @@ const CallScriptPage = () => {
             </h3>
 
             <div className="space-y-3">
-              <button className="w-full text-left p-4 bg-white rounded border border-red-200 hover:bg-red-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-red-200 hover:bg-red-50 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-red-100 p-2 rounded-full">
                     <AlertCircle className="w-4 h-4 text-red-600" />
@@ -253,7 +257,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-red-800 mb-1">
                       Appel enregistré
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Juste pour vous prévenir, cet appel est enregistré dans
                       un but d'amélioration de notre qualité de service."
                     </p>
@@ -261,14 +265,14 @@ const CallScriptPage = () => {
                 </div>
               </button>
 
-              <button className="w-full text-left p-4 bg-white rounded border border-red-200 hover:bg-red-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-red-200 hover:bg-red-50 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-red-100 p-2 rounded-full">
                     <AlertCircle className="w-4 h-4 text-red-600" />
                   </div>
                   <div>
                     <div className="font-medium text-red-800 mb-1">Bloctel</div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Et je vous invite à vous inscrire sur Bloctel si vous ne
                       souhaitez plus recevoir d'appels d'entreprise dont vous
                       n'êtes pas client."
@@ -288,13 +292,13 @@ const CallScriptPage = () => {
         <div className="space-y-4">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <div className="space-y-3">
-              <button className="w-full text-left p-4 bg-white rounded border border-green-200 hover:bg-green-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-green-200 hover:bg-green-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium text-green-800 mb-1">
                       Confirmation du titulaire
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Vous êtes bien le titulaire de la ligne ?"
                     </p>
                   </div>
@@ -302,13 +306,13 @@ const CallScriptPage = () => {
                 </div>
               </button>
 
-              <button className="w-full text-left p-4 bg-white rounded border border-green-200 hover:bg-green-50 transition-colors">
+              <button type="button" className="w-full text-left p-4 bg-white rounded border border-green-200 hover:bg-green-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium text-green-800 mb-1">
                       Confirmation de l'adresse
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Vous habitez toujours au{" "}
                       <span className="bg-yellow-200 px-1 rounded">...</span> ?"
                     </p>
@@ -355,7 +359,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       ❌ "C'est trop cher"
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Je comprends ! Mais justement en ce moment, l'offre est à
                       un tarif bloqué pendant 24 mois."
                     </p>
@@ -372,7 +376,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       ❌ "J'ai déjà Netflix"
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Justement, l'offre inclut Netflix, et Apple TV+ dans le
                       même pack."
                     </p>
@@ -389,7 +393,7 @@ const CallScriptPage = () => {
                     <div className="font-medium text-orange-800 mb-1">
                       ❌ "Je dois réfléchir"
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Aucun souci, je peux vous envoyer un mail avec toutes les
                       infos, et je vous rappelle demain à la même heure ?"
                     </p>
@@ -400,13 +404,13 @@ const CallScriptPage = () => {
               <button className="w-full text-left p-4 bg-white rounded border border-orange-200 hover:bg-orange-50 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-gray-100 p-2 rounded-full">
-                    <AlertCircle className="w-4 h-4 text-gray-600" />
+                    <AlertCircle className="w-4 h-4 text-black" />
                   </div>
                   <div className="flex-1">
                     <div className="font-medium text-orange-800 mb-1">
                       ❌ "Je ne regarde pas la télé"
                     </div>
-                    <p className="text-gray-700">
+                    <p className="text-black">
                       "Je comprends, simplement je suppose que quand il y a un
                       bon film ou un événement sportif, il vous arrive de le
                       regarder ?"
@@ -434,7 +438,7 @@ const CallScriptPage = () => {
                   <div className="font-medium text-green-800 mb-1">
                     Script de conclusion
                   </div>
-                  <div className="text-gray-700 space-y-3">
+                  <div className="text-black space-y-3">
                     <h4 className="text-center font-semibold uppercase">MENTIONS LEGALES</h4>
                     <p>Très bien Mr/Mme</p>
                     <p>
@@ -499,14 +503,266 @@ const CallScriptPage = () => {
     },
   ];
 
+  // Decision-tree content based on the provided diagrams
+  const flowNodes: Record<string, FlowNode> = {
+    root: {
+      id: 'root',
+      title: 'Actuellement, vous regardez la TV…?',
+      text: 'Par le Décodeur Orange, via Smart TV (applications de streaming) ou la TNT ?\n(REPÉRER SMART TV)',
+      options: [
+        { label: 'Smart TV (TV connectée)', nextId: 'smartTVCheck' },
+        { label: 'Décodeur/Box TV Orange', nextId: 'boxBranchee' },
+        { label: 'TNT uniquement / Rien', nextId: 'noBoxStop' },
+      ],
+    },
+    smartTVCheck: {
+      id: 'smartTVCheck',
+      title: 'Smart TV détectée',
+      text: 'Vérifier qu’il y a également la box TV Orange de branchée.\nSi pas de box TV ➜ Canal+ impossible.',
+      options: [
+        { label: 'Box Orange branchée ✔', nextId: 'smartTVInfoYes' },
+        { label: 'Pas de box Orange ✘', nextId: 'noBoxStop' },
+      ],
+    },
+    noBoxStop: {
+      id: 'noBoxStop',
+      title: 'Pas de box Orange',
+      text: 'Si pas de box TV ➜ Canal+ impossible.\n\nL’inviter à le faire et présenter les avantages\nMettre en avant les 200 chaînes et 190 en options\n\nReplay / Guide des programme / Contrôle du direct / Mosaïque\nApplications dans un seul univers: YouTube / Deezer / Netflix…',
+      options: [],
+    },
+    smartTVInfoYes: {
+      id: 'smartTVInfoYes',
+      title: 'Box Orange branchée — informations utiles',
+      text: 'OUI\n\nVous arrivez à utiliser les replays ? (Depuis le menu principal, sélectionnez la rubrique “Replay” pour revoir des programmes déjà diffusés)\n\nVous utilisez le guide des programmes ? (Accès : Appuyez sur la touche menu, rendez-vous dans la rubrique “Programme TV” et validez avec OK. Vous pouvez consulter les programmes en cours, à venir, et accéder à des informations détaillées sur chaque émission.)\n\nET la mosaïque ➜ chaîne 0\n\nConcernant le contrôle du direct, cela fonctionne bien ?\nFonctionnalité : Mettez en pause et reprenez la lecture des programmes en direct grâce à la fonction de contrôle du direct',
+      options: [
+        { label: 'Continuer ➜ Vérifier ensemble', nextId: 'boxFeatures' },
+      ],
+    },
+    boxBranchee: {
+      id: 'boxBranchee',
+      title: 'Profitez-vous des chaînes Orange ?',
+      text: '(BOX BRANCHÉE)\nQuestions de vérification des usages actuels.',
+      options: [
+        { label: 'Oui', nextId: 'boxFeatures' },
+        { label: 'Non', nextId: 'advantages' },
+      ],
+    },
+    boxFeatures: {
+      id: 'boxFeatures',
+      title: 'Fonctions TV — vérifications rapides',
+      text: 'Du coup, vous utilisez des plateformes de streaming de type Netflix, Amazon Prime, CANAL .... ? (REPÉRER CANAL)',
+      kind: undefined,
+      checklistItems: undefined,
+      options: [
+        { label: 'Oui, Canal+ (STOP APPEL)', nextId: 'stopCall' },
+        { label: 'Non, aucune plateforme', nextId: 'neverSubscribedOpen' },
+        { label: 'Oui, autres plateformes', nextId: 'rateScale' },
+      ],
+    },
+    neverSubscribedOpen: {
+      id: 'neverSubscribedOpen',
+      title: 'Jamais pensé à une plateforme ?',
+      text: 'Et vous avez jamais pensé à vous abonner à ce genre de plateforme ?',
+      options: [
+        { label: 'Continuer', nextId: 'neverSubscribed' },
+      ],
+    },
+    advantages: {
+      id: 'advantages',
+      title: 'Présenter les avantages Orange TV',
+      text: 'Mettre en avant les 200 chaînes et 190 options.\nReplay / Guide des programmes / Contrôle du direct / Mosaïque.\nApplications dans un seul univers: YouTube / Deezer / Netflix…',
+      options: [
+        { label: 'Continuer ➜ Plateformes de streaming', nextId: 'streamingPlatforms' },
+      ],
+    },
+    streamingPlatforms: {
+      id: 'streamingPlatforms',
+      title: 'Plateformes de streaming',
+      text: 'Du coup, vous utilisez des plateformes de streaming de type Netflix, Amazon Prime, CANAL … ?\n( REPÉRER CANAL )',
+      options: [
+        { label: "J'utilise des plateformes (Netflix/Prime/…)", nextId: 'rateScale' },
+        { label: 'Si Canal+ ➜ STOP APPEL', nextId: 'stopCall' },
+        { label: 'Si rien', nextId: 'nothing' },
+      ],
+    },
+    nothing: {
+      id: 'nothing',
+      title: 'Si rien',
+      text: "Et vous avez jamais pensé à vous abonner à ce genre de plateforme ?",
+      options: [
+        { label: 'Continuer', nextId: 'neverSubscribed' },
+      ],
+    },
+    rateScale: {
+      id: 'rateScale',
+      title: 'Super, tout fonctionne bien ?',
+      text: 'Sur une échelle de 1 à 10 vous donnez combien à XXX… ?',
+      options: [
+        { label: 'Continuer', nextId: 'rateScaleRemark' },
+      ],
+    },
+    rateScaleRemark: {
+      id: 'rateScaleRemark',
+      title: '',
+      text: "C’est marrant ce que vous me dites car la plupart des clients me donnent la même note\nEt du coup il manquerait quoi pour augmenter la note, des séries de qualité, des films plus récents, du Sport ...?",
+      options: [
+        { label: 'Continuer', nextId: 'explorePreferences' },
+      ],
+    },
+    explorePreferences: {
+      id: 'explorePreferences',
+      title: 'Explorer les goûts',
+      text: '',
+      options: [
+        { label: 'Explorer les goûts ➜ Séries', nextId: 'seriesBranch' },
+        { label: 'Explorer les goûts ➜ Films', nextId: 'filmsBranch' },
+        { label: 'Explorer les goûts ➜ Sport', nextId: 'sportBranch' },
+      ],
+    },
+    neverSubscribed: {
+      id: 'neverSubscribed',
+      title: 'Jamais abonné à une plateforme ?',
+      text: 'Et généralement vous regardez quoi à la TV ? Des séries, des films, du sport ?',
+      options: [
+        { label: 'Plutôt séries', nextId: 'seriesBranch' },
+        { label: 'Plutôt films', nextId: 'filmsBranch' },
+        { label: 'Plutôt sport', nextId: 'sportBranch' },
+        { label: 'Je ne regarde pas la TV', nextId: 'neverWatchTV' },
+      ],
+    },
+    neverWatchTV: {
+      id: 'neverWatchTV',
+      title: 'Je ne regarde pas la TV',
+      text: 'Je ne regarde pas la TV. Je veux pas plus de TV.\n\nJe comprends, simplement je suppose que quand il y a des grands films à la TV ou une belle série, il vous arrive de les regarder comme tout le monde ?',
+      options: [
+        { label: 'Oui', nextId: 'neverWatchTVYes' },
+        { label: 'Continuer', nextId: 'neverWatchTVFrequency' },
+      ],
+    },
+    neverWatchTVYes: {
+      id: 'neverWatchTVYes',
+      title: 'Type de contenus aimés',
+      text: 'Alors par exemple, c’est quoi le type de BOOOOON films ou séries que vous aimez regarder 😊\n\nRéponse',
+      options: [
+        { label: 'Continuer', nextId: 'neverWatchTVFrequency' },
+      ],
+    },
+    neverWatchTVFrequency: {
+      id: 'neverWatchTVFrequency',
+      title: 'Fréquence idéale',
+      text: "Et vous dans l’idéal, ce type de bons films ou séries vous aimeriez en voir combien de fois ? Une fois par semaine, deux fois par semaine, plus …",
+      options: [
+        { label: 'Séries', nextId: 'seriesBranch' },
+        { label: 'Films', nextId: 'filmsBranch' },
+        { label: 'Sport', nextId: 'sportBranch' },
+      ],
+    },
+    seriesBranch: {
+      id: 'seriesBranch',
+      title: 'Si SÉRIE',
+      text: 'Quel type (Aventure, Policier, Fantastique…) ?\nVous en regardez souvent ?\nEt, vous vous et votre famille vous regardes cela ensemble ? chacun chez soi ? un peu des deux ?',
+      options: [
+        { label: 'Continuer', nextId: 'seriesGroupDiscussion' },
+      ],
+    },
+    seriesGroupDiscussion: {
+      id: 'seriesGroupDiscussion',
+      title: 'Si plusieurs',
+      text: 'Et tout le monde regarde la même chose ou chacun a des goûts différents ?\nUn peu comme tout le monde 😉',
+      options: [
+        { label: 'Continuer ➜ Questions Cinéma', nextId: 'seriesCinemaStart' },
+      ],
+    },
+    seriesCinemaStart: {
+      id: 'seriesCinemaStart',
+      title: 'Cinéma — Fréquence',
+      text: 'Et cela vous arrive d’aller au cinéma ?\nUne fois par mois ; 2–3 fois dans l’année … ?',
+      options: [
+        { label: 'Si oui, fréquemment', nextId: 'seriesCinemaYes' },
+        { label: 'Si rarement', nextId: 'seriesCinemaRare' },
+      ],
+    },
+    seriesCinemaYes: {
+      id: 'seriesCinemaYes',
+      title: 'Si oui, fréquemment',
+      text: 'Super, vous êtes un vrai fan de cinéma …\n\nEt c’est quoi le dernier film que vous avez aimé ?\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ?',
+      options: [
+        { label: 'Continuer', nextId: 'closingIntro' },
+      ],
+    },
+    seriesCinemaRare: {
+      id: 'seriesCinemaRare',
+      title: 'Si rarement',
+      text: 'C’est parce que c’est loin de chez vous, c’est la programmation, le prix actuel des places ?',
+      options: [
+        { label: 'Si prix', nextId: 'seriesCinemaRarePrice' },
+        { label: 'Autre raison', nextId: 'seriesCinemaRareOther' },
+      ],
+    },
+    seriesCinemaRarePrice: {
+      id: 'seriesCinemaRarePrice',
+      title: 'Si prix',
+      text: 'Oui c’est vrai, j’ai pas mal de clients qui me disent qu’une sortie à deux on en a presque pour 30 à 35 euros maintenant.\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ?',
+      options: [
+        { label: 'Continuer', nextId: 'closingIntro' },
+      ],
+    },
+    seriesCinemaRareOther: {
+      id: 'seriesCinemaRareOther',
+      title: 'Remarques',
+      text: 'Et à la TV, vous êtes content de ce qui est programmé comme films ?',
+      options: [
+        { label: 'Continuer', nextId: 'closingIntro' },
+      ],
+    },
+    filmsBranch: {
+      id: 'filmsBranch',
+      title: 'Si FILM',
+      text: 'Quel type (Aventure, Policier, Fantastique…) ?\nSouhaiteriez-vous voir plus souvent des films de qualité ?\nEt, vous vous et votre famille vous regardes cela ensemble ? chacun chez soi ? un peu des deux ?',
+      options: [
+        { label: 'Proposer CANAL+ Ciné Séries', nextId: 'closingIntro' },
+      ],
+    },
+    sportBranch: {
+      id: 'sportBranch',
+      title: 'Si SPORT',
+      text: 'Vous regardez un sport en particulier ?\nSupportez-vous une équipe ?\nComment voyez-vous les matchs aujourd’hui ?\nEt, vous vous et votre famille vous regardes cela ensemble ? chacun chez soi ? un peu des deux ?',
+      options: [
+        { label: 'Proposer CANAL+ Sport', nextId: 'closingIntro' },
+      ],
+    },
+    closingIntro: {
+      id: 'closingIntro',
+      title: 'Transition vers proposition',
+      text: 'Synthèse des goûts et introduction de l’offre adaptée.\nPuis passage à la proposition et à la clôture.',
+      options: [
+        { label: 'Aller à la clôture', nextId: 'end' },
+      ],
+    },
+    stopCall: {
+      id: 'stopCall',
+      title: 'Client déjà Canal+',
+      text: 'Si Canal ➜ STOP APPEL (selon consignes).',
+      options: [],
+    },
+    end: {
+      id: 'end',
+      title: 'Fin du parcours',
+      text: 'Passez à la proposition détaillée et clôture.',
+      options: [],
+    },
+  };
+
   const nextStep = () => {
     if (currentStep < steps.length - 1) {
+      setNavDir('right');
       setCurrentStep(currentStep + 1);
     }
   };
 
   const prevStep = () => {
     if (currentStep > 0) {
+      setNavDir('left');
       setCurrentStep(currentStep - 1);
     }
   };
@@ -517,6 +773,7 @@ const CallScriptPage = () => {
         <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-xl px-6">
           <div className="bg-white border border-cactus-300 shadow-lg rounded-xl p-5 flex flex-col gap-3 relative animate-fade-in">
             <button
+              type="button"
               className="absolute top-2 right-2 text-cactus-500 hover:text-cactus-700 text-lg font-bold"
               onClick={() => setShowInfoPopup(false)}
               title="Fermer"
@@ -524,7 +781,7 @@ const CallScriptPage = () => {
               ×
             </button>
             <h2 className="text-lg font-semibold text-cactus-700 mb-1">Mail d'accompagnement</h2>
-            <p className="text-sm text-gray-700 leading-relaxed">
+            <p className="text-sm text-black leading-relaxed">
               <span className="font-semibold text-cactus-700">Ce texte est à utiliser comme mail d'accompagnement après votre appel.</span><br /><br />
               Comme convenu, je vous transmets par ce mail le récapitulatif de l’offre présentée lors de notre échange.<br />
               Je vous invite à en prendre connaissance et reste à votre disposition pour toute précision complémentaire.<br />
@@ -536,6 +793,7 @@ const CallScriptPage = () => {
       )}
       {!showInfoPopup && (
         <button
+          type="button"
           className="fixed top-6 right-8 z-50 bg-cactus-600 hover:bg-cactus-700 text-white rounded-full shadow-lg p-3 flex items-center justify-center transition-colors"
           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
           onClick={() => setShowInfoPopup(true)}
@@ -545,88 +803,162 @@ const CallScriptPage = () => {
         </button>
       )}
       <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-4 bg-gradient-to-r from-cactus-50 to-white border border-cactus-100 rounded-lg px-4 py-3">
           <h1 className="text-2xl font-bold text-gray-900">Script d'appel</h1>
           <button
+            type="button"
             onClick={resetScript}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2 text-black hover:text-black border border-gray-300 rounded-lg hover:bg-gray-50 bg-white/80 backdrop-blur"
           >
             <RotateCcw className="w-4 h-4" /> Nouveau script
           </button>
         </div>
 
-        <div className="w-full bg-gray-200 rounded-full h-2">
+        <div className="w-full bg-gray-200 rounded-full h-2 shadow-inner">
           <div
-            className="bg-cactus-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${((currentStep + 1) / 6) * 100}%` }}
+            className="h-2 rounded-full transition-all duration-300 bg-gradient-to-r from-cactus-600 to-cactus-500"
+            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
           />
         </div>
-        <div className="flex justify-between text-sm text-gray-600 mt-2">
-          <span>Étape {currentStep + 1} sur 6</span>
-          <span>{Math.round(((currentStep + 1) / 6) * 100)}% complété</span>
+        <div className="flex justify-between text-sm text-black mt-2">
+          <span>Étape {currentStep + 1} sur {steps.length}</span>
+          <span>{Math.round(((currentStep + 1) / steps.length) * 100)}% complété</span>
         </div>
+
+        {/* Stepper animé - visible uniquement en mode wizard */}
+        {mode === 'wizard' && (
+          <div className="mt-4 overflow-x-auto">
+            <div className="flex items-center gap-2 min-w-max anim-soft-in">
+              {steps.map((s, i) => {
+                const completed = i < currentStep;
+                const active = i === currentStep;
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(i)}
+                      aria-current={active ? 'step' : undefined}
+                      className={
+                        "relative group flex items-center gap-2 px-3 py-2 rounded-full border transition-all duration-200 " +
+                        (completed
+                          ? 'bg-cactus-600 border-cactus-600 text-white shadow-sm hover:bg-cactus-700'
+                          : active
+                          ? 'border-cactus-400 text-cactus-800 bg-cactus-50'
+                          : 'border-gray-200 text-black hover:bg-gray-50')
+                      }
+                    >
+                      <span
+                        className={
+                          "h-6 w-6 text-xs flex items-center justify-center rounded-full font-semibold " +
+                          (completed
+                            ? 'bg-white/20 text-white'
+                            : active
+                            ? 'bg-cactus-200 text-cactus-900'
+                            : 'bg-gray-100 text-black')
+                        }
+                      >
+                        {completed ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                      </span>
+                      <span className="text-xs font-medium truncate max-w-[160px]">{s.title}</span>
+
+                      {active && (
+                        <span className="absolute inset-0 rounded-full ring-2 ring-cactus-300/70 pointer-events-none animate-pulse" />
+                      )}
+                    </button>
+                    {i < steps.length - 1 && (
+                      <div className={`h-0.5 w-6 rounded ${i < currentStep ? 'bg-cactus-500' : 'bg-gray-200'}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Steps navigation */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100 sticky top-6">
-            <h2 className="font-semibold text-gray-900 mb-4">
-              Étapes du script
-            </h2>
-            <div className="space-y-2">
-              {steps.map((step, index) => (
-                <button
-                  key={index}
-                  onClick={() => setCurrentStep(index)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    currentStep === index
-                      ? "bg-cactus-100 text-cactus-800 border border-cactus-300"
-                      : "text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    {step.icon}
-                    <span className="text-sm font-medium">{step.title}</span>
-                  </div>
-                </button>
-              ))}
+        {/* Steps navigation - only in wizard mode */}
+        {mode === 'wizard' && (
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100 sticky top-6">
+              <h2 className="font-semibold text-black mb-4">Étapes du script</h2>
+              <div className="space-y-2">
+                {steps.map((step, index) => (
+                  <button
+                    type="button"
+                    key={index}
+                    onClick={() => setCurrentStep(index)}
+                    className={"w-full text-left p-3 rounded-lg transition-colors " + (
+                      currentStep === index
+                        ? "bg-cactus-100 text-cactus-800 border border-cactus-300"
+                        : "text-black hover:bg-gray-50"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      {step.icon}
+                      <span className="text-sm font-medium">{step.title}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Main content */}
-        <div className="lg:col-span-3">
+        <div className={mode === 'wizard' ? "lg:col-span-3" : "lg:col-span-4"}>
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
             <div className="flex items-center gap-3 mb-6">
-              {steps[currentStep].icon}
-              <h2 className="text-xl font-semibold text-gray-900">
-                {steps[currentStep].title}
-              </h2>
+              <h2 className="text-xl font-semibold text-black">{mode === 'flow' ? 'Script en arborescence' : steps[currentStep].title}</h2>
+              <div className="ml-auto inline-flex rounded-lg border border-gray-200">
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 text-sm rounded-l-lg ${mode==='flow' ? 'bg-cactus-100 text-cactus-800' : 'text-black hover:bg-gray-50'}`}
+                  onClick={()=> setMode('flow')}
+                >Arborescence</button>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 text-sm rounded-r-lg ${mode==='wizard' ? 'bg-cactus-100 text-cactus-800' : 'text-black hover:bg-gray-50'}`}
+                  onClick={()=> setMode('wizard')}
+                >Étapes</button>
+              </div>
             </div>
 
-            {steps[currentStep].content}
+            <div className={`${navDir === 'right' ? 'anim-in-right' : 'anim-in-left'}`} key={`${mode}-${currentStep}`}>
+              {mode === 'flow' ? (
+                <CallDecisionFlow nodes={flowNodes} rootId="root" />
+              ) : (
+                <>
+                  {steps[currentStep].icon}
+                  {steps[currentStep].content}
+                </>
+              )}
+            </div>
 
             {/* Navigation buttons */}
-            <div className="flex justify-between mt-8">
-              <button
-                onClick={prevStep}
-                disabled={currentStep === 0}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Précédent
-              </button>
+            {mode === 'wizard' && (
+              <div className="flex justify-between mt-8">
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={currentStep === 0}
+                  className="flex items-center gap-2 px-4 py-2 text-black hover:text-black disabled:opacity-50 disabled:cursor-not-allowed hover-lift transition-transform"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Précédent
+                </button>
 
-              <button
-                onClick={nextStep}
-                disabled={currentStep === steps.length - 1}
-                className="flex items-center gap-2 px-4 py-2 bg-cactus-600 text-white rounded-lg hover:bg-cactus-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Suivant
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={currentStep === steps.length - 1}
+                  className="flex items-center gap-2 px-4 py-2 bg-cactus-600 text-white rounded-lg hover:bg-cactus-700 disabled:opacity-50 disabled:cursor-not-allowed hover-lift transition-transform"
+                >
+                  Suivant
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

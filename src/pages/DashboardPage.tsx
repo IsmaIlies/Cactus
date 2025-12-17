@@ -1,8 +1,11 @@
 ﻿import React from "react";
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase';
 import RightSidebar from "../components/RightSidebar";
 import { useLocation, useParams, Navigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import NewMessageNotifier from "../components/NewMessageNotifier";
+// AdminPresenceDebugBadge retiré définitivement
 import DashboardHome from "./DashboardHome";
 import SalesPage from "./SalesPage";
 import SettingsPage from "./SettingsPage";
@@ -17,10 +20,12 @@ import FaqPage from "./FaqPage";
 import NouveautesPage from "./NouveautesPage";
 import MySalesPage from "./MySalesPage";
 import { useRegion } from '../contexts/RegionContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Menu, X } from "lucide-react";
 
 const DashboardPage: React.FC = () => {
   const location = useLocation();
+  const { user } = useAuth();
   // Right sidebar enabled except on ModeTVCasino page
   const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(true);
 
@@ -45,6 +50,33 @@ const DashboardPage: React.FC = () => {
     }
   }, [regionLower, ctxRegion, setRegion]);
   const base = `/dashboard/${regionLower}`;
+
+  // Heartbeat fallback for ALL agents on any dashboard page
+  React.useEffect(() => {
+    if (!user) return;
+    const ref = doc(db, 'users', user.id);
+    let stopped = false;
+    const send = async () => {
+      if (stopped) return;
+      try {
+        await setDoc(ref, {
+          lastActive: serverTimestamp(),
+          lastPing: Date.now(),
+          isOnline: true,
+          email: user.email || undefined,
+          displayName: user.displayName || undefined,
+        }, { merge: true });
+      } catch (e) {
+        if (localStorage.getItem('presenceDebug')==='1') {
+          // eslint-disable-next-line no-console
+          console.warn('[presence] dashboard heartbeat failed', e);
+        }
+      }
+    };
+    send();
+    const id = setInterval(send, 2 * 60 * 1000);
+    return () => { stopped = true; try { clearInterval(id); } catch {} };
+  }, [user, location.pathname]);
 
   // DÃ©termine la page active Ã  partir de l'URL
   const p = location.pathname;
@@ -199,6 +231,8 @@ const DashboardPage: React.FC = () => {
       )}
     {/* Notifications nouveaux messages (global) */}
     <NewMessageNotifier />
+    {/* Badge debug (visible admin/flag) */}
+    {/* Debug présence retiré */}
     </div>
   );
 };

@@ -150,3 +150,12 @@ export const addToRoster = async (item: RosterItem) => {
   const next = exists ? current : [...current, item];
   await setDoc(rosterDocRef(), { agents: next }, { merge: true });
 };
+
+// Remove one or multiple agents from roster by id
+export const removeFromRoster = async (ids: string[] | string) => {
+  const targets = Array.isArray(ids) ? ids : [ids];
+  if (targets.length === 0) return;
+  const current = await getRoster();
+  const next = current.filter((a) => !targets.includes(a.id));
+  await setDoc(rosterDocRef(), { agents: next }, { merge: true });
+};

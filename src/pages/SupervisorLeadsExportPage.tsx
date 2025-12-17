@@ -13,6 +13,7 @@ type LeadRow = {
   completedAt: Date | null;
   email: string | null;
   displayName: string | null;
+  createdByUserId: string | null;
   numeroId: string | null;
   typeOffre: string | null;
   intituleOffre: string | null;
@@ -22,6 +23,13 @@ type LeadRow = {
   origineLead: string | null;
   dateTechnicien: string | null;
   telephone: string | null;
+};
+
+type AgentDirectoryEntry = {
+  userId: string;
+  displayName: string;
+  email: string;
+  label: string;
 };
 
 const HEADERS = [
@@ -178,6 +186,22 @@ const SupervisorLeadsExportPage: React.FC = () => {
   const totalOffers = React.useMemo(() => offerGroups?.find(g => g.name.toLowerCase() === 'total')?.items.length
     ?? offerSuggestions.length
     ?? 0, [offerGroups, offerSuggestions]);
+  const agentDirectory: AgentDirectoryEntry[] = React.useMemo(() => {
+    const map = new Map<string, AgentDirectoryEntry>();
+    rows.forEach((row) => {
+      if (!row.createdByUserId) return;
+      if (!map.has(row.createdByUserId)) {
+        map.set(row.createdByUserId, {
+          userId: row.createdByUserId,
+          displayName: row.displayName || "",
+          email: row.email || "",
+          label: (row.displayName || row.email || row.createdByUserId) as string,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "fr", { sensitivity: "base" }));
+  }, [rows]);
+  const [agentSelection, setAgentSelection] = React.useState<string>("__custom__");
 
   React.useEffect(() => {
     (async () => {
@@ -200,6 +224,9 @@ const SupervisorLeadsExportPage: React.FC = () => {
     })();
   }, []);
 
+  // Répertoire agents (users collection) pour réaffecter proprement les ventes
+  // plus de chargement de tous les users — on ne liste que les téléacteurs présents dans les ventes LEADS
+
   // Chargement Firestore
   React.useEffect(() => {
     setLoading(true);
@@ -219,12 +246,14 @@ const SupervisorLeadsExportPage: React.FC = () => {
           const completedAt = completedAtSource instanceof Timestamp ? completedAtSource.toDate() : null;
           const createdBy = (data?.createdBy ?? {}) as Record<string, unknown>;
           const resolvedDisplayName = resolveAgentLabel(createdBy?.displayName as string | undefined, createdBy?.email as string | undefined);
+          const createdByUserId = typeof createdBy?.userId === "string" ? createdBy.userId : null;
           return {
             id: doc.id,
             startedAt,
             completedAt,
             email: (createdBy?.email as string | undefined) ?? null,
             displayName: resolvedDisplayName,
+            createdByUserId,
             numeroId: (data?.numeroId as string | undefined) ?? null,
             typeOffre: (data?.typeOffre as string | undefined) ?? null,
             intituleOffre: (data?.intituleOffre as string | undefined) ?? null,
@@ -340,6 +369,7 @@ const SupervisorLeadsExportPage: React.FC = () => {
     setEditData(next);
     setEditingRow(row);
     setModalError(null);
+    setAgentSelection(row.createdByUserId || "__custom__");
   };
 
   const closeEditModal = () => {
@@ -347,10 +377,22 @@ const SupervisorLeadsExportPage: React.FC = () => {
     setModalError(null);
     setSaving(false);
     setDeleting(false);
+    setAgentSelection("__custom__");
   };
 
   const handleFieldChange = (field: EditableField, value: string) => {
     setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAgentSelectChange = (value: string) => {
+    setAgentSelection(value);
+    if (value && value !== "__custom__") {
+      const agent = agentDirectory.find((entry) => entry.userId === value);
+      if (agent) {
+        const label = agent.displayName || agent.label || agent.email || agent.userId;
+        setEditData((prev) => ({ ...prev, displayName: label }));
+      }
+    }
   };
 
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -392,8 +434,26 @@ const SupervisorLeadsExportPage: React.FC = () => {
       }
       const updatePayload: Record<string, any> = { ...updates };
       const newDisplayName = (editData.displayName || "").trim();
-      if (newDisplayName) {
-        updatePayload["createdBy.displayName"] = newDisplayName;
+      const trimmedDisplayName = newDisplayName.length > 0 ? newDisplayName : null;
+      if (agentSelection && agentSelection !== "__custom__") {
+        const agent =
+          agentDirectory.find((entry) => entry.userId === agentSelection) ||
+          (editingRow.createdByUserId === agentSelection
+            ? {
+                userId: agentSelection,
+                displayName: editingRow.displayName || "",
+                email: editingRow.email || "",
+                label: editingRow.displayName || editingRow.email || agentSelection,
+              }
+            : undefined);
+        if (!agent) {
+          throw new Error("Agent introuvable. Recharge la page et réessaie.");
+        }
+        updatePayload["createdBy.userId"] = agent.userId;
+        updatePayload["createdBy.displayName"] = agent.displayName || trimmedDisplayName || agent.label;
+        updatePayload["createdBy.email"] = agent.email || null;
+      } else if (trimmedDisplayName !== null) {
+        updatePayload["createdBy.displayName"] = trimmedDisplayName;
       }
       await updateDoc(doc(db, "leads_sales", editingRow.id), updatePayload);
       closeEditModal();
@@ -701,18 +761,37 @@ const SupervisorLeadsExportPage: React.FC = () => {
                 <label key={key} className="flex flex-col gap-1 text-xs uppercase tracking-[0.3em] text-slate-600">
                   {label}
                   {key === "displayName" ? (
-                    <select
-                      value={editData.displayName}
-                      onChange={(e) => handleFieldChange("displayName", e.target.value)}
-                      className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
-                    >
-                      <option value="">Sélectionner un téléacteur</option>
-                      {agentOptions.map((agent) => (
-                        <option key={agent} value={agent}>
-                          {agent}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-2">
+                      <select
+                        value={agentSelection}
+                        onChange={(e) => handleAgentSelectChange(e.target.value)}
+                        className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                      >
+                        <option value="__custom__">Sélectionner dans la liste</option>
+                        {agentDirectory.map((agent) => (
+                          <option key={agent.userId} value={agent.userId}>
+                            {agent.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={editData.displayName}
+                        onChange={(event) => {
+                          handleFieldChange("displayName", event.target.value);
+                          if (agentSelection !== "__custom__") {
+                            setAgentSelection("__custom__");
+                          }
+                        }}
+                        placeholder="Nom affiché (libre)"
+                        className="rounded-xl border border-sky-200/70 bg-white px-4 py-2 text-sm text-slate-800 shadow-[0_12px_32px_rgba(14,116,144,0.16)] focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60"
+                      />
+                      {agentSelection !== "__custom__" && (
+                        <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500">
+                          UID sélectionné : {agentSelection}
+                        </p>
+                      )}
+                    </div>
                   ) : key === "typeOffre" ? (
                     <select
                       value={editData.typeOffre}

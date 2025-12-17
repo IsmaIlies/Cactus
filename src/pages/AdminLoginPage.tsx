@@ -1,16 +1,19 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { auth as firebaseAuth } from "../firebase";
 
 const ALLOWED_ADMINS = [
   "i.boultame@mars-marketing.fr",
   "i.brai@mars-marketing.fr",
+  "i.boultame@orange.mars-marketing.fr",
+  "i.brai@orange.mars-marketing.fr",
 ];
 
 const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginWithMicrosoft, logout, user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +39,31 @@ const AdminLoginPage: React.FC = () => {
       } else {
         setError(message || "Identifiants invalides. Veuillez réessayer.");
       }
+    } catch (err) {
+      setError("Impossible de vous connecter pour le moment.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMicrosoftLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const hint = email.trim().toLowerCase();
+      const ok = await loginWithMicrosoft(hint);
+      if (!ok) {
+        setError("Échec de la connexion avec Microsoft. Veuillez réessayer.");
+        return;
+      }
+      const signedEmail = (firebaseAuth.currentUser?.email || user?.email || "").toLowerCase();
+      if (!ALLOWED_ADMINS.includes(signedEmail)) {
+        setError("Accès refusé. Réservé à l'équipe Cactus.");
+        try { await logout(); } catch {}
+        return;
+      }
+      localStorage.setItem("adminAuth", "1");
+      navigate("/admin/dashboard");
     } catch (err) {
       setError("Impossible de vous connecter pour le moment.");
     } finally {
@@ -123,6 +151,21 @@ const AdminLoginPage: React.FC = () => {
                 <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.32),transparent_55%),radial-gradient(circle_at_75%_85%,rgba(120,180,255,0.25),transparent_60%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <span className="pointer-events-none absolute inset-0 -translate-y-full bg-gradient-to-br from-white/55 via-transparent to-transparent opacity-0 transition-all duration-500 ease-out group-hover:translate-y-0 group-hover:opacity-100" />
                 <span className="relative">{loading ? "Connexion..." : "Connexion"}</span>
+              </button>
+
+              <div className="relative my-2 flex items-center justify-center">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-white/40">ou</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleMicrosoftLogin}
+                disabled={loading}
+                className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-full border border-white/15 bg-[#111b2d] px-6 py-3 text-sm font-semibold text-white shadow-[0_22px_60px_rgba(15,23,42,0.55)] transition-all duration-300 hover:scale-[1.02] hover:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Se connecter avec Microsoft"
+              >
+                <ShieldCheck className="h-4 w-4 text-white/80" />
+                <span>Se connecter avec Microsoft</span>
               </button>
             </form>
 

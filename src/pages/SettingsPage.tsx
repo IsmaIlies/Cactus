@@ -104,6 +104,7 @@ const SettingsPage = () => {
 
   const handleMigrateEmail = async () => {
     if (!user?.email) return;
+    const targetEmail = (msEmailHint || '').trim().toLowerCase();
     const localPart = user.email.split('@')[0];
     setMigrating(true);
     try {
@@ -115,11 +116,11 @@ const SettingsPage = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ localPart })
+        body: JSON.stringify(targetEmail ? { targetEmail } : { localPart })
       });
       const data = await resp.json();
       if (resp.ok && data?.ok) {
-        const newEmail = data.newEmail || `${localPart}@orange.mars-marketing.fr`;
+        const newEmail = data.newEmail || targetEmail || `${localPart}@orange.mars-marketing.fr`;
         setEmail(newEmail);
         showMessage('success', `Email migré vers ${newEmail}`);
       } else if (resp.ok && data?.skipped) {

@@ -160,7 +160,9 @@ const LeadsDashboardPage: React.FC = () => {
       if (ok) {
         setActionMsg('Compte Microsoft synchronisé.');
       } else {
-        setActionMsg("Échec de la synchronisation Microsoft.");
+        const last = (window as any).__authLastMsError;
+        const code = last?.code ? String(last.code) : null;
+        setActionMsg(code ? `Échec de la synchronisation Microsoft (${code}).` : "Échec de la synchronisation Microsoft.");
       }
     } catch (e:any) {
       setActionMsg(e?.message || 'Erreur de synchronisation.');
@@ -173,18 +175,28 @@ const LeadsDashboardPage: React.FC = () => {
     setActionMsg(null);
     setMigrating(true);
     try {
-      const localPart = (user.email || '').split('@')[0];
+      // Extraire le localPart et retirer un éventuel suffixe Gmail '+tag'
+      let rawLocal = (user.email || '').split('@')[0];
+      if (rawLocal.includes('+')) rawLocal = rawLocal.split('+')[0];
+      const localPart = rawLocal.replace(/[^a-z0-9._-]/gi, '').toLowerCase();
+      if (!localPart) throw new Error('localPart invalide après normalisation');
+      const targetEmail = (msEmailHint || '').trim().toLowerCase();
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) throw new Error('Utilisateur non authentifié');
-      const resp = await fetch('/api/update-email', {
+      // Déterminer l'URL de l'endpoint selon l'environnement (dev Vite n'a pas de proxy pour update-email)
+      const baseFn = 'https://europe-west9-cactus-mm.cloudfunctions.net/updatePrimaryEmailIfMicrosoftLinkedHttp';
+      const isLocal = typeof window !== 'undefined' && /localhost|127\.0\.0\.1/.test(window.location.hostname);
+      const endpoint = isLocal ? baseFn : '/api/update-email';
+      const resp = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ localPart })
+        body: JSON.stringify(targetEmail ? { targetEmail } : { localPart })
       });
-      const data = await resp.json();
+      let data: any = null;
+      try { data = await resp.clone().json(); } catch { /* Corps vide ou non JSON */ }
       if (resp.ok && (data?.ok || data?.skipped)) {
         try { await reloadUser(); } catch {}
         setActionMsg(data?.ok ? 'Email migré avec succès.' : 'Déjà migré.');
@@ -194,8 +206,14 @@ const LeadsDashboardPage: React.FC = () => {
         setActionMsg('Nouvel email déjà utilisé.');
       } else if (resp.status === 404) {
         setActionMsg('Utilisateur introuvable.');
+      } else if (resp.status === 405) {
+        setActionMsg('Méthode non autorisée sur endpoint de migration.');
+      } else if (resp.status === 500) {
+        setActionMsg(data?.error ? `Erreur serveur: ${data.error}` : 'Erreur interne lors de la migration.');
+      } else if (resp.status === 404 && isLocal) {
+        setActionMsg('Endpoint non disponible en mode dev. Utilise le domaine hébergé ou l’URL Cloud Function directe.');
       } else {
-        setActionMsg(data?.error || 'Migration impossible.');
+        setActionMsg(data?.error || `Migration impossible (HTTP ${resp.status}).`);
       }
     } catch (e:any) {
       setActionMsg(e?.message || 'Erreur migration email');

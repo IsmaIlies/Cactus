@@ -1,6 +1,6 @@
 import React from 'react';
 import LeadInflowConversionPanel from '../components/LeadInflowConversionPanel';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { categorize } from '../leads/services/leadsSalesService';
@@ -120,6 +120,7 @@ const monthlyChartOptions = {
 const SupervisorLeadsDashboard2: React.FC = () => {
   const { area } = useParams<{ area: string }>();
   const normalizedArea = (area || '').toLowerCase();
+  const navigate = useNavigate();
 
   // Region switcher (FR/CIV) replacing "Changer d'espace"
   const [region, setRegion] = React.useState<'FR' | 'CIV'>(() => {
@@ -129,13 +130,7 @@ const SupervisorLeadsDashboard2: React.FC = () => {
       return 'FR';
     }
   });
-  const [regionMenuOpen, setRegionMenuOpen] = React.useState(false);
-  const toggleRegionMenu = () => setRegionMenuOpen((v) => !v);
-  const handleRegionChange = (r: 'FR' | 'CIV') => {
-    setRegion(r);
-    try { localStorage.setItem('activeRegion', r); } catch {}
-    setRegionMenuOpen(false);
-  };
+  // Menu removed: we only display the current active space (region)
 
   const [sourceBreakdown, setSourceBreakdown] = React.useState<Record<LeadSourceKey, LeadBreakdown>>({
     opportunity: createEmptyBreakdown(),
@@ -344,32 +339,8 @@ const SupervisorLeadsDashboard2: React.FC = () => {
               : 'Vision temps réel des performances ORANGE_LEADS (jour).'}
           </p>
         </div>
-        {/* Region dropdown */}
-        <div className="relative">
-          <button
-            onClick={toggleRegionMenu}
-            className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-blue-100 hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
-          >
-            Superviseur Leads — {region}
-          </button>
-          {regionMenuOpen && (
-            <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#0a1430] shadow-xl">
-              <div className="px-3 py-2 text-[11px] uppercase tracking-[0.25em] text-blue-300/70">Choisir l’espace</div>
-              <button
-                onClick={() => handleRegionChange('FR')}
-                className={`block w-full px-4 py-2 text-left text-sm hover:bg-white/10 ${region === 'FR' ? 'text-white' : 'text-blue-100/90'}`}
-              >
-                Leads — Superviseur FR
-              </button>
-              <button
-                onClick={() => handleRegionChange('CIV')}
-                className={`block w-full px-4 py-2 text-left text-sm hover:bg-white/10 ${region === 'CIV' ? 'text-white' : 'text-blue-100/90'}`}
-              >
-                Leads — Superviseur CIV
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Current space indicator only */}
+        <SpaceIndicator region={region} />
       </header>
 
       {error && (
@@ -486,3 +457,12 @@ const SupervisorLeadsDashboard2: React.FC = () => {
 };
 
 export default SupervisorLeadsDashboard2;
+
+// Small header helper: shows current space only (no navigation button)
+const SpaceIndicator: React.FC<{ region: 'FR' | 'CIV' }> = ({ region }) => {
+  return (
+    <span className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-blue-100">
+      Superviseur Leads — {region}
+    </span>
+  );
+};

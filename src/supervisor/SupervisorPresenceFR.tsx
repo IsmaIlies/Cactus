@@ -11,6 +11,7 @@ import {
   subscribeAttendance,
   patchEntryName,
   getAttendancesInRange,
+  removeFromRoster,
 } from "../services/attendanceService";
 
 const pad = (n: number) => n.toString().padStart(2, "0");
@@ -23,10 +24,8 @@ const SupervisorPresenceFR: React.FC = () => {
   const [attendance, setAttendance] = React.useState<AttendanceDoc | null>(null);
   const [roster, setRoster] = React.useState<RosterItem[]>([]);
   const [newName, setNewName] = React.useState("");
+  const [selected, setSelected] = React.useState<Record<string, boolean>>({});
   // History controls
-  const daysAgo = (n: number) => {
-    const d = new Date(); d.setDate(d.getDate()-n); return d;
-  };
   // Par défaut: aujourd'hui → aujourd'hui
   const [histStart, setHistStart] = React.useState<string>(() => toYMD(new Date()));
   const [histEnd, setHistEnd] = React.useState<string>(() => toYMD(new Date()));
@@ -153,8 +152,15 @@ const SupervisorPresenceFR: React.FC = () => {
   const presentPM = pmList.length;
   const phraseCount = (n:number) => `Il y a ${n} personne${n>1?'s':''} présente${n>1?'s':''}`;
 
-  const handleToggle = async (name: string, part: "am" | "pm", checked: boolean) => {
-    const id = slug(name);
+  const handleToggle = async (id: string, name: string, part: "am" | "pm", checked: boolean) => {
+    // Optimistic UI update so the checkbox and counters reflect immediately
+    setAttendance((prev) => {
+      const base: AttendanceDoc = prev || { region: "FR", date: dateStr, entries: {} };
+      const current = base.entries[id] || { name, am: false, pm: false, agentId: id };
+      const nextEntry = { ...current, [part]: checked } as any;
+      return { ...base, entries: { ...base.entries, [id]: nextEntry } };
+    });
+    // Persist to Firestore
     await setPresence(dateStr, id, name, part, checked, (user as any)?.uid);
   };
 
@@ -165,6 +171,37 @@ const SupervisorPresenceFR: React.FC = () => {
     await addToRoster(item);
     setRoster((prev) => (prev.some((x) => x.id === item.id) ? prev : [...prev, item]));
     setNewName("");
+  };
+
+  const toggleSelect = (id: string, checked: boolean) => {
+    setSelected((prev) => ({ ...prev, [id]: checked }));
+  };
+
+  const allSelected = React.useMemo(() => {
+    if (roster.length === 0) return false;
+    return roster.every((r) => selected[r.id]);
+  }, [roster, selected]);
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const next: Record<string, boolean> = {};
+      roster.forEach((r) => { next[r.id] = true; });
+      setSelected(next);
+    } else {
+      setSelected({});
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = roster.filter((r) => selected[r.id]).map((r) => r.id);
+    if (ids.length === 0) return;
+    const confirmMsg = ids.length === 1
+      ? `Supprimer définitivement ce TA du roster ?`
+      : `Supprimer définitivement ${ids.length} TAs du roster ?`;
+    if (!window.confirm(confirmMsg)) return;
+    await removeFromRoster(ids);
+    setRoster((prev) => prev.filter((r) => !ids.includes(r.id)));
+    setSelected({});
   };
 
   // Compose full list for the day from roster (sorted)
@@ -213,6 +250,15 @@ const SupervisorPresenceFR: React.FC = () => {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {Object.values(selected).some(Boolean) && (
+            <button
+              onClick={handleDeleteSelected}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-md bg-red-600/80 hover:bg-red-600 text-white"
+              title="Supprimer la sélection du roster FR"
+            >
+              Supprimer sélection
+            </button>
+          )}
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -233,6 +279,11 @@ const SupervisorPresenceFR: React.FC = () => {
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 bg-slate-900/70 backdrop-blur border-b border-white/10 text-blue-200">
             <tr>
+              <th className="text-left p-3 w-10">
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" className="accent-cactus-600" checked={allSelected} onChange={(e)=>toggleSelectAll(e.target.checked)} />
+                </label>
+              </th>
               <th className="text-left p-3">Nom</th>
               <th className="text-left p-3">AM</th>
               <th className="text-left p-3">PM</th>
@@ -243,13 +294,22 @@ const SupervisorPresenceFR: React.FC = () => {
               const e = entries[r.id] || { name: r.name, am: false, pm: false };
               return (
                 <tr key={r.id} className="border-t border-white/10 hover:bg-white/5">
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={!!selected[r.id]}
+                      onChange={(ev)=>toggleSelect(r.id, ev.target.checked)}
+                      className="accent-cactus-600"
+                      aria-label={`Sélectionner ${r.name}`}
+                    />
+                  </td>
                   <td className="p-3 text-white">{r.name}</td>
                   <td className="p-3">
                     <label className="inline-flex items-center gap-2 text-blue-100">
                       <input
                         type="checkbox"
                         checked={!!e.am}
-                        onChange={(ev) => handleToggle(r.name, "am", ev.target.checked)}
+                        onChange={(ev) => handleToggle(r.id, r.name, "am", ev.target.checked)}
                         className="accent-cactus-600"
                       />
                       <span className="hidden sm:inline">Présent AM</span>
@@ -260,7 +320,7 @@ const SupervisorPresenceFR: React.FC = () => {
                       <input
                         type="checkbox"
                         checked={!!e.pm}
-                        onChange={(ev) => handleToggle(r.name, "pm", ev.target.checked)}
+                        onChange={(ev) => handleToggle(r.id, r.name, "pm", ev.target.checked)}
                         className="accent-cactus-600"
                       />
                       <span className="hidden sm:inline">Présent PM</span>
@@ -271,7 +331,7 @@ const SupervisorPresenceFR: React.FC = () => {
             })}
             {rows.length === 0 && (
               <tr className="border-t border-white/10">
-                <td className="p-3 text-blue-200" colSpan={3}>Aucun TA dans le roster. Ajoutez un nom ci‑dessus.</td>
+                <td className="p-3 text-blue-200" colSpan={4}>Aucun TA dans le roster. Ajoutez un nom ci‑dessus.</td>
               </tr>
             )}
           </tbody>

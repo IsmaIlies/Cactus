@@ -749,9 +749,15 @@ const filteredSales = normalizedQuery
                         )}
                       </div>
                     ) : (
-                      <div className="text-[10px] leading-tight">
-                        <div className="font-semibold">{sale.clientFirstName} {sale.clientLastName}</div>
-                        {sale.clientPhone && <div className="text-gray-500">{sale.clientPhone}</div>}
+                      <div className="text-[10px] leading-tight" style={{ color: '#000' }}>
+                        <div className="font-semibold text-gray-900" style={{ color: '#000' }}>
+                          {sale.clientFirstName} {sale.clientLastName}
+                        </div>
+                        {sale.clientPhone && (
+                          <div className="text-gray-900" style={{ color: '#000' }}>
+                            {sale.clientPhone}
+                          </div>
+                        )}
                       </div>
                     )}
                   </td>

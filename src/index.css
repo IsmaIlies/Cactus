@@ -31,6 +31,71 @@
 .animate-fade-in {
   animation: fadeInSlide 0.5s ease;
 }
+
+/* Soft fade-in with slight rise */
+@keyframes fadeInSoft {
+  0% { opacity: 0; transform: translateY(4px) scale(0.99); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.anim-soft-in {
+  animation: fadeInSoft 280ms ease-out both;
+}
+
+/* Slide up (generic) */
+@keyframes slideUpSoft {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.anim-slide-up {
+  animation: slideUpSoft 320ms ease-out both;
+}
+
+/* Utility: subtle hover lift for cards/buttons */
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* Button ripple (centered) */
+.btn-ripple { position: relative; overflow: hidden; }
+.btn-ripple::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(16,185,129,0.25) 0%, rgba(16,185,129,0) 60%);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0.8;
+  pointer-events: none;
+}
+.btn-ripple:active::after {
+  transform: translate(-50%, -50%) scale(1);
+  transition: transform 420ms ease-out, opacity 600ms ease-out;
+  opacity: 0;
+}
+
+/* Slide-in animations for directional navigation */
+@keyframes slideInFromRight {
+  0% { opacity: 0; transform: translateX(12px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInFromLeft {
+  0% { opacity: 0; transform: translateX(-12px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.anim-in-right { animation: slideInFromRight 260ms ease-out both; }
+.anim-in-left { animation: slideInFromLeft 260ms ease-out both; }
+
+/* Soft ping for small dots */
+@keyframes pingSoft {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  70% { transform: scale(1.15); opacity: 0.2; }
+  100% { transform: scale(1); opacity: 0.1; }
+}
+.ping-soft { animation: pingSoft 1.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
 /* stylelint-disable */
 @tailwind base;
 @tailwind components;

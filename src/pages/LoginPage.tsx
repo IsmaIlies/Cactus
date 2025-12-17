@@ -2,11 +2,15 @@ import React, { useEffect, useState } from "react";
 import { firebaseConfig } from "../firebase";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { auth } from "../firebase";
+import SpacePickerModal from "../components/SpacePickerModal";
+import { fetchUserSpaces, AppSpace, spaceToRoute, getSpacesFromRole } from "../services/userSpaces";
 // auth import removed (region selection is manual, no Firestore region fetch needed)
 import { useRegion } from '../contexts/RegionContext';
 import { Eye, EyeOff, Cpu, ShieldCheck, Sparkles } from "lucide-react";
 
 const LoginPage = () => {
+  const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +22,9 @@ const LoginPage = () => {
   const [advRunning, setAdvRunning] = useState(false);
   const [advResults, setAdvResults] = useState<any | null>(null);
   const [showDiag, setShowDiag] = useState(false);
+  const [spaceModalOpen, setSpaceModalOpen] = useState(false);
+  const [spaceChoices, setSpaceChoices] = useState<AppSpace[]>([]);
+  const [spaceEmail, setSpaceEmail] = useState<string | null>(null);
   // Option B: whitelist temporary supervisor access based on email typed on login screen
   const SUPERVISOR_WHITELIST = [
     "i.brai@orange.mars-marketing.fr",
@@ -29,9 +36,11 @@ const LoginPage = () => {
     "j.pariolleau@mars-marketing.fr",
     "olivier@evenmedia.fr",
     "m.maimoun@mars-marketing.fr",
+    "m.maimoun@orange.mars-marketing.fr",
     "s.karabagli@mars-marketing.fr",
     "s.karabagli@orange.mars-marketing.fr",
     "a.gouet@mars-marketing.fr",
+    "a.gouet@orange.mars-marketing.fr",
     "i.brai@mars-marketing.fr",
 
   ]; // temporary
@@ -196,17 +205,75 @@ const LoginPage = () => {
       // Passer l'email saisi comme login_hint et pour tentative de pré-liaison
       const success = await loginWithMicrosoft(normalizedEmail);
       if (success) {
-        localStorage.setItem('activeRegion', selectedRegion);
-        localStorage.setItem('activeMission', mission);
-        setRegion(selectedRegion);
-        if (isSupervisorAllowed && supervisorTargetPath) {
-          try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
-          navigate(supervisorTargetPath);
-          try { sessionStorage.removeItem('supervisorTarget'); } catch {}
-        } else if (mission === 'ORANGE_LEADS') {
-          navigate('/leads/dashboard');
+        // Nouveau flux: détermine l'espace autorisé via Firestore userSpaces
+        const emailAfter = (auth.currentUser?.email || normalizedEmail || '').toLowerCase();
+        // 1) Prefer role-based spaces from user claims to be fully automatic
+        const roleSpaces = getSpacesFromRole(user?.role);
+        const { spaces: fsSpaces, defaultSpace } = await fetchUserSpaces(emailAfter);
+        const spaces = roleSpaces.length ? roleSpaces : fsSpaces;
+
+        const last = ((): AppSpace | null => {
+          const v = localStorage.getItem('lastSpace');
+          return v === 'CANAL_FR' || v === 'CANAL_CIV' || v === 'LEADS' ? (v as AppSpace) : null;
+        })();
+
+        const pickSupervisorSpace = (choice: SupervisorChoice | null): AppSpace | null => {
+          if (!choice) return null;
+          if (choice === 'fr') return 'CANAL_FR';
+          if (choice === 'civ') return 'CANAL_CIV';
+          if (choice === 'leads') return 'LEADS';
+          return null;
+        };
+
+        const navigateToSpace = (space: AppSpace, supervisor?: boolean) => {
+          try { localStorage.setItem('lastSpace', space); } catch {}
+          // Rétro-compat: positionner mission/region pour les composants existants
+          if (space === 'LEADS') {
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+          } else {
+            try { localStorage.setItem('activeMission', 'CANAL_PLUS'); } catch {}
+          }
+          if (space === 'CANAL_FR') {
+            try { localStorage.setItem('activeRegion', 'FR'); } catch {}
+            setRegion('FR');
+          } else if (space === 'CANAL_CIV') {
+            try { localStorage.setItem('activeRegion', 'CIV'); } catch {}
+            setRegion('CIV');
+          }
+          const path = spaceToRoute(space, supervisor);
+          navigate(path);
+        };
+
+        if (spaces.length === 0) {
+          // Aucun mapping trouvé: fallback sur logique actuelle pour ne pas bloquer
+          if (isSupervisorAllowed && supervisorTargetPath) {
+            try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
+            navigate(supervisorTargetPath);
+            try { sessionStorage.removeItem('supervisorTarget'); } catch {}
+          } else if (mission === 'ORANGE_LEADS') {
+            navigate('/leads/dashboard');
+          } else {
+            navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+          }
+        } else if (spaces.length === 1) {
+          const sole = spaces[0];
+          const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
+          const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && sole === requestedSupSpace;
+          navigateToSpace(sole, supervisorOk);
         } else {
-          navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+          // Multi-espaces: tenter default/last sinon ouvrir modal
+          const preferred = (last && spaces.includes(last))
+            ? last
+            : (defaultSpace && spaces.includes(defaultSpace) ? defaultSpace : null);
+          if (preferred) {
+            const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
+            const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && preferred === requestedSupSpace;
+            navigateToSpace(preferred, supervisorOk);
+          } else {
+            setSpaceChoices(spaces);
+            setSpaceEmail(emailAfter);
+            setSpaceModalOpen(true);
+          }
         }
       } else {
         setError("Échec de la connexion avec Microsoft. Veuillez réessayer.");
@@ -220,6 +287,31 @@ const LoginPage = () => {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <SpacePickerModal
+        open={spaceModalOpen}
+        email={spaceEmail}
+        spaces={spaceChoices}
+        onClose={() => setSpaceModalOpen(false)}
+        onSelect={(space) => {
+          const requestedSupSpace = supervisorChoice === 'fr' ? 'CANAL_FR' : supervisorChoice === 'civ' ? 'CANAL_CIV' : supervisorChoice === 'leads' ? 'LEADS' : null;
+          const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && requestedSupSpace === space;
+          try { localStorage.setItem('lastSpace', space); } catch {}
+          if (space === 'LEADS') {
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+          } else {
+            try { localStorage.setItem('activeMission', 'CANAL_PLUS'); } catch {}
+          }
+          if (space === 'CANAL_FR') {
+            try { localStorage.setItem('activeRegion', 'FR'); } catch {}
+            setRegion('FR');
+          } else if (space === 'CANAL_CIV') {
+            try { localStorage.setItem('activeRegion', 'CIV'); } catch {}
+            setRegion('CIV');
+          }
+          setSpaceModalOpen(false);
+          navigate(spaceToRoute(space, supervisorOk));
+        }}
+      />
       <div className="absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-[-320px] h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-cactus-500/25 blur-3xl" />
         <div className="absolute bottom-[-240px] right-[-200px] h-[680px] w-[680px] rounded-full bg-gradient-to-br from-cactus-400/30 via-transparent to-transparent blur-3xl" />
@@ -264,6 +356,34 @@ const LoginPage = () => {
                   Identifie-toi pour accéder à ton environnement personnalisé.
                 </p>
               </div>
+
+              {/* SSO migration notice */}
+              <div className="relative mb-6 overflow-hidden rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-emerald-500/10 to-transparent p-4">
+                <div className="pointer-events-none absolute inset-0 opacity-60">
+                  <div className="absolute -top-24 right-10 h-48 w-48 rounded-full bg-cyan-400/20 blur-3xl" />
+                  <div className="absolute -bottom-28 left-6 h-56 w-56 rounded-full bg-emerald-400/15 blur-3xl" />
+                </div>
+                <div className="relative flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0 rounded-lg border border-white/15 bg-white/10 p-2 text-cyan-200 shadow-[0_0_22px_rgba(34,211,238,0.25)]">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-200/80">Important</p>
+                    <h3 className="mt-1 text-sm font-semibold text-white">Migration SSO Microsoft (@orange.mars-marketing.fr)</h3>
+                    <p className="mt-1 text-[13px] leading-relaxed text-blue-100/85">
+                      Une fois connecté, merci de <span className="font-semibold text-cyan-200">lier et migrer votre compte</span> vers votre adresse
+                      <span className="mx-1 rounded-md border border-cyan-300/40 bg-cyan-500/10 px-1.5 py-0.5 text-[12px] text-cyan-100">@orange.mars-marketing.fr</span>.
+                      L’authentification par email + mot de passe sera bientôt retirée.
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-blue-100/80">
+                      <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5">1. Connexion</span>
+                      <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5">2. Lier Microsoft</span>
+                      <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5">3. Migrer vers @orange</span>
+                    </div>
+                  </div>
+                </div>
+                <span className="pointer-events-none absolute inset-x-6 bottom-0 h-[1px] animate-[shimmer_2.6s_ease_infinite] bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent" />
+              </div>
               <form onSubmit={handleSubmit} className="space-y-6">
                 {error && (
                   <div className="space-y-2">
@@ -290,9 +410,6 @@ const LoginPage = () => {
                 )}
 
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span className={isOnline ? 'text-emerald-300 font-medium' : 'text-red-300 font-medium'}>
-                    Statut réseau : {isOnline ? 'En ligne' : 'Hors ligne'}
-                  </span>
                   {networkOk !== null && (
                     <span className={networkOk ? 'text-emerald-300' : 'text-red-300'}>
                       Test: {networkOk ? 'OK' : 'Échec'}

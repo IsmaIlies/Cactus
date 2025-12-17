@@ -1,10 +1,12 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LayoutDashboard, Users, UserCheck2, BarChart3, Tv, LineChart } from "lucide-react";
-import { collection, getDocs, onSnapshot, QuerySnapshot, DocumentData, query, where } from "firebase/firestore";
+import { LayoutDashboard, Users, UserCheck2, BarChart3, Tv, LineChart, Crown, X, Trophy, ArrowUpDown, ChevronUp, ChevronDown, Award, Search, Check } from "lucide-react";
+import { collection, getDocs, onSnapshot, QuerySnapshot, DocumentData, query, where, doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from "firebase/functions";
-import { db } from "../firebase";
+import { db, auth as firebaseAuth } from "../firebase";
+import { getIdToken } from "firebase/auth";
+// AdminPresenceDebugBadge retiré définitivement
 import { subscribeEntriesByPeriod, type HoursEntryDoc } from "../services/hoursService";
 import { computeWorkedMinutes } from "../modules/checklist/lib/time";
 import { formatDayLabel, formatHours } from "../modules/checklist/lib/time";
@@ -16,9 +18,19 @@ type NavItem = {
   children?: NavItem[];
 };
 
+type CanalMonthlySale = {
+  id?: string;
+  dateMs: number;
+  region: "FR" | "CIV" | "OTHER";
+  seller: string;
+  sellerId?: string | null;
+  campaign?: string | null;
+};
+
 type NewUserForm = {
   firstName: string;
   lastName: string;
+  companyName: string;
   email: string;
   password: string;
   confirmPassword: string;
@@ -33,6 +45,7 @@ type AdminUserRow = {
   id: string;
   displayName: string;
   email: string;
+  companyName?: string;
   role?: string;
   status: "active" | "inactive" | "disabled";
   lastActiveMs?: number;
@@ -60,12 +73,74 @@ const navItems: NavItem[] = [
 const createEmptyNewUserForm = (): NewUserForm => ({
   firstName: "",
   lastName: "",
+  companyName: "",
   email: "",
   password: "",
   confirmPassword: "",
 });
 
-const ACTIVITY_WINDOW_MS = 1000 * 60 * 60; // 1 heure pour considérer un utilisateur actif
+// Fenêtre d'activité étendue à 2 heures pour refléter la présence réelle
+const ACTIVITY_WINDOW_MS = 1000 * 60 * 60 * 2; // 2 heures pour considérer un utilisateur actif
+
+const normalizeCampaignCode = (value: unknown): string | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "string") {
+    const clean = value.trim().toUpperCase();
+    const match = clean.match(/(210|211|214|216)/);
+    if (match) {
+      return match[1];
+    }
+    if (/^\d+$/.test(clean)) {
+      return clean;
+    }
+  }
+  return null;
+};
+
+const parseMonthInput = (value: string) => {
+  const [yearStr, monthStr] = value.split("-");
+  const parsedYear = Number(yearStr);
+  const parsedMonth = Number(monthStr);
+  if (!parsedYear || parsedMonth < 1 || parsedMonth > 12) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }
+  return { year: parsedYear, month: parsedMonth };
+};
+
+const getMonthBounds = (value: string) => {
+  const { year, month } = parseMonthInput(value);
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  const end = new Date(year, month, 1, 0, 0, 0, 0);
+  return { year, month, start, end };
+};
+
+const countBusinessDays = (start: Date, end: Date) => {
+  const cursor = new Date(start);
+  let count = 0;
+  while (cursor < end) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      count += 1;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+};
+
+const buildMonthOptions = (monthsBack = 6) => {
+  const list: Array<{ value: string; label: string }> = [];
+  const now = new Date();
+  for (let i = 0; i < monthsBack; i += 1) {
+    const ref = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`;
+    const label = ref.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    list.push({ value, label });
+  }
+  return list;
+};
 
 const StatCard: React.FC<{
   icon?: React.ComponentType<{ className?: string }>;
@@ -136,7 +211,7 @@ const formatDateLabel = (ms?: number) => {
 
 const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user: authUser } = useAuth();
 
   const functions = React.useMemo(() => {
     const instance = getFunctions(undefined, "europe-west9");
@@ -177,6 +252,31 @@ const AdminDashboardPage: React.FC = () => {
   const [selectedUserIds, setSelectedUserIds] = React.useState<string[]>([]);
   const [disableLoading, setDisableLoading] = React.useState<boolean>(false);
   const [disableFeedback, setDisableFeedback] = React.useState<CreateUserFeedback | null>(null);
+  // Role assignment state
+  const [showAssignRoleModal, setShowAssignRoleModal] = React.useState<boolean>(false);
+  const [assignRoleLoading, setAssignRoleLoading] = React.useState<boolean>(false);
+  const [assignRoleFeedback, setAssignRoleFeedback] = React.useState<CreateUserFeedback | null>(null);
+  const allowedRoles = React.useMemo(() => ([
+    "TA C+ FR",
+    "TA C+ CIV",
+    "TA LEADS FR",
+    "TA LEADS CIV",
+    "SUPERVISEUR C+ FR",
+    "SUPERVISEUR C+ CIV",
+    "SUPERVISEUR LEADS FR",
+    "SUPERVISEUR LEADS CIV",
+    "DIRECTION",
+    "ADMINISTRATEUR",
+  ]), []);
+  // Only specific admins can assign roles (frontend guard)
+  const roleAdmins = React.useMemo(() => ([
+    "i.brai@mars-marketing.fr",
+    "i.boultame@mars-marketing.fr",
+  ]), []);
+  const canAssignRoles = React.useMemo(() => {
+    const email = authUser?.email?.toLowerCase() || "";
+    return roleAdmins.includes(email);
+  }, [authUser?.email, roleAdmins]);
   // Admin Heures state
   const [hoursPeriod, setHoursPeriod] = React.useState<string>(() => new Date().toISOString().slice(0,7));
   const [hoursEntries, setHoursEntries] = React.useState<HoursEntryDoc[]>([]);
@@ -187,6 +287,7 @@ const AdminDashboardPage: React.FC = () => {
   const [newUserForm, setNewUserForm] = React.useState<NewUserForm>(() => createEmptyNewUserForm());
   const [createUserLoading, setCreateUserLoading] = React.useState<boolean>(false);
   const [createUserFeedback, setCreateUserFeedback] = React.useState<CreateUserFeedback | null>(null);
+  const [showRevokeConfirm, setShowRevokeConfirm] = React.useState<boolean>(false);
 
   const requestAuthStatsRefresh = React.useCallback(() => {
     setAuthStatsNonce((prev) => prev + 1);
@@ -194,6 +295,215 @@ const AdminDashboardPage: React.FC = () => {
   const [expandedNav, setExpandedNav] = React.useState<Record<string, boolean>>({});
   const [canalStats, setCanalStats] = React.useState({ fr: 0, civ: 0, total: 0, loading: true });
   const [canalError, setCanalError] = React.useState<string | null>(null);
+  // Monthly view selectors and derived data
+  const [canalMonth, setCanalMonth] = React.useState<string>(() => new Date().toISOString().slice(0,7));
+  const [canalRegionView, setCanalRegionView] = React.useState<'FR' | 'CIV'>(() => {
+    try { return localStorage.getItem('admin:canalRegion') === 'CIV' ? 'CIV' : 'FR'; } catch { return 'FR'; }
+  });
+  const [canalMonthlySales, setCanalMonthlySales] = React.useState<CanalMonthlySale[]>([]);
+  const [canalCampaignTotals, setCanalCampaignTotals] = React.useState<{ [k: string]: number }>({ '210': 0, '211': 0, '216': 0, '214': 0 });
+  const [canalObjectiveRows, setCanalObjectiveRows] = React.useState<Array<{ agent: string; ventes: number; objectif: number; pct: number }>>([]);
+  const [productionDaysInfo, setProductionDaysInfo] = React.useState<{ elapsed: number; total: number }>({ elapsed: 0, total: 0 });
+  // Tri du tableau Objectifs
+  type SortKey = 'agent' | 'ventes' | 'objectif' | 'pct';
+  const [sortKey, setSortKey] = React.useState<SortKey>('ventes');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
+  const toggleSort = (key: SortKey) => {
+    setSortKey((prevKey) => {
+      if (prevKey === key) {
+        // alterne asc/desc si même colonne
+        setSortDir((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'));
+        return prevKey;
+      }
+      // nouvelle colonne -> défaut desc (sauf agent -> asc)
+      setSortDir(key === 'agent' ? 'asc' : 'desc');
+      return key;
+    });
+  };
+  const objectiveDisplayRows = React.useMemo(() => {
+    const rows = [...canalObjectiveRows];
+    rows.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      if (sortKey === 'agent') return dir * a.agent.localeCompare(b.agent, 'fr', { sensitivity: 'base' });
+      if (sortKey === 'ventes') return dir * (a.ventes - b.ventes);
+      if (sortKey === 'objectif') return dir * (a.objectif - b.objectif);
+      return dir * (a.pct - b.pct);
+    });
+    return rows;
+  }, [canalObjectiveRows, sortKey, sortDir]);
+  const topObjectiveCount = React.useMemo(() => {
+    return canalObjectiveRows.reduce((m, r) => (r.ventes > m ? r.ventes : m), 0);
+  }, [canalObjectiveRows]);
+  const [selectedAgent, setSelectedAgent] = React.useState<string | null>(null);
+  const selectedAgentDetails = React.useMemo(() => {
+    if (!selectedAgent) return null;
+    const filtered = canalMonthlySales.filter(
+      (s) => s.region === canalRegionView && s.seller === selectedAgent
+    );
+    const counts: { [k: string]: number } = { '210': 0, '211': 0, '216': 0, '214': 0 };
+    filtered.forEach((s) => {
+      const c = normalizeCampaignCode(s.campaign);
+      if (c && counts[c] !== undefined) counts[c] += 1;
+    });
+    const total = filtered.length;
+    const recent = filtered.slice().sort((a, b) => b.dateMs - a.dateMs).slice(0, 10);
+    return { counts, total, recent };
+  }, [selectedAgent, canalMonthlySales, canalRegionView]);
+  const [canalTodaySales, setCanalTodaySales] = React.useState<Array<{
+    id?: string;
+    dateMs: number;
+    seller: string;
+    region: 'FR' | 'CIV' | 'OTHER';
+    offer?: string;
+    status: string;
+    orderNumber?: string;
+  }>>([]);
+  const [canalKpis, setCanalKpis] = React.useState({
+    total: 0,
+    validated: 0,
+    conversion: 0,
+    pending: 0,
+    pending2h: 0,
+    iban: 0,
+    roac: 0,
+    topSellerName: '—' as string,
+    topSellerCount: 0,
+  });
+  // LEADS reports state
+  const [leadsStats, setLeadsStats] = React.useState({ fr: 0, civ: 0, total: 0, loading: true });
+  const [leadsError, setLeadsError] = React.useState<string | null>(null);
+  
+  // Persist region choice
+  React.useEffect(() => {
+    try { localStorage.setItem('admin:canalRegion', canalRegionView); } catch {}
+  }, [canalRegionView]);
+
+  // Monthly CANAL+ fetcher (fills canalMonthlySales and monthly FR/CIV/Total)
+  React.useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    if (!isAuthenticated) {
+      setCanalMonthlySales([]);
+      setCanalStats({ fr: 0, civ: 0, total: 0, loading: false });
+      return () => {};
+    }
+    setCanalStats((p)=>({ ...p, loading: true }));
+
+    const { start, end } = getMonthBounds(canalMonth);
+    const startTs = Timestamp.fromDate(start);
+    const endTs = Timestamp.fromDate(end);
+
+    const sanitize = (value: string) =>
+      value.trim().toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    const normalizeLower = (value: unknown) =>
+      String(value || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'').replace(/\s+/g,' ').trim();
+    const isValidated = (raw: any): boolean => {
+      const s = normalizeLower(
+        raw?.basketStatus ?? raw?.basketStatut ?? raw?.status ?? raw?.statut ?? raw?.orderStatus ?? raw?.commandeStatus ?? raw?.etat
+      );
+      if (!s) return false;
+      if (/\bok\b/.test(s)) return true;
+      if (/\bvalid\s*soft\b/.test(s)) return true;
+      if (/\bvalid(e|ee)?\s*finale?\b/.test(s)) return true;
+      if (/\bvalid(e|ee)?\b/.test(s)) return true;
+      return false;
+    };
+    const normalizeRegion = (input: unknown): 'FR'|'CIV'|'OTHER' => {
+      if (typeof input !== 'string') return 'OTHER';
+      const v = sanitize(input);
+      if (!v) return 'OTHER';
+      if (v === 'CIV' || v === 'CI' || v.includes('ABIDJAN') || v.includes('COTEDIVOIRE')) return 'CIV';
+      if (v === 'FR' || v === 'FRANCE' || v.includes('MARSEILLE')) return 'FR';
+      return 'OTHER';
+    };
+
+    const compute = (docs: Array<{ id?: string; data: ()=>any }>) => {
+      let fr = 0, civ = 0; const rows: CanalMonthlySale[] = [];
+      docs.forEach(d => {
+        const data = d.data();
+        const ms = readTimestampMs(data, ['date','createdAt','created_at','timestamp','time','validatedAt']);
+        if (typeof ms !== 'number' || ms < start.getTime() || ms >= end.getTime()) return;
+        if (!isValidated(data)) return;
+        const region = [data?.region, data?.site, data?.site?.region, data?.zone, data?.location]
+          .map(normalizeRegion).find(r => r !== 'OTHER') || 'OTHER';
+        if (region === 'FR') fr++; else if (region === 'CIV') civ++;
+        const sellerId = typeof data?.userId === 'string'
+          ? data.userId : (typeof data?.createdBy?.userId === 'string' ? data.createdBy.userId : null);
+        const seller = String(
+          data?.name || data?.userName || data?.agent || data?.createdBy?.displayName || data?.createdBy?.email || '—'
+        );
+        rows.push({ id: (d as any).id, dateMs: ms, region, seller, sellerId, campaign: data?.campaign ?? data?.project ?? null });
+      });
+      setCanalStats({ fr, civ, total: rows.length, loading: false });
+      setCanalMonthlySales(rows);
+    };
+
+    const salesColl = collection(db, 'sales');
+    (async () => {
+      try {
+        try {
+          const qMonth = query(salesColl, where('date','>=',startTs), where('date','<', endTs));
+          const snap = await getDocs(qMonth);
+          compute(snap.docs as any);
+        } catch {
+          try {
+            const qLower = query(salesColl, where('date','>=', startTs));
+            const snap = await getDocs(qLower);
+            compute(snap.docs as any);
+          } catch {
+            const snap = await getDocs(salesColl);
+            compute(snap.docs as any);
+          }
+        }
+        try {
+          const qLive = query(salesColl, where('date','>=', startTs));
+          unsubscribe = onSnapshot(qLive, (snap) => compute(snap.docs as any));
+        } catch {}
+      } catch {
+        setCanalStats((p)=>({ ...p, loading: false }));
+      }
+    })();
+    return () => { try { unsubscribe && unsubscribe(); } catch {} };
+  }, [isAuthenticated, canalMonth]);
+    // Derive campaign totals and objectives from monthly sales
+    React.useEffect(() => {
+      const { start, end } = getMonthBounds(canalMonth);
+      const totalDays = countBusinessDays(start, end);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const elapsedDays = countBusinessDays(start, today < end ? today : end);
+      setProductionDaysInfo({ elapsed: elapsedDays, total: totalDays });
+      // campaign totals for selected region
+      const filtered = canalMonthlySales.filter(s => s.region === canalRegionView);
+      const totals: { [k: string]: number } = { '210': 0, '211': 0, '216': 0, '214': 0 };
+      filtered.forEach(s => {
+        const code = normalizeCampaignCode(s.campaign);
+        if (code && totals[code] !== undefined) totals[code] += 1;
+      });
+      setCanalCampaignTotals(totals);
+      // per-agent rows
+      const perAgent = new Map<string, number>();
+      filtered.forEach(s => {
+        perAgent.set(s.seller, (perAgent.get(s.seller) || 0) + 1);
+      });
+      const dailyTarget = 1; // default target per business day
+      const rows: Array<{ agent: string; ventes: number; objectif: number; pct: number }> = [];
+      perAgent.forEach((ventes, agent) => {
+        const objectif = dailyTarget * totalDays;
+        const pct = objectif > 0 ? Math.round((ventes / objectif) * 100) : 0;
+        rows.push({ agent, ventes, objectif, pct });
+      });
+      rows.sort((a,b)=> b.ventes - a.ventes);
+      setCanalObjectiveRows(rows);
+    }, [canalMonthlySales, canalMonth, canalRegionView]);
+  const [leadsTodayRows, setLeadsTodayRows] = React.useState<Array<{
+    id?: string;
+    dateMs: number;
+    seller: string;
+    region: 'FR'|'CIV'|'OTHER';
+    typeOffre?: string | null;
+    intituleOffre?: string | null;
+    numeroId?: string | null;
+    referencePanier?: string | null;
+  }>>([]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -298,6 +608,7 @@ const AdminDashboardPage: React.FC = () => {
       const rows: AdminUserRow[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
         const email = typeof data.email === "string" ? data.email : "";
+        const companyName = typeof data.companyName === "string" ? data.companyName.trim() : undefined;
         const disabledFlag = data?.disabled === true;
         if (disabledFlag) {
           disabledCount += 1;
@@ -343,6 +654,7 @@ const AdminDashboardPage: React.FC = () => {
           id: docSnap.id,
           displayName,
           email,
+          companyName,
           role,
           status: disabledFlag ? "disabled" : isActive ? "active" : "inactive",
           lastActiveMs,
@@ -461,6 +773,29 @@ const AdminDashboardPage: React.FC = () => {
     navigate("/admin/login", { replace: true });
   };
 
+  // Fallback: si l'admin est connecté via Firebase, pinger sa présence depuis le dashboard
+  React.useEffect(() => {
+    if (!isAuthenticated || !authUser) return;
+    const ref = doc(db, 'users', authUser.id);
+    const send = async () => {
+      try {
+        await setDoc(ref, {
+          lastActive: serverTimestamp(),
+          lastPing: Date.now(),
+          isOnline: true,
+          email: authUser.email || undefined,
+          displayName: authUser.displayName || undefined,
+        }, { merge: true });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[admin-presence] write failed', e);
+      }
+    };
+    send();
+    const id = setInterval(send, 2 * 60 * 1000);
+    return () => { try { clearInterval(id); } catch {} };
+  }, [isAuthenticated, authUser]);
+
   // Handlers for CreateUser modal
   const openCreateUserModal = React.useCallback(() => {
     setCreateUserFeedback(null);
@@ -488,7 +823,7 @@ const AdminDashboardPage: React.FC = () => {
         return;
       }
 
-      const { firstName, lastName, email, password, confirmPassword } = newUserForm;
+      const { firstName, lastName, companyName, email, password, confirmPassword } = newUserForm;
       if (!firstName || !lastName || !email || !password) {
         setCreateUserFeedback({ type: "error", message: "Tous les champs sont obligatoires." });
         return;
@@ -505,7 +840,7 @@ const AdminDashboardPage: React.FC = () => {
         const res = await fetch(registerUserEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ firstName, lastName, email, password }),
+          body: JSON.stringify({ firstName, lastName, companyName: companyName || undefined, email, password }),
           credentials: "include",
         });
 
@@ -566,7 +901,7 @@ const AdminDashboardPage: React.FC = () => {
     [userRows]
   );
 
-  const handleDisableSelectedUsers = React.useCallback(async () => {
+  const confirmDisableUsers = React.useCallback(async () => {
     if (!isAuthenticated || selectedUserIds.length === 0) {
       setDisableFeedback({ type: "error", message: "Sélectionne au moins un utilisateur." });
       return;
@@ -574,6 +909,7 @@ const AdminDashboardPage: React.FC = () => {
 
     setDisableLoading(true);
     setDisableFeedback(null);
+    setShowRevokeConfirm(false);
 
     try {
       const callable = httpsCallable(functions, "disableUsersCallable");
@@ -623,8 +959,16 @@ const AdminDashboardPage: React.FC = () => {
     }
   }, [functions, isAuthenticated, selectedUserIds, requestAuthStatsRefresh]);
 
+  const handleDisableClick = React.useCallback(() => {
+    if (selectedUserIds.length === 0) {
+      setDisableFeedback({ type: "error", message: "Sélectionne au moins un utilisateur." });
+      return;
+    }
+    setShowRevokeConfirm(true);
+  }, [selectedUserIds]);
+
   React.useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
+    let unsubscribeFallbackAll: (() => void) | null = null;
 
     if (!isAuthenticated) {
       setCanalStats({ fr: 0, civ: 0, total: 0, loading: false });
@@ -635,9 +979,6 @@ const AdminDashboardPage: React.FC = () => {
     setCanalStats((prev) => ({ ...prev, loading: true }));
     setCanalError(null);
 
-    const missionOptions = ["CANAL_PLUS", "CANAL+", "CANAL", "CANALPLUS"] as const;
-    const canalQuery = query(collection(db, "sales"), where("mission", "in", missionOptions));
-
     const sanitize = (value: string) =>
       value
         .trim()
@@ -645,6 +986,39 @@ const AdminDashboardPage: React.FC = () => {
         .normalize("NFD")
         .replace(/\p{Diacritic}/gu, "")
         .replace(/[^A-Z0-9]/g, "");
+
+    const normalizeLower = (value: unknown) =>
+      String(value || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const isValidated = (raw: any): boolean => {
+      const s = normalizeLower(
+        raw?.basketStatus ?? raw?.basketStatut ?? raw?.status ?? raw?.statut ?? raw?.orderStatus ?? raw?.commandeStatus ?? raw?.etat
+      );
+      if (!s) return false;
+      // OK (strict word), Valid Soft, Valid Finale, Validé/Valid (avoid matching 'invalid')
+      if (/\bok\b/.test(s)) return true;
+      if (/\bvalid\s*soft\b/.test(s)) return true;
+      if (/\bvalid(e|ee)?\s*finale?\b/.test(s)) return true;
+      if (/\bvalid(e|ee)?\b/.test(s)) return true;
+      return false;
+    };
+
+    const classifyStatus = (raw: any): 'Validé' | 'En attente' | 'ROAC' | 'IBAN' | 'Autre' => {
+      const s = normalizeLower(
+        raw?.basketStatus ?? raw?.basketStatut ?? raw?.status ?? raw?.statut ?? raw?.orderStatus ?? raw?.commandeStatus ?? raw?.etat
+      );
+      if (!s) return 'Autre';
+      if (/iban|rib/.test(s)) return 'IBAN';
+      if (/roac/.test(s)) return 'ROAC';
+      if (isValidated(raw)) return 'Validé';
+      if (/attente|pending|awaiting|on\s*hold|hold|pause|paused|en\s*pause|en\s*att|en\s*cours|saisie|traitement|traite|wait|draft|validation|valider|a\s*valider|verif|verifier|v[ée]rification|controle|control|a\s*traiter|à\s*traiter|a\s*verifier|à\s*verifier|incomplet|incomplete|missing|process|processing/.test(s)) return 'En attente';
+      return 'Autre';
+    };
 
     const normalizeRegion = (input: unknown): "FR" | "CIV" | "OTHER" => {
       if (typeof input !== "string") return "OTHER";
@@ -673,11 +1047,44 @@ const AdminDashboardPage: React.FC = () => {
       return "OTHER";
     };
 
-    const computeStats = (docs: Array<{ data: () => any }>) => {
+    // Today bounds (local time)
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(todayStart.getDate()+1);
+    const startMs = todayStart.getTime();
+    const endMs = tomorrowStart.getTime();
+
+    const computeStats = (docs: Array<{ id?: string; data: () => any }>) => {
       let fr = 0;
       let civ = 0;
+      const rows: Array<{ id?: string; dateMs: number; seller: string; region: 'FR'|'CIV'|'OTHER'; offer?: string; status: string; orderNumber?: string; }> = [];
+      let totalDocs = 0;
+      let validatedCount = 0;
+      let pendingCount = 0;
+      let pending2h = 0;
+      let ibanCount = 0;
+      let roacCount = 0;
+      const sellerMap = new Map<string, number>();
+      const now = Date.now();
+
+      const statusCategory = (raw: any): string => {
+        const s = normalizeLower(
+          raw?.basketStatus ?? raw?.basketStatut ?? raw?.status ?? raw?.statut ?? raw?.orderStatus ?? raw?.commandeStatus ?? raw?.etat
+        );
+        if (!s) return '';
+        if (/\bvalid\s*soft\b/.test(s)) return 'Valid Soft';
+        if (/\bvalid(e|ee)?\s*finale?\b/.test(s)) return 'Valid Finale';
+        if (/\bok\b/.test(s) || /\bvalid(e|ee)?\b/.test(s)) return 'Validé';
+        return s;
+      };
+
       docs.forEach((doc) => {
         const data = doc.data() as any;
+        // Keep only today's sales based on several possible date fields
+        const dms = readTimestampMs(data, [
+          'date','createdAt','created_at','timestamp','time','created','submittedAt','validatedAt'
+        ]);
+        if (typeof dms !== 'number' || !(dms >= startMs && dms < endMs)) return;
+        totalDocs += 1;
         const candidates: Array<unknown> = [
           data?.region,
           data?.region?.name,
@@ -692,52 +1099,241 @@ const AdminDashboardPage: React.FC = () => {
         const region = candidates
           .map((value) => normalizeRegion(value))
           .find((value) => value !== "OTHER") ?? "OTHER";
-
-        if (region === "FR") fr += 1;
-        else if (region === "CIV") civ += 1;
+        const cat = classifyStatus(data);
+        if (cat === 'IBAN') ibanCount += 1;
+        if (cat === 'ROAC') roacCount += 1;
+        if (cat === 'En attente') {
+          pendingCount += 1;
+          if (now - dms > 2 * 60 * 60 * 1000) pending2h += 1;
+        }
+        if (isValidated(data)) {
+          validatedCount += 1;
+          if (region === "FR") fr += 1;
+          else if (region === "CIV") civ += 1;
+          // Build a lightweight row for live table (validated only)
+          const seller = String(
+            data?.name || data?.userName || data?.agent || data?.createdBy?.displayName || data?.createdBy?.email || '—'
+          );
+          sellerMap.set(seller, (sellerMap.get(seller) || 0) + 1);
+          rows.push({
+            id: (doc as any).id,
+            dateMs: dms,
+            seller,
+            region,
+            offer: data?.offer || data?.offre,
+            orderNumber: data?.orderNumber,
+            status: statusCategory(data),
+          });
+        }
       });
-      setCanalStats({ fr, civ, total: fr + civ, loading: false });
+      setCanalStats({ fr, civ, total: rows.length, loading: false });
+      const top = Array.from(sellerMap.entries()).sort((a,b)=> b[1]-a[1])[0];
+      const conversion = totalDocs > 0 ? (validatedCount / totalDocs) * 100 : 0;
+      setCanalKpis({
+        total: totalDocs,
+        validated: validatedCount,
+        conversion,
+        pending: pendingCount,
+        pending2h,
+        iban: ibanCount,
+        roac: roacCount,
+        topSellerName: top ? top[0] : '—',
+        topSellerCount: top ? top[1] : 0,
+      });
+      // Keep latest 30 by time desc
+      rows.sort((a,b) => b.dateMs - a.dateMs);
+      setCanalTodaySales(rows.slice(0, 30));
     };
 
     const fallbackFetch = async () => {
       try {
-        const backupSnap = await getDocs(collection(db, "sales"));
-        const filtered = backupSnap.docs.filter((doc) => {
-          const missionValue = (doc.data() as any)?.mission;
-          if (typeof missionValue !== "string") return false;
-          const normalizedMission = sanitize(missionValue);
-          return missionOptions.some((mission) => normalizedMission.includes(mission));
-        });
-        computeStats(filtered);
+        const salesColl = collection(db, "sales");
+        let backupSnap;
+        try {
+          const qDay = query(
+            salesColl,
+            where('date', '>=', Timestamp.fromDate(todayStart)),
+            where('date', '<', Timestamp.fromDate(tomorrowStart))
+          );
+          backupSnap = await getDocs(qDay);
+        } catch (e) {
+          // If index missing, fallback to single bound or full collection
+          try {
+            const qLower = query(salesColl, where('date', '>=', Timestamp.fromDate(todayStart)));
+            backupSnap = await getDocs(qLower);
+          } catch {
+            backupSnap = await getDocs(salesColl);
+          }
+        }
+        // Pass all docs and compute day filters + segmentation client-side
+        computeStats(backupSnap.docs as any);
+        // Attach a live listener on all sales, and filter client-side by CANAL mission
+        try {
+          const qLive = query(salesColl, where('date', '>=', Timestamp.fromDate(todayStart)));
+          unsubscribeFallbackAll = onSnapshot(
+            qLive,
+            (snap) => {
+              // Pass all docs; computeStats will apply validated+date+region filters
+              const debug = (() => { try { return localStorage.getItem('DEBUG_CANAL') === '1'; } catch { return false; } })();
+              if (debug) {
+                // eslint-disable-next-line no-console
+                console.info('[canal-stats] live snapshot', { size: snap.size });
+                const first = snap.docs[0]?.data?.();
+                if (first) {
+                  // eslint-disable-next-line no-console
+                  console.info('[canal-stats] sample doc keys', Object.keys(first));
+                }
+              }
+              computeStats(snap.docs as unknown as Array<{ data: () => any }>);
+            },
+            (err) => {
+              // eslint-disable-next-line no-console
+              console.warn("[canal-stats] fallback live listener error", err);
+            }
+          );
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn("[canal-stats] unable to attach fallback live listener", e);
+        }
       } catch (err: any) {
         setCanalStats((prev) => ({ ...prev, loading: false }));
         setCanalError(err?.message || "Impossible de charger les ventes CANAL+.");
       }
     };
 
-    unsubscribe = onSnapshot(
-      canalQuery,
-      (snapshot) => {
-        computeStats(snapshot.docs);
-      },
-      (error) => {
-        const code = (error as any)?.code || "";
-        if (code === "failed-precondition" || code === "permission-denied") {
-          fallbackFetch();
-        } else {
-          setCanalStats((prev) => ({ ...prev, loading: false }));
-          setCanalError(error?.message || "Impossible de charger les ventes CANAL+.");
-        }
-      }
-    );
+    // Always use the robust daily listener and filter by mission containing CANAL
+    fallbackFetch();
 
     return () => {
+      try { if (typeof unsubscribeFallbackAll === 'function') { unsubscribeFallbackAll(); } } catch (e) { /* noop */ }
+    };
+  }, [isAuthenticated]);
+
+  // Reports: LEADS (today, mission ORANGE_LEADS)
+  React.useEffect(() => {
+    let unsubscribeAll: (() => void) | null = null;
+    if (!isAuthenticated) {
+      setLeadsStats({ fr: 0, civ: 0, total: 0, loading: false });
+      setLeadsError('Authentification requise pour consulter les rapports LEADS.');
+      return () => {};
+    }
+
+    setLeadsStats((p)=>({ ...p, loading: true }));
+    setLeadsError(null);
+
+    const sanitize = (value: string) =>
+      value.trim().toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu,'').replace(/[^A-Z0-9]/g,'');
+    const normalizeRegion = (input: unknown): 'FR'|'CIV'|'OTHER' => {
+      if (typeof input !== 'string') return 'OTHER';
+      const v = sanitize(input);
+      if (v === 'CIV' || v === 'CI' || v.includes('ABIDJAN') || v.includes('COTEDIVOIRE')) return 'CIV';
+      if (v === 'FR' || v === 'FRANCE' || v.includes('MARSEILLE')) return 'FR';
+      return 'OTHER';
+    };
+
+    // Normalise le type d'offre LEADS
+    const canonicalLeadType = (raw: string | null | undefined): string => {
+      const s = String(raw || '').trim().toLowerCase().replace(/\s+/g,'');
+      if (s === 'internet') return 'Internet';
+      if (s === 'internetsosh') return 'Internet Sosh';
+      if (s === 'mobile') return 'Mobile';
+      if (s === 'mobilesosh') return 'Mobile Sosh';
+      if (s.includes('internetsosh') && s.includes('mobilesosh')) return 'Internet Sosh';
+      if (s.includes('internet') && s.includes('mobile')) return 'Internet';
+      if (/internetsosh/.test(s)) return 'Internet Sosh';
+      if (/mobilesosh/.test(s)) return 'Mobile Sosh';
+      if (/internet/.test(s)) return 'Internet';
+      if (/mobile/.test(s)) return 'Mobile';
+      return String(raw || '');
+    };
+
+    // Today window
+    const start = new Date(); start.setHours(0,0,0,0);
+    const end = new Date(start); end.setDate(start.getDate()+1);
+    const startMs = start.getTime(); const endMs = end.getTime();
+
+    const compute = (docs: Array<{ id?: string; data: ()=>any }>) => {
+      let fr = 0, civ = 0; const rows: Array<any> = [];
+      docs.forEach(d => {
+        const data = d.data();
+        const dms = readTimestampMs(data, ['createdAt','created_at','date','timestamp']);
+        if (typeof dms !== 'number' || dms < startMs || dms >= endMs) return;
+        // Filtrer uniquement les Internet (exclure Mobile / Sosh)
+        const typeCanon = canonicalLeadType(data?.typeOffre ?? data?.intituleOffre);
+        if (typeCanon !== 'Internet') return;
+        const candidates = [data?.region, data?.site, data?.site?.region, data?.zone, data?.location];
+        const region = candidates.map(normalizeRegion).find(r => r !== 'OTHER') || 'OTHER';
+        if (region === 'CIV') civ++; else fr++; // par défaut, compter OTHER côté FR (Marseille)
+        const seller = String(
+          data?.createdBy?.displayName || data?.createdBy?.email || data?.name || '—'
+        );
+        rows.push({
+          id: (d as any).id,
+          dateMs: dms,
+          seller,
+          region,
+          typeOffre: typeCanon,
+          intituleOffre: data?.intituleOffre ?? null,
+          numeroId: data?.numeroId ?? null,
+          referencePanier: data?.referencePanier ?? null,
+        });
+      });
+      setLeadsStats({ fr, civ, total: rows.length, loading: false });
+      rows.sort((a,b)=> b.dateMs - a.dateMs);
+      setLeadsTodayRows(rows.slice(0,30));
+    };
+
+    const doFetch = async () => {
       try {
-        unsubscribe && unsubscribe();
-      } catch (e) {
-        // noop
+        const leadsColl = collection(db, 'leads_sales');
+        // Prefer mission + date range; fallback to mission-only
+        let snap;
+        try {
+          const q1 = query(
+            leadsColl,
+            where('mission','==','ORANGE_LEADS'),
+            where('createdAt','>=', Timestamp.fromDate(start)),
+            where('createdAt','<', Timestamp.fromDate(end))
+          );
+          snap = await getDocs(q1);
+        } catch (e) {
+          try {
+            const q2 = query(leadsColl, where('mission','==','ORANGE_LEADS'));
+            snap = await getDocs(q2);
+          } catch {
+            snap = await getDocs(leadsColl);
+          }
+        }
+        compute(snap.docs as any);
+        // Live listener on createdAt >= today (mission filtered if possible)
+        try {
+          const qLive = query(
+            leadsColl,
+            where('createdAt','>=', Timestamp.fromDate(start))
+          );
+          unsubscribeAll = onSnapshot(qLive, (s) => {
+            const debug = (()=>{ try { return localStorage.getItem('DEBUG_LEADS')==='1'; } catch { return false; } })();
+            if (debug) {
+              // eslint-disable-next-line no-console
+              console.info('[leads-stats] live snapshot', { size: s.size });
+            }
+            compute(s.docs as any);
+          }, (err)=>{
+            // eslint-disable-next-line no-console
+            console.warn('[leads-stats] live error', err);
+          });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[leads-stats] cannot attach live listener', e);
+        }
+      } catch (err: any) {
+        setLeadsStats((p)=>({ ...p, loading:false }));
+        setLeadsError(err?.message || 'Impossible de charger les ventes LEADS.');
       }
     };
+
+    doFetch();
+    return () => { try { unsubscribeAll && unsubscribeAll(); } catch { /* noop */ } };
   }, [isAuthenticated]);
 
   const displayStats = firestoreStats;
@@ -759,7 +1355,6 @@ const AdminDashboardPage: React.FC = () => {
     ? ` (dont ${displayStats.disabledUsers.toLocaleString("fr-FR")} désactivé${displayStats.disabledUsers > 1 ? 's' : ''})`
     : "";
   const authTotalsLabel = typeof authTotals === "number" ? authTotals.toLocaleString("fr-FR") : null;
-  const authActiveLabel = typeof authActiveUsers === "number" ? authActiveUsers.toLocaleString("fr-FR") : null;
   const totalHelperText = cardsLoading
     ? "Chargement en cours..."
     : authTotalsLabel
@@ -767,13 +1362,15 @@ const AdminDashboardPage: React.FC = () => {
       ? `Firestore : ${totalFirestoreLabel}${disabledSuffix}. Auth mis à jour ${statsUpdatedLabel} (${authTotalsLabel}).`
       : `Firestore : ${totalFirestoreLabel}${disabledSuffix}. Auth : ${authTotalsLabel}.`
     : `Total Firestore : ${totalFirestoreLabel}${disabledSuffix}.`;
+  // Préférer la mesure Auth pour refléter les connexions réelles (fallback Firestore)
+  const activeValue = typeof authActiveUsers === 'number' ? authActiveUsers : displayStats.activeUsers;
   const activeHelperText = cardsLoading
     ? "Détection de l'activité..."
-    : authActiveLabel
-    ? activityWindowHours <= 1
-      ? `Actifs sur la dernière heure (Firestore). Auth : ${authActiveLabel}.`
-      : `Actifs sur les ${activityWindowHours} dernières heures (Firestore). Auth : ${authActiveLabel}.`
-    : "Utilisateurs actifs sur la dernière heure (Firestore).";
+    : typeof authActiveUsers === 'number'
+      ? (activityWindowHours <= 1
+          ? `Actifs sur la dernière heure (Auth). Firestore estimé : ${displayStats.activeUsers.toLocaleString("fr-FR")}.`
+          : `Actifs sur ${activityWindowHours}h (Auth). Firestore estimé : ${displayStats.activeUsers.toLocaleString("fr-FR")}.`)
+      : "Utilisateurs actifs sur la dernière heure (Firestore).";
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-[#030b1d] via-[#02132b] to-[#010511] text-white">
@@ -804,8 +1401,7 @@ const AdminDashboardPage: React.FC = () => {
           }`}
         >
           <div className="border-b border-white/10 px-6 py-8">
-            <p className="text-xs uppercase tracking-[0.4em] text-sky-200/70">Admin</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Cactus Console</h2>
+            <h2 className="text-xl font-semibold text-white">Cactus Console</h2>
           </div>
           <nav className="space-y-2 px-2 py-6">
             {navItems.map((item) => {
@@ -924,7 +1520,7 @@ const AdminDashboardPage: React.FC = () => {
                 <StatCard
                   icon={UserCheck2}
                   title="Utilisateurs actifs"
-                  value={formatStatValue(displayStats.activeUsers, cardsLoading)}
+                  value={formatStatValue(activeValue, cardsLoading)}
                   helperText={activeHelperText}
                 />
               </div>
@@ -932,10 +1528,30 @@ const AdminDashboardPage: React.FC = () => {
           ) : activeSection === "reports-canal" ? (
             <div className="space-y-8 pt-16 md:pt-20">
               <div className="flex flex-col gap-2">
-                <h1 className="text-2xl font-semibold text-white">Rapports CANAL+</h1>
-                <p className="text-sm text-blue-100/70">
-                  Ventilation des ventes CANAL+ par hub de production, consolidée en temps réel.
-                </p>
+                <div className="flex items-end justify-between flex-wrap gap-3">
+                  <div>
+                    <h1 className="text-2xl font-semibold text-white">Rapports CANAL+</h1>
+                    <p className="text-sm text-blue-100/70">Vue mensuelle (sélectionne le mois et le hub).</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+                      <button
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${canalRegionView==='FR' ? 'bg-sky-500/20 text-sky-100 border border-sky-500/40' : 'text-blue-100/70'}`}
+                        onClick={() => setCanalRegionView('FR')}
+                      >C+ FR</button>
+                      <button
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg ${canalRegionView==='CIV' ? 'bg-sky-500/20 text-sky-100 border border-sky-500/40' : 'text-blue-100/70'}`}
+                        onClick={() => setCanalRegionView('CIV')}
+                      >C+ ABJ</button>
+                    </div>
+                    <input
+                      type="month"
+                      value={canalMonth}
+                      onChange={(e)=> setCanalMonth(e.target.value)}
+                      className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+                </div>
               </div>
 
               {canalError && (
@@ -952,7 +1568,7 @@ const AdminDashboardPage: React.FC = () => {
                   helperText={
                     canalStats.loading
                       ? "Chargement en cours..."
-                      : "Comptes mission CANAL+ attribués à l'équipe Marseille."}
+                      : " Mois — Marseille."}
                 />
                 <StatCard
                   icon={Tv}
@@ -961,7 +1577,7 @@ const AdminDashboardPage: React.FC = () => {
                   helperText={
                     canalStats.loading
                       ? "Chargement en cours..."
-                      : "Comptes mission CANAL+ attribués à l'équipe Abidjan."}
+                      : " Mois — Abidjan."}
                 />
                 <StatCard
                   icon={BarChart3}
@@ -970,8 +1586,320 @@ const AdminDashboardPage: React.FC = () => {
                   helperText={
                     canalStats.loading
                       ? "Chargement en cours..."
-                      : "Somme des ventes Marseille + Abidjan."}
+                      : " Mois — Marseille + Abidjan."}
                 />
+              </div>
+
+              {/* Campagnes du mois */}
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard icon={BarChart3} title="Campagne 210" value={canalCampaignTotals['210'].toLocaleString('fr-FR')} helperText={`Ventes validées — ${canalRegionView}`} />
+                <StatCard icon={BarChart3} title="Campagne 211" value={canalCampaignTotals['211'].toLocaleString('fr-FR')} helperText={`Ventes validées — ${canalRegionView}`} />
+                <StatCard icon={BarChart3} title="Campagne 216" value={canalCampaignTotals['216'].toLocaleString('fr-FR')} helperText={`Ventes validées — ${canalRegionView}`} />
+                <StatCard icon={BarChart3} title="Campagne 214" value={canalCampaignTotals['214'].toLocaleString('fr-FR')} helperText={`Ventes validées — ${canalRegionView}`} />
+              </div>
+
+              {/* Tableau Objectifs mensuels */}
+              <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                <div className="flex items-center justify-between px-4 pt-4">
+                  <h3 className="text-sm font-semibold text-white">Ventes à l'objectif — {canalRegionView} — {new Date(canalMonth+'-01').toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</h3>
+                  <div className="flex items-center gap-2 text-xs text-blue-200/80">
+                    <span className="hidden sm:inline">Jours prod</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-100">
+                      {productionDaysInfo?.total ?? '-'}
+                    </span>
+                    <span className="text-blue-200/50">(écoulés&nbsp;: {productionDaysInfo?.elapsed ?? '-'})</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <div className="max-h-[60vh] overflow-y-auto scroll-beauty">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 z-10 bg-[#0b1632]/70 backdrop-blur-sm text-blue-100/80">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">
+                            <button className="inline-flex items-center gap-1 hover:text-white/95" onClick={() => toggleSort('agent')}>
+                              Agent
+                              {sortKey !== 'agent' ? (
+                                <ArrowUpDown className="h-3.5 w-3.5" />
+                              ) : sortDir === 'asc' ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold">
+                            <button className="inline-flex items-center gap-1 hover:text-white/95" onClick={() => toggleSort('ventes')}>
+                              Ventes (mois)
+                              {sortKey !== 'ventes' ? (
+                                <ArrowUpDown className="h-3.5 w-3.5" />
+                              ) : sortDir === 'asc' ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold">
+                            <button className="inline-flex items-center gap-1 hover:text-white/95" onClick={() => toggleSort('objectif')}>
+                              Objectif
+                              {sortKey !== 'objectif' ? (
+                                <ArrowUpDown className="h-3.5 w-3.5" />
+                              ) : sortDir === 'asc' ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold">
+                            <button className="inline-flex items-center gap-1 hover:text-white/95" onClick={() => toggleSort('pct')}>
+                              % progression
+                              {sortKey !== 'pct' ? (
+                                <ArrowUpDown className="h-3.5 w-3.5" />
+                              ) : sortDir === 'asc' ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/10">
+                        {canalObjectiveRows.length === 0 ? (
+                          <tr>
+                            <td className="px-4 py-6 text-center text-blue-100/60" colSpan={4}>Aucune vente ce mois pour ce hub.</td>
+                          </tr>
+                        ) : (
+                          objectiveDisplayRows.map((r, idx) => {
+                            const initials = r.agent
+                              .split(/\s+/)
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((p) => p.charAt(0).toUpperCase())
+                              .join("") || "?";
+                            const widthPct = Math.min(Math.max(r.pct, 0), 150); // clamp 0–150%
+                            const barColor = r.pct >= 100
+                              ? "from-fuchsia-500/70 to-violet-400/70"
+                              : r.pct >= 50
+                              ? "from-emerald-400/70 to-teal-400/70"
+                              : "from-sky-400/70 to-blue-400/70";
+                            const isTop = topObjectiveCount > 0 && r.ventes === topObjectiveCount;
+                            return (
+                              <tr
+                                key={idx}
+                                className="hover:bg-white/5 transition-colors animate-fade-in cursor-pointer focus:outline-none focus:bg-white/10"
+                                style={{ animationDelay: `${Math.min(idx, 12) * 40}ms` }}
+                                onClick={() => setSelectedAgent(r.agent)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') setSelectedAgent(r.agent); }}
+                                tabIndex={0}
+                              >
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative h-8 w-8 shrink-0 rounded-full border border-white/20 bg-gradient-to-br from-sky-500/30 to-blue-500/20 text-white/90 flex items-center justify-center text-[11px] font-semibold">
+                                      {initials}
+                                      <span className="absolute inset-0 rounded-full bg-white/5" />
+                                    </div>
+                                    <span className="font-medium text-white flex items-center gap-2">
+                                      {r.agent}
+                                      {isTop && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200">
+                                          <Crown className="h-3.5 w-3.5" aria-hidden="true" />
+                                          Top
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-blue-100/90">{r.ventes.toLocaleString('fr-FR')}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-blue-100/80">{r.objectif.toLocaleString('fr-FR')}</td>
+                                <td className="px-4 py-3">
+                                  <div className="w-44 sm:w-56">
+                                    <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+                                      <div
+                                        className={`relative h-full rounded-full bg-gradient-to-r ${barColor} shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset,0_6px_14px_-6px_rgba(37,99,235,0.5)] transition-[width] duration-700 ease-out`}
+                                        style={{ width: `${widthPct}%` }}
+                                      >
+                                        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                                          <span className="absolute left-0 top-0 h-full w-1/3 -skew-x-12 bg-white/20 animate-shimmer-move" />
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-2 text-[11px] leading-none text-blue-200/80">
+                                      <span>{r.pct}%</span>
+                                      {(() => {
+                                        if (r.pct >= 125) {
+                                          return (
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-400/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                                              <Trophy className="h-3 w-3" aria-hidden="true" />
+                                              125%+
+                                            </span>
+                                          );
+                                        }
+                                        if (r.pct >= 100) {
+                                          return (
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-fuchsia-400/40 bg-fuchsia-400/10 px-1.5 py-0.5 text-[10px] text-fuchsia-200">
+                                              <Award className="h-3 w-3" aria-hidden="true" />
+                                              100%+
+                                            </span>
+                                          );
+                                        }
+                                        if (r.pct >= 90) {
+                                          return (
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                                              90%+
+                                            </span>
+                                          );
+                                        }
+                                        if (r.pct >= 75) {
+                                          return (
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-teal-400/40 bg-teal-400/10 px-1.5 py-0.5 text-[10px] text-teal-200">
+                                              75%+
+                                            </span>
+                                          );
+                                        }
+                                        if (r.pct >= 50) {
+                                          return (
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/40 bg-sky-400/10 px-1.5 py-0.5 text-[10px] text-sky-200">
+                                              50%+
+                                            </span>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              {selectedAgent && selectedAgentDetails && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6" onClick={() => setSelectedAgent(null)}>
+                  <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-[#071120] via-[#050b17] to-[#02050b] p-6 shadow-[0_35px_80px_-45px_rgba(37,99,235,0.6)]" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h4 className="text-lg font-semibold text-white">{selectedAgent}</h4>
+                        <p className="text-xs text-blue-100/70">{canalRegionView} · {new Date(canalMonth+'-01').toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</p>
+                      </div>
+                      <button aria-label="Fermer" className="rounded-lg border border-white/10 p-1.5 text-white/70 hover:bg-white/5" onClick={() => setSelectedAgent(null)}>
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {(['210','211','216','214'] as const).map((c) => (
+                        <div key={c} className="rounded-2xl border border-sky-500/15 bg-white/5 px-3 py-2 text-center">
+                          <div className="text-[10px] uppercase tracking-[0.25em] text-blue-200/70">Campagne {c}</div>
+                          <div className="mt-1 text-lg font-semibold text-white">{selectedAgentDetails.counts[c].toLocaleString('fr-FR')}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5">
+                      <div className="flex items-center justify-between px-4 py-2">
+                        <div className="text-sm font-medium text-white">Dernières ventes</div>
+                        <div className="text-xs text-blue-200/80">Total mois: {selectedAgentDetails.total.toLocaleString('fr-FR')}</div>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto scroll-beauty">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-white/5 text-blue-100/80">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-semibold">Date</th>
+                              <th className="px-4 py-2 text-left font-semibold">Région</th>
+                              <th className="px-4 py-2 text-left font-semibold">Campagne</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/10">
+                            {selectedAgentDetails.recent.map((s, i) => (
+                              <tr key={s.id || i} className="hover:bg-white/5">
+                                <td className="px-4 py-2 whitespace-nowrap">{new Date(s.dateMs).toLocaleDateString('fr-FR',{ day:'2-digit', month:'short'})}</td>
+                                <td className="px-4 py-2 whitespace-nowrap">{s.region}</td>
+                                <td className="px-4 py-2 whitespace-nowrap">{normalizeCampaignCode(s.campaign) || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : activeSection === "reports-leads" ? (
+            <div className="space-y-8 pt-16 md:pt-20">
+              <div className="flex flex-col gap-2">
+                <h1 className="text-2xl font-semibold text-white">Rapports LEADS</h1>
+                <p className="text-sm text-blue-100/70">Ventes LEADS (mission ORANGE_LEADS), cumulées en temps réel pour aujourd'hui.</p>
+              </div>
+
+              {leadsError && (
+                <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-4 text-sm text-rose-100">{leadsError}</div>
+              )}
+
+              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                <StatCard
+                  icon={Tv}
+                  title="Ventes LEADS Marseille"
+                  value={formatStatValue(leadsStats.fr, leadsStats.loading)}
+                  helperText={leadsStats.loading ? 'Chargement en cours...' : 'Internet uniquement — créés aujourd\'hui — Marseille (FR).'}
+                />
+                <StatCard
+                  icon={Tv}
+                  title="Ventes LEADS Abidjan"
+                  value={formatStatValue(leadsStats.civ, leadsStats.loading)}
+                  helperText={leadsStats.loading ? 'Chargement en cours...' : 'Internet uniquement — créés aujourd\'hui — Abidjan (CIV).'}
+                />
+                <StatCard
+                  icon={BarChart3}
+                  title="Total LEADS"
+                  value={formatStatValue(leadsStats.total, leadsStats.loading)}
+                  helperText={leadsStats.loading ? 'Chargement en cours...' : 'Internet uniquement — créés aujourd\'hui — Marseille + Abidjan.'}
+                />
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                <div className="flex items-center justify-between px-4 pt-4">
+                  <h3 className="text-sm font-semibold text-white">Leads créés aujourd'hui</h3>
+                  <div className="text-xs text-blue-200/80">{leadsTodayRows.length} affiché(s)</div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white/5 text-blue-100/80">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">Heure</th>
+                        <th className="px-4 py-3 text-left font-semibold">Agent</th>
+                        <th className="px-4 py-3 text-left font-semibold">Région</th>
+                        <th className="px-4 py-3 text-left font-semibold">Type</th>
+                        <th className="px-4 py-3 text-left font-semibold">Intitulé</th>
+                        <th className="px-4 py-3 text-left font-semibold">N°</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {leadsTodayRows.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-6 text-center text-blue-100/60" colSpan={6}>Aucun lead créé aujourd'hui.</td>
+                        </tr>
+                      ) : (
+                        leadsTodayRows.map((r, idx) => (
+                          <tr key={r.id || idx} className="hover:bg-white/5">
+                            <td className="px-4 py-3 whitespace-nowrap">{new Date(r.dateMs).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{r.seller}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{r.region}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{r.typeOffre || '—'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{r.intituleOffre || '—'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">{r.numeroId || r.referencePanier || '—'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           ) : activeSection === "heures" ? (
@@ -1038,6 +1966,15 @@ const AdminDashboardPage: React.FC = () => {
           ) : activeSection === "users" ? (
             <UsersSection
               onCreateUserClick={openCreateUserModal}
+              onAssignRoleClick={() => {
+                if (!canAssignRoles) {
+                  setAssignRoleFeedback({ type: "error", message: "Seuls les administrateurs autorisés peuvent modifier les rôles." });
+                  setShowAssignRoleModal(true); // still open to show feedback
+                  return;
+                }
+                setAssignRoleFeedback(null);
+                setShowAssignRoleModal(true);
+              }}
               disabled={!isAuthenticated}
               users={userRows}
               loading={statsLoading}
@@ -1045,9 +1982,10 @@ const AdminDashboardPage: React.FC = () => {
               selectedIds={selectedUserIds}
               onToggleUser={handleToggleUserSelection}
               onToggleAll={handleToggleAllUsers}
-              onDisableSelected={handleDisableSelectedUsers}
+              onDisableSelected={handleDisableClick}
               disableLoading={disableLoading}
               disableFeedback={disableFeedback}
+              canAssignRoles={canAssignRoles}
             />
           ) : (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center text-sm text-blue-100/70 backdrop-blur-xl">
@@ -1070,12 +2008,113 @@ const AdminDashboardPage: React.FC = () => {
         feedback={createUserFeedback}
         disabled={!isAuthenticated}
       />
+
+      {showAssignRoleModal && (
+        <AssignRoleModal
+          open={showAssignRoleModal}
+          onClose={() => setShowAssignRoleModal(false)}
+          selectedIds={selectedUserIds}
+          allowedRoles={allowedRoles}
+          onAssign={async (role) => {
+            if (!isAuthenticated) {
+              setAssignRoleFeedback({ type: "error", message: "Authentification admin requise." });
+              return;
+            }
+            if (!role) {
+              setAssignRoleFeedback({ type: "error", message: "Choisis un rôle." });
+              return;
+            }
+            if (selectedUserIds.length === 0) {
+              setAssignRoleFeedback({ type: "error", message: "Sélectionne au moins un utilisateur." });
+              return;
+            }
+            setAssignRoleLoading(true);
+            setAssignRoleFeedback(null);
+            try {
+              const callable = httpsCallable(functions, "setUserRole");
+              const res = await callable({ userIds: selectedUserIds, role });
+              const payload: any = res?.data || {};
+              if (!payload?.success) {
+                const msg = typeof payload?.message === 'string' ? payload.message : 'Impossible d\'assigner le rôle.';
+                setAssignRoleFeedback({ type: "error", message: msg });
+                return;
+              }
+              const okCount = Array.isArray(payload?.updated) ? payload.updated.length : selectedUserIds.length;
+              setAssignRoleFeedback({ type: "success", message: `Rôle \"${role}\" assigné à ${okCount} utilisateur(s).` });
+              requestAuthStatsRefresh();
+              setSelectedUserIds([]);
+            } catch (e: any) {
+              // Fallback HTTP endpoint with ID token when callable denies (403 / permission issues)
+              try {
+                const cu = firebaseAuth.currentUser;
+                const idToken = cu ? await getIdToken(cu, true) : null;
+                if (!idToken) throw e;
+                const endpoint = 'https://europe-west9-cactus-mm.cloudfunctions.net/setUserRoleHttp';
+                const resp = await fetch(endpoint, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                  },
+                  body: JSON.stringify({ userIds: selectedUserIds, role }),
+                  credentials: 'include',
+                });
+                const json = await resp.json().catch(() => ({}));
+                if (!resp.ok || !json?.ok) {
+                  throw new Error(json?.error || e?.message || 'Assignation refusée');
+                }
+                const okCount = Array.isArray(json?.updated) ? json.updated.length : selectedUserIds.length;
+                setAssignRoleFeedback({ type: 'success', message: `Rôle \"${role}\" assigné à ${okCount} utilisateur(s).` });
+                requestAuthStatsRefresh();
+                setSelectedUserIds([]);
+              } catch (e2: any) {
+              setAssignRoleFeedback({ type: "error", message: e?.message || "Erreur réseau lors de l'assignation du rôle." });
+              }
+            } finally {
+              setAssignRoleLoading(false);
+            }
+          }}
+          loading={assignRoleLoading}
+          feedback={assignRoleFeedback}
+        />
+      )}
+
+      {showRevokeConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-[#071120] via-[#050b17] to-[#02050b] p-6 shadow-[0_35px_80px_-45px_rgba(244,63,94,0.7)]">
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold text-white">Confirmation requise</h3>
+              <p className="text-sm text-blue-100/70">
+                Etes vous sur de vouloir revoquer l'accés du compte {selectedUserIds.length > 1 ? `de ces ${selectedUserIds.length} utilisateurs` : "sélectionné"} ?
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowRevokeConfirm(false)}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={confirmDisableUsers}
+                  className="rounded-xl bg-rose-500/20 border border-rose-500/50 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/30 hover:text-white"
+                >
+                  Confirmer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Badge de debug présence (admins ou presenceDebug=1) */}
+      {/* Debug présence retiré */}
     </div>
   );
 };
 
 type UsersSectionProps = {
   onCreateUserClick: () => void;
+  onAssignRoleClick: () => void;
+  canAssignRoles: boolean;
   disabled: boolean;
   users: AdminUserRow[];
   loading: boolean;
@@ -1090,6 +2129,8 @@ type UsersSectionProps = {
 
 const UsersSection: React.FC<UsersSectionProps> = ({
   onCreateUserClick,
+  onAssignRoleClick,
+  canAssignRoles,
   disabled,
   users,
   loading,
@@ -1137,6 +2178,17 @@ const UsersSection: React.FC<UsersSectionProps> = ({
             </span>
             Nouveau compte
           </button>
+          <button
+            type="button"
+            onClick={onAssignRoleClick}
+            disabled={disabled || selectedIds.length === 0 || !canAssignRoles}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-gradient-to-r from-[#1b3a2f] via-[#112821] to-[#0a1b14] px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-200 shadow-[0_14px_34px_rgba(16,185,129,0.3)] transition-all duration-300 hover:scale-105 hover:border-emerald-300/60 disabled:cursor-not-allowed disabled:border-white/10 disabled:text-white/30"
+          >
+            Assigner un rôle
+          </button>
+          {!canAssignRoles && (
+            <span className="text-[10px] text-blue-200/60">Seuls les administrateurs peuvent modifier les rôles</span>
+          )}
           <button
             type="button"
             onClick={onDisableSelected}
@@ -1190,6 +2242,7 @@ const UsersSection: React.FC<UsersSectionProps> = ({
                     />
                   </th>
                   <th scope="col" className="px-4 py-3 text-left">Utilisateur</th>
+                  <th scope="col" className="px-4 py-3 text-left">Entreprise</th>
                   <th scope="col" className="px-4 py-3 text-left">Rôle</th>
                   <th scope="col" className="px-4 py-3 text-left">Statut</th>
                   <th scope="col" className="px-4 py-3 text-left">Dernière activité</th>
@@ -1255,6 +2308,7 @@ const UsersSection: React.FC<UsersSectionProps> = ({
                               <span className="text-xs text-white/50">{user.email || "—"}</span>
                             </div>
                           </td>
+                          <td className="px-4 py-3 text-white/70">{user.companyName || "—"}</td>
                           <td className="px-4 py-3 text-white/70">
                             {user.role ? user.role : "—"}
                           </td>
@@ -1376,6 +2430,22 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
           </div>
 
           <div className="space-y-2">
+            <label className="text-xs uppercase tracking-[0.3em] text-blue-100/60" htmlFor="admin-new-companyName">
+              Nom de l'entreprise
+            </label>
+            <input
+              id="admin-new-companyName"
+              type="text"
+              value={form.companyName}
+              onChange={(event) => onFieldChange("companyName", event.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-black/60 px-4 py-3 text-sm text-white placeholder:text-white/30 transition focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
+              placeholder="Cactus Tech"
+              autoComplete="organization"
+              disabled={disabled || loading}
+            />
+          </div>
+
+          <div className="space-y-2">
             <label className="text-xs uppercase tracking-[0.3em] text-blue-100/60" htmlFor="admin-new-email">
               Email professionnel
             </label>
@@ -1494,21 +2564,43 @@ const isUserConsideredActive = (data: Record<string, any> | undefined | null) =>
     return false;
   }
 
+  // 1. Priorité au timestamp s'il existe
+  const lastActivityMs = readTimestampMs(data, [
+    "lastActive",
+    "lastPing", // Backup client-side timestamp
+    "lastHeartbeat",
+    "lastActivity",
+    "lastLogin",
+    "lastSeenAt",
+    "updatedAt",
+  ]);
+
+  if (typeof lastActivityMs === "number") {
+    const now = Date.now();
+    const diff = now - lastActivityMs;
+
+    // Si la date est dans le futur (plus de 60 min), c'est une erreur -> inactif
+    // (Tolérance augmentée pour éviter les problèmes de fuseau horaire/horloge client)
+    if (diff < -60 * 60 * 1000) {
+      return false;
+    }
+
+    // Si la date est valide, on vérifie la fenêtre d'activité
+    return diff <= ACTIVITY_WINDOW_MS;
+  }
+
+  // 2. Fallback : si pas de timestamp, on regarde les indicateurs booléens (legacy)
   if (dataHasTruthyBoolean(data, ["isActive", "active", "isOnline", "enabled"])) {
     return true;
   }
 
+  // 3. Fallback : statut textuel
   const status = readStringField(data, ["status", "state", "activity", "activityStatus"]);
   if (status) {
     const normalized = status.toLowerCase();
     if (["active", "actif", "online", "en ligne"].includes(normalized)) {
       return true;
     }
-  }
-
-  const lastActivityMs = readTimestampMs(data, ["lastActive", "lastActivity", "lastLogin", "lastSeenAt", "updatedAt"]);
-  if (typeof lastActivityMs === "number") {
-    return Date.now() - lastActivityMs <= ACTIVITY_WINDOW_MS;
   }
 
   return false;
@@ -1547,6 +2639,12 @@ const toMillis = (input: unknown): number | undefined => {
   if (input instanceof Date) {
     return input.getTime();
   }
+  if (typeof input === "string") {
+    const d = new Date(input);
+    if (!isNaN(d.getTime())) {
+      return d.getTime();
+    }
+  }
   if (typeof input === "object") {
     const maybeTimestamp = input as { toDate?: () => Date; seconds?: number; milliseconds?: number };
     if (typeof maybeTimestamp.toDate === "function") {
@@ -1563,3 +2661,143 @@ const toMillis = (input: unknown): number | undefined => {
 };
 
 export default AdminDashboardPage;
+
+type AssignRoleModalProps = {
+  open: boolean;
+  onClose: () => void;
+  selectedIds: string[];
+  allowedRoles: string[];
+  onAssign: (role: string) => void | Promise<void>;
+  loading: boolean;
+  feedback: CreateUserFeedback | null;
+};
+
+const AssignRoleModal: React.FC<AssignRoleModalProps> = ({
+  open,
+  onClose,
+  selectedIds,
+  allowedRoles,
+  onAssign,
+  loading,
+  feedback,
+}) => {
+  const [role, setRole] = React.useState<string>("");
+  const [query, setQuery] = React.useState<string>("");
+  React.useEffect(() => { setRole(allowedRoles[0] || ""); }, [allowedRoles]);
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allowedRoles;
+    return allowedRoles.filter(r => r.toLowerCase().includes(q));
+  }, [allowedRoles, query]);
+  const groupOf = (r: string): string => {
+    const up = r.toUpperCase();
+    if (up.startsWith("TA C+")) return "TA C+";
+    if (up.startsWith("TA LEADS")) return "TA LEADS";
+    if (up.startsWith("SUPERVISEUR C+")) return "SUPERVISEUR C+";
+    if (up.startsWith("SUPERVISEUR LEADS")) return "SUPERVISEUR LEADS";
+    if (up === "DIRECTION") return "DIRECTION";
+    if (up === "ADMINISTRATEUR") return "ADMINISTRATION";
+    return "AUTRES";
+  };
+  const order = ["TA C+", "TA LEADS", "SUPERVISEUR C+", "SUPERVISEUR LEADS", "DIRECTION", "ADMINISTRATION", "AUTRES"];
+  const grouped = React.useMemo(() => {
+    const m = new Map<string, string[]>();
+    filtered.forEach(r => {
+      const g = groupOf(r);
+      const arr = m.get(g) || [];
+      arr.push(r);
+      m.set(g, arr);
+    });
+    return order.filter(k => m.has(k)).map(k => ({ key: k, items: (m.get(k) || []).sort() }));
+  }, [filtered]);
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-[#071120] via-[#050b17] to-[#02050b] p-6 shadow-[0_35px_80px_-45px_rgba(16,185,129,0.7)]">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-blue-200/60">Rôles</p>
+            <h3 className="text-xl font-semibold text-white">Assigner un rôle</h3>
+            <p className="text-xs text-blue-100/70 mt-1">{selectedIds.length} utilisateur(s) sélectionné(s)</p>
+          </div>
+          <button className="rounded-lg border border-white/10 p-1.5 text-white/70 hover:bg-white/5" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <label className="text-xs uppercase tracking-[0.3em] text-blue-100/60" htmlFor="assign-role-input">Rôle</label>
+          {/* Searchable role picker */}
+          <div className="relative">
+            <input
+              id="assign-role-input"
+              placeholder="Rechercher un rôle…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-black/60 pl-10 pr-3 py-3 text-sm text-white placeholder:text-blue-200/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-200/60" />
+          </div>
+          <div className="max-h-64 overflow-auto rounded-2xl border border-white/10 bg-white/5">
+            {grouped.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-blue-200/70">Aucun rôle ne correspond.</div>
+            ) : (
+              grouped.map(group => (
+                <div key={group.key} className="">
+                  <div className="sticky top-0 z-10 bg-white/10 px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-blue-200/70 border-b border-white/10">{group.key}</div>
+                  <ul className="divide-y divide-white/10">
+                    {group.items.map((r) => {
+                      const isActive = r === role;
+                      const suffix = r.endsWith(" FR") ? "FR" : r.endsWith(" CIV") ? "CIV" : null;
+                      const baseLabel = suffix ? r.replace(/\s+(FR|CIV)$/i, "") : r;
+                      return (
+                        <li key={r}>
+                          <button
+                            type="button"
+                            onClick={() => setRole(r)}
+                            className={`w-full flex items-center justify-between px-4 py-2 text-left text-sm transition ${isActive ? 'bg-emerald-500/15 text-white' : 'text-blue-100/90 hover:bg-white/10'}`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="font-medium">{baseLabel}</span>
+                              {suffix && (
+                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] tracking-wide ${suffix==='FR' ? 'border-emerald-300/50 text-emerald-100' : 'border-amber-300/50 text-amber-100'}`}>{suffix}</span>
+                              )}
+                            </span>
+                            {isActive && <Check className="h-4 w-4 text-emerald-300" />}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))
+            )}
+          </div>
+
+          {feedback && (
+            <div className={`rounded-2xl border px-4 py-3 text-sm ${feedback.type === 'success' ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-red-400/40 bg-red-500/10 text-red-200'}`}>{feedback.message}</div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-blue-100/80 transition hover:border-white/30 hover:text-white"
+          >
+            Fermer
+          </button>
+          <button
+            type="button"
+            onClick={() => onAssign(role)}
+            disabled={loading || !role}
+            className="inline-flex items-center justify-center rounded-xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/20 via-blue-500/10 to-transparent px-5 py-2.5 text-sm font-semibold uppercase tracking-[0.3em] text-white transition hover:border-emerald-300/60 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Assignation...' : 'Assigner'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

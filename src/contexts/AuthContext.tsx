@@ -21,6 +21,7 @@ import {
   OAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   fetchSignInMethodsForEmail,
   linkWithCredential,
   linkWithPopup,
@@ -29,7 +30,7 @@ import {
 } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { firebaseApp } from "../firebase";
-import { doc, setDoc, getFirestore } from "firebase/firestore";
+import { doc, setDoc, getFirestore, getDoc } from "firebase/firestore";
 
 import { getIdTokenResult } from "firebase/auth";
 
@@ -101,12 +102,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           // Récupère photoURL depuis Firestore (compatible v9)
           try {
           } catch {}
+          // Si le rôle n'est pas présent en claims, tenter Firestore users/{uid}
+          let mergedRole: string | undefined = role;
+          if (!mergedRole) {
+            try {
+              const db = getFirestore(firebaseApp);
+              const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+              const data = userDoc.exists() ? userDoc.data() as any : null;
+              const fsRole = typeof data?.role === 'string' ? data.role : undefined;
+              mergedRole = fsRole || undefined;
+            } catch {}
+          }
           setUser({
             id: firebaseUser.uid,
             displayName: firebaseUser.displayName || "",
             email: firebaseUser.email || "",
             emailVerified: firebaseUser.emailVerified,
-            role,
+            role: mergedRole,
           });
         } catch (e) {
           // Récupère photoURL depuis Firestore (compatible v9)
@@ -213,7 +225,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       if (Object.keys(params).length) {
         try { p.setCustomParameters(params); } catch {}
       }
-      // p.addScope('User.Read'); // Optionnel
+      // Demande permissions Graph utiles
+      try { p.addScope('User.Read'); } catch {}
+      try { p.addScope('User.ReadBasic.All'); } catch {}
       return p;
     };
 
@@ -255,6 +269,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       const provider = buildProvider();
       const result = await signInWithPopup(auth, provider);
       const u = result.user;
+      // Save Microsoft OAuth tokens (debug only; session-scoped)
+      try {
+        const credFromResult = OAuthProvider.credentialFromResult?.(result) as any;
+        if (credFromResult?.accessToken) {
+          sessionStorage.setItem('ms_access_token', credFromResult.accessToken);
+        }
+        if (credFromResult?.idToken) {
+          sessionStorage.setItem('ms_id_token', credFromResult.idToken);
+        }
+        sessionStorage.setItem('auth_provider', 'microsoft.com');
+      } catch {}
       // If domain changed (@orange) and an old account exists (@mars), link to preserve old UID
       try {
         const email = (u.email || '').toLowerCase();
@@ -278,6 +303,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
                 email: linked.email || email,
                 emailVerified: linked.emailVerified,
               });
+              try {
+                // Persist tokens for debug after linking as well
+                if ((credFromResult as any)?.accessToken) sessionStorage.setItem('ms_access_token', (credFromResult as any).accessToken);
+                if ((credFromResult as any)?.idToken) sessionStorage.setItem('ms_id_token', (credFromResult as any).idToken);
+                sessionStorage.setItem('auth_provider', 'microsoft.com');
+              } catch {}
               return true;
             }
           }
@@ -294,6 +325,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return true;
     } catch (err: any) {
       const code: string = err?.code || 'auth/unknown';
+      try { (window as any).__authLastMsError = { when: Date.now(), phase: 'loginWithMicrosoft', code, err }; } catch {}
       if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
         try {
           await signInWithRedirect(auth, buildProvider());
@@ -372,13 +404,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         if (Object.keys(params).length) {
           try { p.setCustomParameters(params); } catch {}
         }
+        // Aligner les scopes Graph avec le flux login
+        try { p.addScope('User.Read'); } catch {}
+        try { p.addScope('User.ReadBasic.All'); } catch {}
         return p;
       };
       if (method === 'redirect') {
         await linkWithRedirect(auth.currentUser, buildProvider());
         return true;
       }
-      await linkWithPopup(auth.currentUser, buildProvider());
+      const linkResult = await linkWithPopup(auth.currentUser, buildProvider());
+      // Persist Microsoft tokens for debug (if available)
+      try {
+        const credFromResult = OAuthProvider.credentialFromResult?.(linkResult) as any;
+        if (credFromResult?.accessToken) sessionStorage.setItem('ms_access_token', credFromResult.accessToken);
+        if (credFromResult?.idToken) sessionStorage.setItem('ms_id_token', credFromResult.idToken);
+        sessionStorage.setItem('auth_provider', 'microsoft.com');
+      } catch {}
       // Refresh local user state
       const u = auth.currentUser;
       if (u) {
@@ -392,25 +434,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return true;
     } catch (err: any) {
       const code: string = err?.code || 'auth/unknown';
+      try { (window as any).__authLastMsError = { when: Date.now(), phase: 'linkMicrosoft', code, err }; } catch {}
       // Gestion du cas credential-already-in-use
-      if (code === 'auth/credential-already-in-use' && err?.customData?.credential) {
+      if (code === 'auth/credential-already-in-use') {
+        // Essayer de dériver la credential depuis l'erreur
+        const pendingCred = err?.customData?.credential || OAuthProvider.credentialFromError?.(err);
+        if (pendingCred) {
+          try {
+            const signInResult = await signInWithCredential(auth, pendingCred);
+            const u = signInResult.user;
+            if (u) {
+              setUser({
+                id: u.uid,
+                displayName: u.displayName || '',
+                email: u.email || '',
+                emailVerified: u.emailVerified,
+              });
+            }
+            return true;
+          } catch (err2: any) {
+            if (localStorage.getItem('authDebug') === '1') {
+              console.warn('[auth] linkMicrosoft fallback signInWithCredential failed', err2?.code, err2);
+            }
+          }
+        }
+        // Dernier recours: utiliser le flux loginWithMicrosoft (plus complet) pour tenter la pré-liaison/migration
         try {
-          // On connecte l’utilisateur avec le compte Microsoft existant
-          const signInResult = await signInWithCredential(auth, err.customData.credential);
-          const u = signInResult.user;
-          if (u) {
-            setUser({
-              id: u.uid,
-              displayName: u.displayName || '',
-              email: u.email || '',
-              emailVerified: u.emailVerified,
-            });
-          }
-          return true;
-        } catch (err2: any) {
-          if (localStorage.getItem('authDebug') === '1') {
-            console.warn('[auth] linkMicrosoft credential-already-in-use fallback failed', err2?.code, err2);
-          }
+          const altOk = await loginWithMicrosoft(emailHint);
+          return altOk;
+        } catch (e3) {
+          if (localStorage.getItem('authDebug') === '1') console.warn('[auth] secondary loginWithMicrosoft fallback failed', e3);
           return false;
         }
       }
@@ -613,12 +666,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const resetPassword = async (email: string): Promise<boolean> => {
+    // Toujours utiliser la Cloud Function afin de garantir le domaine cactus-labs.fr
     try {
-      // Ne plus ajouter automatiquement de domaine : utiliser exactement la saisie
-      await sendPasswordResetEmail(auth, email);
+      const endpoint = '/api/request-password-reset';
+      // Toujours forcer le domaine de redirection vers cactus-labs.fr
+      const redirectUrl = 'https://cactus-labs.fr/auth/action';
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), redirectUrl })
+      });
+      if (!resp.ok) {
+        const msg = await resp.text().catch(() => '');
+        console.error('[resetPassword] http error', resp.status, msg);
+        return false;
+      }
       return true;
-    } catch (error) {
-      console.error("Erreur envoi email de réinitialisation:", error);
+    } catch (e) {
+      console.error('[resetPassword] exception', e);
       return false;
     }
   };

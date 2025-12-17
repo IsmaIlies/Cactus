@@ -15,6 +15,7 @@ const cors = require('cors')({ origin: true });
 
 // Migré depuis functions.config() vers Firebase Secret Manager (post-2026 compliant).
 const LEADS_API_TOKEN = defineSecret('LEADS_API_TOKEN');
+const SWEEGO_API_KEY = defineSecret('SWEEGO_API_KEY');
 
 // Sanitize token: trim and if pasted twice (e.g., ABCABC), keep first half
 function sanitizeToken(raw) {
@@ -265,16 +266,203 @@ const isAdminFromToken = (token = {}) => {
   if (!token || typeof token !== "object") {
     return false;
   }
+  // Email whitelist: specific admins (both legacy and orange domains)
+  const email = (token.email || '').toLowerCase();
+  if (email) {
+    const [local, domain = ''] = email.split('@');
+    const isOwner = local === 'i.brai' || local === 'i.boultame';
+    const isAllowedDomain = domain === 'mars-marketing.fr' || domain === 'orange.mars-marketing.fr';
+    if (isOwner && isAllowedDomain) {
+      return true;
+    }
+  }
   if (token.isAdmin === true) {
     return true;
   }
   const role = typeof token.role === "string" ? token.role.toLowerCase() : "";
-  if (role === "admin") {
+  if (role === "admin" || role === "administrateur" || role === "direction") {
     return true;
   }
   const roles = Array.isArray(token.roles) ? token.roles.map((value) => String(value).toLowerCase()) : [];
-  return roles.includes("admin");
+  return roles.includes("admin") || roles.includes("administrateur") || roles.includes("direction");
 };
+
+// Async guard that checks multiple sources to determine admin privilege
+async function isAdminAllowed(auth) {
+  if (!auth || !auth.token) return false;
+  // 1) Fast path: token-based checks, including whitelisted emails
+  if (isAdminFromToken(auth.token)) return true;
+  // 2) Fallback: read Firestore user role
+  try {
+    const snap = await admin.firestore().collection('users').doc(auth.uid).get();
+    const data = snap.exists ? snap.data() || {} : {};
+    const role = (data.role || '').toString().toUpperCase();
+    if (!role) return false;
+    if (role === 'ADMINISTRATEUR' || role === 'DIRECTION') return true;
+    if (role.startsWith('SUPERVISEUR')) return true;
+    return false;
+  } catch (e) {
+    console.warn('[isAdminAllowed] Firestore lookup failed', e && e.message ? e.message : e);
+    return false;
+  }
+}
+
+// =============================================================
+// Roles management
+// - setUserRole: admin-only, assigns role string and optional claims
+// - Updates Firebase custom claims and Firestore user document
+// =============================================================
+const ALLOWED_ROLES = [
+  'TA C+ FR',
+  'TA C+ CIV',
+  'TA LEADS CIV',
+  'TA LEADS FR',
+  'SUPERVISEUR C+ FR',
+  'SUPERVISEUR C+ CIV',
+  'SUPERVISEUR LEADS FR',
+  'SUPERVISEUR LEADS CIV',
+  'DIRECTION',
+  'ADMINISTRATEUR',
+];
+
+function deriveClaimsFromRole(role) {
+  const r = String(role).toUpperCase();
+  const isAdmin = r === 'ADMINISTRATEUR' || r === 'DIRECTION';
+  let mission = null;
+  let operation = null;
+  if (r.includes('C+')) { mission = 'CANAL+'; }
+  if (r.includes('LEADS')) { mission = 'LEADS'; }
+  if (r.includes('FR')) { operation = 'FR'; }
+  if (r.includes('CIV')) { operation = 'CIV'; }
+  const supervisor = r.startsWith('SUPERVISEUR');
+  const direction = r === 'DIRECTION';
+  return { role, isAdmin, mission, operation, supervisor, direction };
+}
+
+exports.setUserRole = onCall({ region: 'europe-west9' }, async (req) => {
+  const { auth } = req;
+  if (!auth || !auth.token) {
+    throw new HttpsError('unauthenticated', 'Authentification requise');
+  }
+  if (!(await isAdminAllowed(auth))) {
+    throw new HttpsError('permission-denied', 'Réservé aux administrateurs');
+  }
+  const { userId, userIds, role } = req.data || {};
+  if (!role || typeof role !== 'string') {
+    throw new HttpsError('invalid-argument', 'role requis');
+  }
+  const normalized = role.trim();
+  if (!ALLOWED_ROLES.includes(normalized)) {
+    throw new HttpsError('invalid-argument', 'Rôle invalide');
+  }
+  const targets = Array.isArray(userIds) && userIds.length > 0
+    ? Array.from(new Set(userIds.filter((u) => typeof u === 'string' && u.trim().length > 0)))
+    : (typeof userId === 'string' && userId.trim().length > 0 ? [userId] : []);
+  if (targets.length === 0) {
+    throw new HttpsError('invalid-argument', 'Aucun utilisateur à traiter');
+  }
+  const updated = [];
+  const failed = [];
+  for (const uid of targets) {
+    try {
+      const claims = deriveClaimsFromRole(normalized);
+      await admin.auth().setCustomUserClaims(uid, { ...(claims || {}) });
+      await admin.firestore().collection('users').doc(uid).set({
+        role: normalized,
+        mission: claims.mission || null,
+        operation: claims.operation || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: auth.uid,
+      }, { merge: true });
+      updated.push(uid);
+    } catch (e) {
+      console.error('[setUserRole] failed for', uid, e);
+      failed.push({ uid, code: e?.code, message: e?.message });
+    }
+  }
+  if (updated.length === 0) {
+    throw new HttpsError('internal', 'Aucune assignation réalisée', { failed });
+  }
+  return { ok: true, role: normalized, updated, failed };
+});
+
+// (Removed duplicate definition of setUserRoleHttp)
+
+// HTTP fallback for role assignment using Authorization: Bearer <idToken>
+exports.setUserRoleHttp = onRequest({ region: 'europe-west9' }, async (req, res) => {
+  const allowedOrigins = [
+    'https://cactus-labs.fr',
+    'http://localhost:5173', 'http://127.0.0.1:5173',
+    'http://localhost:5174', 'http://127.0.0.1:5174'
+  ];
+  const origin = req.headers.origin;
+  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const setCors = () => {
+    const reqAllowed = (req.headers['access-control-request-headers'] || 'Content-Type, Authorization').toString();
+    res.set({
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Vary': 'Origin',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': reqAllowed,
+      'Access-Control-Max-Age': '86400',
+    });
+  };
+  if (req.method === 'OPTIONS') { setCors(); return res.status(204).send(''); }
+  if (req.method !== 'POST') { setCors(); return res.status(405).json({ error: 'Méthode non autorisée' }); }
+  setCors();
+  try {
+    const authHeader = req.headers.authorization || '';
+    const m = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!m) return res.status(401).json({ error: 'Token Firebase requis' });
+    let decoded;
+    try { decoded = await admin.auth().verifyIdToken(m[1]); } catch (e) {
+      return res.status(401).json({ error: 'Token invalide', details: e && e.message });
+    }
+    const auth = { uid: decoded.uid, token: decoded };
+    if (!(await isAdminAllowed(auth))) {
+      return res.status(403).json({ error: 'Réservé aux administrateurs' });
+    }
+    let body;
+    try { body = typeof req.body === 'object' ? req.body : JSON.parse(req.rawBody?.toString('utf8') || '{}'); }
+    catch { body = {}; }
+    const { userId, userIds, role } = body || {};
+    if (!role || typeof role !== 'string') {
+      return res.status(400).json({ error: 'role requis' });
+    }
+    const normalized = role.trim();
+    if (!ALLOWED_ROLES.includes(normalized)) {
+      return res.status(400).json({ error: 'Rôle invalide' });
+    }
+    const targets = Array.isArray(userIds) && userIds.length > 0
+      ? Array.from(new Set(userIds.filter((u) => typeof u === 'string' && u.trim().length > 0)))
+      : (typeof userId === 'string' && userId.trim().length > 0 ? [userId] : []);
+    if (targets.length === 0) return res.status(400).json({ error: 'Aucun utilisateur à traiter' });
+    const updated = [];
+    const failed = [];
+    for (const uid of targets) {
+      try {
+        const claims = deriveClaimsFromRole(normalized);
+        await admin.auth().setCustomUserClaims(uid, { ...(claims || {}) });
+        await admin.firestore().collection('users').doc(uid).set({
+          role: normalized,
+          mission: claims.mission || null,
+          operation: claims.operation || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedBy: auth.uid,
+        }, { merge: true });
+        updated.push(uid);
+      } catch (e) {
+        failed.push({ uid, code: e?.code, message: e?.message });
+      }
+    }
+    if (updated.length === 0) return res.status(500).json({ error: 'Aucune assignation réalisée', failed });
+    return res.json({ ok: true, role: normalized, updated, failed });
+  } catch (err) {
+    console.error('[setUserRoleHttp] error', err);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 // =============================================================
 // Purge automatique des matchs passés
@@ -618,7 +806,7 @@ exports.getAdminUserStats = onCall({ region: "europe-west9" }, async (req) => {
     throw new HttpsError("unauthenticated", "Authentification requise");
   }
 
-  if (!isAdminFromToken(auth.token)) {
+  if (!(await isAdminAllowed(auth))) {
     throw new HttpsError("permission-denied", "Réservé aux administrateurs");
   }
 
@@ -669,6 +857,64 @@ exports.getAdminUserStats = onCall({ region: "europe-west9" }, async (req) => {
   };
 });
 
+// HTTP fallback for admin user stats with CORS and Bearer token verification
+exports.getAdminUserStatsHttp = onRequest({ region: 'europe-west9' }, async (req, res) => {
+  const allowedOrigins = [
+    'https://cactus-labs.fr',
+    'http://localhost:5173','http://127.0.0.1:5173',
+    'http://localhost:5174','http://127.0.0.1:5174'
+  ];
+  const origin = req.headers.origin; const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const setCors = () => { res.set({
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Credentials': 'true',
+    'Vary': 'Origin',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  }); };
+  if (req.method === 'OPTIONS') { setCors(); return res.status(204).send(''); }
+  if (req.method !== 'GET') { setCors(); return res.status(405).json({ error: 'Méthode non autorisée' }); }
+  setCors();
+  try {
+    const m = (req.headers.authorization || '').toString().match(/^Bearer\s+(.+)$/i);
+    if (!m) return res.status(401).json({ error: 'Token Firebase requis' });
+    const idToken = m[1];
+    let decoded; try { decoded = await admin.auth().verifyIdToken(idToken); } catch (e) { return res.status(401).json({ error: 'Token invalide', details: e && e.message }); }
+    const auth = { uid: decoded.uid, token: decoded };
+    if (!(await isAdminAllowed(auth))) {
+      return res.status(403).json({ error: 'Réservé aux administrateurs' });
+    }
+
+    const now = Date.now();
+    const threshold = now - ADMIN_ACTIVITY_WINDOW_MS;
+    let totalUsers = 0; let activeUsers = 0; let disabledUsers = 0; let pageToken;
+    try {
+      do {
+        const result = await admin.auth().listUsers(1000, pageToken);
+        result.users.forEach((userRecord) => {
+          if (userRecord.disabled) { disabledUsers += 1; return; }
+          totalUsers += 1;
+          const lastSignInTime = userRecord.metadata?.lastSignInTime;
+          const lastRefreshTime = userRecord.metadata?.lastRefreshTime;
+          const signInMs = lastSignInTime ? Date.parse(lastSignInTime) : NaN;
+          const refreshMs = lastRefreshTime ? Date.parse(lastRefreshTime) : NaN;
+          const latestActivity = Math.max(Number.isFinite(signInMs) ? signInMs : 0, Number.isFinite(refreshMs) ? refreshMs : 0);
+          if (latestActivity && latestActivity >= threshold) { activeUsers += 1; }
+        });
+        pageToken = result.pageToken;
+      } while (pageToken);
+    } catch (error) {
+      console.error('[getAdminUserStatsHttp] error', error);
+      return res.status(500).json({ error: error?.message || 'Erreur lors de la récupération des statistiques', rawCode: error?.code });
+    }
+    return res.json({ success: true, totalUsers, activeUsers, disabledUsers, windowHours: ADMIN_ACTIVITY_WINDOW_HOURS, updatedAt: new Date(now).toISOString() });
+  } catch (err) {
+    console.error('[getAdminUserStatsHttp] failure', err);
+    return res.status(500).json({ error: 'Internal error', details: err?.message });
+  }
+});
+
 // =============================================================
 // Auth migration helpers
 // - mintCustomTokenByEmail: returns a Custom Token for an existing user
@@ -716,9 +962,10 @@ exports.mintCustomTokenByEmail = onCall({ region: 'europe-west9' }, async (req) 
 
 // =============================================================
 // updatePrimaryEmailIfMicrosoftLinked
-// Admin-only callable: migrate a user's primary email from @mars-marketing.fr
-// to @orange.mars-marketing.fr but only if the Microsoft provider is already
-// linked (garantie SSO et UID inchangé). Prevents accidental UID duplication.
+// Admin/self callable: migrate a user's primary email to @orange.mars-marketing.fr
+// Works from any source domain (mars-marketing.fr, gmail.com, etc.) by defaulting
+// to the caller's UID when email lookups don't match. Requires Microsoft provider
+// to be linked (unless admin uses force). Prevents accidental UID duplication.
 // =============================================================
 exports.updatePrimaryEmailIfMicrosoftLinked = onCall({ region: 'europe-west9' }, async (req) => {
   const { auth } = req;
@@ -726,35 +973,44 @@ exports.updatePrimaryEmailIfMicrosoftLinked = onCall({ region: 'europe-west9' },
     throw new HttpsError('unauthenticated', 'Authentification requise');
   }
 
-  const { localPart, force } = req.data || {};
+  const { localPart, targetEmail, force } = req.data || {};
   let lpInput = typeof localPart === 'string' ? localPart.trim().toLowerCase() : '';
+  let target = typeof targetEmail === 'string' ? targetEmail.trim().toLowerCase() : '';
   // Fallback: prendre localPart depuis l'email courant si non fourni
   const callerEmail = (auth.token.email || '').toLowerCase();
   if (!lpInput && callerEmail.includes('@')) {
     lpInput = callerEmail.split('@')[0];
   }
-  if (!lpInput) {
-    throw new HttpsError('invalid-argument', 'localPart requis ou impossible à déduire');
+  // If a full target email is provided, prefer it (must be @orange.mars-marketing.fr)
+  if (target) {
+    if (!/@orange\.mars-marketing\.fr$/i.test(target)) {
+      throw new HttpsError('invalid-argument', 'targetEmail doit être @orange.mars-marketing.fr');
+    }
+    const [loc] = target.split('@');
+    if (!loc || /[^a-z0-9._-]/.test(loc)) {
+      throw new HttpsError('invalid-argument', 'targetEmail invalide');
+    }
   }
-  if (/[^a-z0-9._-]/.test(lpInput)) {
-    throw new HttpsError('invalid-argument', 'localPart invalide');
+  if (!target) {
+    if (!lpInput) {
+      throw new HttpsError('invalid-argument', 'localPart requis ou impossible à déduire');
+    }
+    if (/[^a-z0-9._-]/.test(lpInput)) {
+      throw new HttpsError('invalid-argument', 'localPart invalide');
+    }
   }
 
-  const legacyEmail = `${lpInput}@mars-marketing.fr`;
-  const newEmail = `${lpInput}@orange.mars-marketing.fr`;
+  const desiredEmail = target || `${lpInput}@orange.mars-marketing.fr`;
+  const legacyEmail = `${(target ? desiredEmail.split('@')[0] : lpInput)}@mars-marketing.fr`;
 
-  // Récupérer l'utilisateur (legacy ou déjà migré)
+  // Toujours migrer le compte de l'appelant (évite les 403 si localPart diffère)
   let userRecord = null;
   let alreadyMigrated = false;
   try {
-    userRecord = await admin.auth().getUserByEmail(legacyEmail);
-  } catch (e1) {
-    try {
-      userRecord = await admin.auth().getUserByEmail(newEmail);
-      alreadyMigrated = true;
-    } catch (e2) {
-      throw new HttpsError('not-found', 'Utilisateur introuvable (legacy ou migré)');
-    }
+    userRecord = await admin.auth().getUser(auth.uid);
+    alreadyMigrated = ((userRecord.email || '').toLowerCase() === desiredEmail);
+  } catch (e3) {
+    throw new HttpsError('not-found', 'Utilisateur appelant introuvable');
   }
 
   const callerIsAdmin = isAdminFromToken(auth.token);
@@ -776,7 +1032,7 @@ exports.updatePrimaryEmailIfMicrosoftLinked = onCall({ region: 'europe-west9' },
 
   // Vérifier collision nouvel email
   try {
-    const existingNew = await admin.auth().getUserByEmail(newEmail);
+    const existingNew = await admin.auth().getUserByEmail(desiredEmail);
     if (existingNew && existingNew.uid !== userRecord.uid) {
       throw new HttpsError('already-exists', 'Nouvel email déjà utilisé par un autre UID');
     }
@@ -786,7 +1042,7 @@ exports.updatePrimaryEmailIfMicrosoftLinked = onCall({ region: 'europe-west9' },
   } catch (e) { /* si non trouvé: OK */ }
 
   try {
-    await admin.auth().updateUser(userRecord.uid, { email: newEmail });
+    await admin.auth().updateUser(userRecord.uid, { email: desiredEmail });
   } catch (e) {
     if (e && e.code === 'auth/email-already-exists') {
       throw new HttpsError('already-exists', 'Nouvel email déjà utilisé');
@@ -795,12 +1051,12 @@ exports.updatePrimaryEmailIfMicrosoftLinked = onCall({ region: 'europe-west9' },
   }
 
   try {
-    await admin.firestore().collection('users').doc(userRecord.uid).set({ email: newEmail, migratedEmailAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await admin.firestore().collection('users').doc(userRecord.uid).set({ email: desiredEmail, migratedEmailAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   } catch (e) {
     console.warn('[updatePrimaryEmailIfMicrosoftLinked] Firestore update failed', e);
   }
 
-  return { ok: true, uid: userRecord.uid, oldEmail: legacyEmail, newEmail };
+  return { ok: true, uid: userRecord.uid, oldEmail: legacyEmail, newEmail: desiredEmail };
 });
 
 // HTTP wrapper with CORS for updatePrimaryEmailIfMicrosoftLinked
@@ -862,27 +1118,36 @@ exports.updatePrimaryEmailIfMicrosoftLinkedHttp = onRequest({ region: 'europe-we
       try { return JSON.parse(req.rawBody?.toString('utf8') || '{}'); } catch { return {}; }
     })();
 
-    const { localPart, force } = body || {};
+    const { localPart, targetEmail, force } = body || {};
     let lpInput = typeof localPart === 'string' ? localPart.trim().toLowerCase() : '';
+    let target = typeof targetEmail === 'string' ? targetEmail.trim().toLowerCase() : '';
     const callerEmail = (decoded.email || '').toLowerCase();
-    if (!lpInput && callerEmail.includes('@')) lpInput = callerEmail.split('@')[0];
-    if (!lpInput) return res.status(400).json({ error: 'localPart requis ou impossible à déduire' });
-    if (/[^a-z0-9._-]/.test(lpInput)) return res.status(400).json({ error: 'localPart invalide' });
+    if (!lpInput && !target && callerEmail.includes('@')) lpInput = callerEmail.split('@')[0];
+    if (target) {
+      if (!/@orange\.mars-marketing\.fr$/i.test(target)) {
+        return res.status(400).json({ error: 'targetEmail doit être @orange.mars-marketing.fr' });
+      }
+      const [loc] = target.split('@');
+      if (!loc || /[^a-z0-9._-]/.test(loc)) {
+        return res.status(400).json({ error: 'targetEmail invalide' });
+      }
+    }
+    if (!target) {
+      if (!lpInput) return res.status(400).json({ error: 'localPart requis ou impossible à déduire' });
+      if (/[^a-z0-9._-]/.test(lpInput)) return res.status(400).json({ error: 'localPart invalide' });
+    }
 
-    const legacyEmail = `${lpInput}@mars-marketing.fr`;
-    const newEmail = `${lpInput}@orange.mars-marketing.fr`;
+    const desiredEmail = target || `${lpInput}@orange.mars-marketing.fr`;
+    const legacyEmail = `${(target ? desiredEmail.split('@')[0] : lpInput)}@mars-marketing.fr`;
 
+    // Toujours migrer le compte de l'appelant (évite les 403 si localPart diffère)
     let userRecord = null;
     let alreadyMigrated = false;
     try {
-      userRecord = await admin.auth().getUserByEmail(legacyEmail);
-    } catch (e1) {
-      try {
-        userRecord = await admin.auth().getUserByEmail(newEmail);
-        alreadyMigrated = true;
-      } catch (e2) {
-        return res.status(404).json({ error: 'Utilisateur introuvable (legacy ou migré)' });
-      }
+      userRecord = await admin.auth().getUser(decoded.uid);
+      alreadyMigrated = ((userRecord.email || '').toLowerCase() === desiredEmail);
+    } catch (e3) {
+      return res.status(404).json({ error: 'Utilisateur appelant introuvable' });
     }
 
     const callerIsAdmin = isAdminFromToken(decoded);
@@ -903,7 +1168,7 @@ exports.updatePrimaryEmailIfMicrosoftLinkedHttp = onRequest({ region: 'europe-we
     }
 
     try {
-      const existingNew = await admin.auth().getUserByEmail(newEmail);
+      const existingNew = await admin.auth().getUserByEmail(desiredEmail);
       if (existingNew && existingNew.uid !== userRecord.uid) {
         setCors();
         return res.status(409).json({ error: 'Nouvel email déjà utilisé par un autre UID' });
@@ -914,7 +1179,7 @@ exports.updatePrimaryEmailIfMicrosoftLinkedHttp = onRequest({ region: 'europe-we
     } catch (e) { /* non trouvé OK */ }
 
     try {
-      await admin.auth().updateUser(userRecord.uid, { email: newEmail });
+      await admin.auth().updateUser(userRecord.uid, { email: desiredEmail });
     } catch (e) {
       if (e && e.code === 'auth/email-already-exists') {
         setCors();
@@ -925,12 +1190,12 @@ exports.updatePrimaryEmailIfMicrosoftLinkedHttp = onRequest({ region: 'europe-we
     }
 
     try {
-      await admin.firestore().collection('users').doc(userRecord.uid).set({ email: newEmail, migratedEmailAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      await admin.firestore().collection('users').doc(userRecord.uid).set({ email: desiredEmail, migratedEmailAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     } catch (e) {
       console.warn('[updatePrimaryEmailIfMicrosoftLinkedHttp] Firestore update failed', e);
     }
 
-    return res.json({ ok: true, uid: userRecord.uid, oldEmail: legacyEmail, newEmail });
+    return res.json({ ok: true, uid: userRecord.uid, oldEmail: legacyEmail, newEmail: desiredEmail });
   } catch (err) {
     console.error('[updatePrimaryEmailIfMicrosoftLinkedHttp] Error', err);
     setCors();
@@ -1161,6 +1426,122 @@ exports.sendProgramme = onCall({ region: "europe-west9" }, async () => {
   return { success: true, recipients };
 });
 
+// =============================================================
+// Password reset via Sweego
+// - Generates a Firebase Auth password reset link using Admin SDK
+// - Sends the link by email via Sweego (same sender as other mails)
+// - Hides user enumeration (returns generic success when user not found)
+// Endpoint: POST /api/request-password-reset { email, redirectUrl? }
+// =============================================================
+exports.requestPasswordReset = onRequest({ region: 'europe-west9', secrets: [SWEEGO_API_KEY] }, async (req, res) => {
+  const allowedOrigins = [
+    'https://cactus-labs.fr',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174'
+  ];
+  const origin = req.headers.origin;
+  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  const setCors = () => {
+    res.set({
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Vary': 'Origin',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
+    });
+  };
+
+  if (req.method === 'OPTIONS') {
+    setCors();
+    return res.status(204).send('');
+  }
+  if (req.method !== 'POST') {
+    setCors();
+    return res.status(405).json({ error: 'Méthode non autorisée' });
+  }
+
+  setCors();
+  const body = (() => {
+    if (typeof req.body === 'object') return req.body;
+    try { return JSON.parse(req.rawBody?.toString('utf8') || '{}'); } catch { return {}; }
+  })();
+  const email = (body?.email || '').toString().trim().toLowerCase();
+  const inferredRedirect = () => {
+    // Force the reset link to use cactus-labs.fr to avoid NXDOMAIN issues
+    return `https://cactus-labs.fr/auth/action`;
+  };
+  const redirectUrl = (body?.redirectUrl || inferredRedirect()).toString();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'Email invalide' });
+  }
+
+  try {
+    let link = '';
+    try {
+      link = await admin.auth().generatePasswordResetLink(email, {
+        url: redirectUrl,
+        handleCodeInApp: true,
+      });
+    } catch (e) {
+      // Cacher l’existence/non‑existence: si user-not-found, répondre comme succès sans envoyer
+      if (e && e.code === 'auth/user-not-found') {
+        return res.json({ success: true, sent: false });
+      }
+      // Si le domaine de redirection n'est pas autorisé ou l'URL invalide, tenter sans URL (utilise la configuration par défaut du projet)
+      const code = e?.code || '';
+      if (code === 'auth/invalid-continue-uri' || code === 'auth/unauthorized-continue-uri') {
+        try {
+          link = await admin.auth().generatePasswordResetLink(email);
+        } catch (e2) {
+          console.error('[requestPasswordReset] fallback without redirect failed', e2);
+          // Ne pas bloquer l’UI: on considère succès même sans envoi
+          return res.json({ success: true, sent: false });
+        }
+      } else {
+        console.error('[requestPasswordReset] generate link failed', e);
+        // Ne pas bloquer l’UI: on considère succès même sans envoi
+        return res.json({ success: true, sent: false });
+      }
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html lang="fr">
+  <head><meta charset="UTF-8" /></head>
+  <body style="margin:0; padding:24px; font-family:Arial, sans-serif; background:#f7f7f8;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px; margin:0 auto; background:#fff; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.06);">
+      <tr><td style="padding:24px;">
+        <h2 style="margin:0 0 8px; color:#0f172a;">Réinitialisation du mot de passe</h2>
+        <p style="margin:0 0 16px; color:#334155;">Cliquez sur le bouton ci‑dessous pour définir un nouveau mot de passe. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p>
+        <p style="margin:24px 0;">
+          <a href="${link}" style="display:inline-block; background:#00c08b; color:#fff; padding:12px 18px; border-radius:8px; text-decoration:none; font-weight:600;">Réinitialiser le mot de passe</a>
+        </p>
+        <p style="font-size:13px; color:#64748b; margin:0 0 8px;">Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :</p>
+        <p style="font-size:12px; color:#0f172a; word-break:break-all;">${link}</p>
+        <p style="font-size:12px; color:#64748b;">Le lien expirera automatiquement après un délai de sécurité.</p>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+
+    try {
+      const apiKey = (SWEEGO_API_KEY && SWEEGO_API_KEY.value && SWEEGO_API_KEY.value()) || process.env.SWEEGO_API_KEY;
+      await sendEmail({ to: email, subject: '🔐 Réinitialisation du mot de passe', html, apiKey });
+      return res.json({ success: true, sent: true });
+    } catch (mailErr) {
+      console.error('[requestPasswordReset] sendEmail failed, returning success without send', mailErr);
+      // Ne bloque pas l’utilisateur: on considère succès même si l’email n’a pas pu être envoyé
+      return res.json({ success: true, sent: false });
+    }
+  } catch (e) {
+    console.error('[requestPasswordReset] error', e);
+    return res.status(500).json({ error: 'Envoi email impossible' });
+  }
+});
+
 exports.sendProgrammeScheduled = onSchedule(
   {
     schedule: "30 09 * * 1-5", // Du lundi au vendredi à 09:30 (heure de Paris)
@@ -1279,10 +1660,11 @@ function buildHtml(sale, message) {
 </html>`;
 }
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, apiKey }) {
   // Récupération clé Sweego depuis config Firebase Functions ou variable d'env fallback
-  const functions = require('firebase-functions');
-  const apiKey = (functions.config().sweego && functions.config().sweego.apikey) || process.env.SWEEGO_API_KEY;
+  // Cloud Functions Gen2: functions.config() n'est plus supporté.
+  // Utiliser uniquement une variable d'environnement (ex: SWEEGO_API_KEY)
+  apiKey = apiKey || process.env.SWEEGO_API_KEY;
   if (!apiKey) {
     console.error('[sendEmail] Clé API Sweego manquante (config sweego.apikey ou env SWEEGO_API_KEY). Email NON envoyé:', { to, subject });
     return; // On n'essaie pas l'appel sans clé
@@ -1293,8 +1675,8 @@ async function sendEmail({ to, subject, html }) {
     provider: "sweego",
     recipients: [{ email: to }],
     from: {
-      email: "no-reply@cactus-tech.fr",
-      name: "Cactus-Tech",
+      email: "no-reply@cactus-labs.fr",
+      name: "Cactus",
     },
     subject,
     "message-html": html,

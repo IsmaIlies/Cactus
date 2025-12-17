@@ -7,6 +7,7 @@ import autoprefixer from 'autoprefixer';
 // Alternative (if using emulator): change target to your local emulator URL.
 const JUSTWATCH_FN_BASE = 'https://europe-west9-cactus-mm.cloudfunctions.net';
 const LEADS_FN_BASE = 'https://europe-west1-cactus-mm.cloudfunctions.net';
+const AUTH_MIGRATION_FN_BASE = 'https://europe-west9-cactus-mm.cloudfunctions.net'; // même région que updatePrimaryEmailIfMicrosoftLinkedHttp
 
 export default defineConfig({
   plugins: [react()],
@@ -51,6 +52,17 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/vendor\/leads-stats/, '/stats-lead.php'),
+      },
+      // Migration email: permet d'utiliser simplement fetch('/api/update-email') en dev sans 404
+      '/api/update-email': {
+        target: AUTH_MIGRATION_FN_BASE,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/update-email/, '/updatePrimaryEmailIfMicrosoftLinkedHttp'),
+      },
+      '/api/request-password-reset': {
+        target: AUTH_MIGRATION_FN_BASE,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/request-password-reset/, '/requestPasswordReset'),
       },
     },
   },

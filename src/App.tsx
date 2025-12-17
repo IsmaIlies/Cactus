@@ -11,6 +11,7 @@ import TeleSalesAssistant from "./components/TeleSalesAssistant";
 import AssistantTestPage from "./pages/AssistantTestPage";
 import { AuthProvider } from "./contexts/AuthContext";
 import AutoLogout from "./components/AutoLogout";
+import UserPresenceManager from "./components/UserPresenceManager";
 import { RegionProvider } from './contexts/RegionContext';
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
@@ -39,14 +40,30 @@ import SupervisorLeadsAnalysePage from "./pages/SupervisorLeadsAnalysePage";
 import SupervisorLeadsPlusPage from "./pages/SupervisorLeadsPlusPage";
 import SupervisorLeadsExportPage from "./pages/SupervisorLeadsExportPage";
 import SupervisorLeadsEcoutesPage from "./pages/SupervisorLeadsEcoutesPage";
+import SupervisorCanalCIVEcoutesPage from "./pages/SupervisorCanalCIVEcoutesPage";
+import SupervisorCanalFREcoutesPage from "./pages/SupervisorCanalFREcoutesPage";
+import { useParams } from "react-router-dom";
+
+// Router component to render the correct Ecoutes page per supervisor area
+const SupervisorEcoutesRouter: React.FC = () => {
+  const { area } = useParams();
+  const a = (area || '').toUpperCase();
+  if (a === 'LEADS') return <SupervisorLeadsEcoutesPage />;
+  if (a === 'CIV') return <SupervisorCanalCIVEcoutesPage />;
+  if (a === 'FR') return <SupervisorCanalFREcoutesPage />;
+  // Default: fall back to LEADS style (or implement FR later if needed)
+  return <SupervisorLeadsEcoutesPage />;
+};
 import SupervisorLeadsSalesHistoryPage from "./pages/SupervisorLeadsSalesHistoryPage";
 import SupervisorLeadsAgentStatsPage from "./pages/SupervisorLeadsAgentStatsPage";
 import SupervisorLeadSaleReassignPage from "./pages/SupervisorLeadSaleReassignPage";
+import AuthDebugPage from "./pages/AuthDebugPage";
 
 function App() {
   return (
     <AuthProvider>
       <AutoLogout />
+      <UserPresenceManager />
       <RegionProvider>
       <Routes>
         <Route
@@ -74,6 +91,7 @@ function App() {
           }
         />
         <Route path="/diagnostic" element={<DiagnosticPage />} />
+        <Route path="/auth/debug" element={<ProtectedRoute><AuthDebugPage /></ProtectedRoute>} />
         <Route path="/checklist" element={<Checklist />} />
         <Route path="/assistant-test" element={<TeleSalesAssistantTestPage />} />
         <Route path="/assistant-demo" element={
@@ -107,7 +125,7 @@ function App() {
           <Route path="stat-agent" element={<SupervisorLeadsAgentStatsPage />} />
           <Route path="reassign" element={<SupervisorLeadSaleReassignPage />} />
           <Route path="analyse" element={<SupervisorLeadsAnalysePage />} />
-          <Route path="ecoutes" element={<SupervisorLeadsEcoutesPage />} />
+          <Route path="ecoutes" element={<SupervisorEcoutesRouter />} />
           <Route path="export" element={<SupervisorLeadsExportPage />} />
           <Route path="checklist" element={<SupervisorChecklist />} />
           <Route path="archives" element={<SupervisorArchives />} />

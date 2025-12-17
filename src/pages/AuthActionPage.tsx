@@ -28,6 +28,9 @@ const AuthActionPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resetEmail, setResetEmail] = useState<string | null>(null);
+  const [pwdTouched, setPwdTouched] = useState(false);
   const [actionProcessed, setActionProcessed] = useState(false);
   const [actionStarted, setActionStarted] = useState(false);
   const actionInProgress = useRef(false);
@@ -294,11 +297,16 @@ const AuthActionPage = () => {
             break;
 
           case "resetPassword":
-            // Vérifier que le code est valide
-            await verifyPasswordResetCode(auth, oobCode);
+            // Vérifier que le code est valide et récupérer l'email concerné
+            const emailForReset = await verifyPasswordResetCode(auth, oobCode);
+            setResetEmail(emailForReset || null);
             setIsPasswordReset(true);
             setStatus("success");
-            setMessage("Entrez votre nouveau mot de passe.");
+            setMessage(
+              emailForReset
+                ? `Entrez un nouveau mot de passe pour ${emailForReset}.`
+                : "Entrez votre nouveau mot de passe."
+            );
             setActionProcessed(true);
             actionInProgress.current = false;
             break;
@@ -345,23 +353,37 @@ const AuthActionPage = () => {
 
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPwdTouched(true);
+
+    const rules = {
+      len8: newPassword.length >= 8,
+      letter: /[A-Za-z]/.test(newPassword),
+      number: /\d/.test(newPassword),
+    };
 
     if (newPassword !== confirmPassword) {
       setMessage("Les mots de passe ne correspondent pas.");
       return;
     }
 
-    if (newPassword.length < 6) {
-      setMessage("Le mot de passe doit contenir au moins 6 caractères.");
+    if (!rules.len8 || !rules.letter || !rules.number) {
+      setMessage(
+        "Le mot de passe doit faire au moins 8 caractères et contenir des lettres et des chiffres."
+      );
       return;
     }
 
     try {
+      setIsSubmitting(true);
       await confirmPasswordReset(auth, oobCode!, newPassword);
       setMessage("Votre mot de passe a été réinitialisé avec succès !");
-      setTimeout(() => navigate("/login"), 3000);
+      setTimeout(() =>
+        navigate(`/login${resetEmail ? `?email=${encodeURIComponent(resetEmail)}` : ""}`),
+      1800);
     } catch (error: any) {
       setMessage(getErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -437,6 +459,11 @@ const AuthActionPage = () => {
       "Nouveau mot de passe",
       <div className="bg-white rounded-lg shadow-lg p-6 w-full">
         <form onSubmit={handlePasswordReset} className="space-y-4">
+          {resetEmail && (
+            <div className="text-sm text-gray-600 mb-2">
+              Réinitialisation pour : <span className="font-semibold">{resetEmail}</span>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nouveau mot de passe
@@ -446,10 +473,11 @@ const AuthActionPage = () => {
                 type={showNewPassword ? "text" : "password"}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                onBlur={() => setPwdTouched(true)}
                 className="input-field pr-10"
                 placeholder="Votre nouveau mot de passe"
                 required
-                minLength={6}
+                minLength={8}
               />
               <button
                 type="button"
@@ -463,6 +491,13 @@ const AuthActionPage = () => {
                 )}
               </button>
             </div>
+            {pwdTouched && (
+              <ul className="mt-2 text-xs text-gray-600 space-y-1">
+                <li className={`${newPassword.length >= 8 ? "text-green-700" : ""}`}>• Au moins 8 caractères</li>
+                <li className={`${/[A-Za-z]/.test(newPassword) ? "text-green-700" : ""}`}>• Contient au moins une lettre</li>
+                <li className={`${/\d/.test(newPassword) ? "text-green-700" : ""}`}>• Contient au moins un chiffre</li>
+              </ul>
+            )}
           </div>
 
           <div>
@@ -477,7 +512,7 @@ const AuthActionPage = () => {
                 className="input-field pr-10"
                 placeholder="Confirmez votre mot de passe"
                 required
-                minLength={6}
+                minLength={8}
               />
               <button
                 type="button"
@@ -505,9 +540,13 @@ const AuthActionPage = () => {
             </div>
           )}
 
-          <button type="submit" className="w-full btn-primary py-3">
+          <button type="submit" disabled={isSubmitting} className={`w-full btn-primary py-3 ${isSubmitting ? "opacity-70 cursor-not-allowed" : ""}`}>
             Réinitialiser le mot de passe
           </button>
+          <div className="text-xs text-gray-500 text-center mt-1">
+            En validant, vous serez redirigé vers la connexion
+            {resetEmail ? " avec votre email prérempli." : "."}
+          </div>
         </form>
       </div>
     );
@@ -538,6 +577,15 @@ const AuthActionPage = () => {
               Accéder au Dashboard
             </button>
           )}
+
+        {status === "error" && mode === "resetPassword" && (
+          <button
+            onClick={() => navigate(`/login${resetEmail ? `?email=${encodeURIComponent(resetEmail)}` : ""}`)}
+            className="block w-full btn-primary py-3"
+          >
+            Renvoyer un lien de réinitialisation
+          </button>
+        )}
 
         <button
           onClick={() => navigate("/login")}

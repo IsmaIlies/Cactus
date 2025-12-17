@@ -59,6 +59,11 @@
         "functionRegion": "europe-west1"
       },
       {
+        "source": "/api/request-password-reset",
+        "function": "requestPasswordReset",
+        "functionRegion": "europe-west9"
+      },
+      {
         "source": "/auth/action",
         "destination": "/index.html"
       },
