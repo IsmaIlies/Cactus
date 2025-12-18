@@ -49,7 +49,6 @@ const CallScriptPage = () => {
   });
   const [isCallActive, setIsCallActive] = useState(false);
   const [, setCallDuration] = useState(0);
-  const [showInfoPopup, setShowInfoPopup] = useState(true);
   const [mode, setMode] = useState<'wizard' | 'flow'>('flow');
   const [navDir, setNavDir] = useState<'left' | 'right'>('right');
 
@@ -543,7 +542,7 @@ const CallScriptPage = () => {
       title: 'Profitez-vous des chaînes Orange ?',
       text: '(BOX BRANCHÉE)\nQuestions de vérification des usages actuels.',
       options: [
-        { label: 'Oui', nextId: 'boxFeatures' },
+        { label: 'Oui', nextId: 'smartTVInfoYes' },
         { label: 'Non', nextId: 'advantages' },
       ],
     },
@@ -572,7 +571,7 @@ const CallScriptPage = () => {
       title: 'Présenter les avantages Orange TV',
       text: 'Mettre en avant les 200 chaînes et 190 options.\nReplay / Guide des programmes / Contrôle du direct / Mosaïque.\nApplications dans un seul univers: YouTube / Deezer / Netflix…',
       options: [
-        { label: 'Continuer ➜ Plateformes de streaming', nextId: 'streamingPlatforms' },
+        { label: "Fin d'appel — box non branchée", nextId: 'noBoxStop' },
       ],
     },
     streamingPlatforms: {
@@ -677,7 +676,7 @@ const CallScriptPage = () => {
     seriesCinemaStart: {
       id: 'seriesCinemaStart',
       title: 'Cinéma — Fréquence',
-      text: 'Et cela vous arrive d’aller au cinéma ?\nUne fois par mois ; 2–3 fois dans l’année … ?',
+      text: 'Et cela vous arrive d’aller au Cinéma ?\nune fois par mois ; 2-3 fois dans l’année ... ?',
       options: [
         { label: 'Si oui, fréquemment', nextId: 'seriesCinemaYes' },
         { label: 'Si rarement', nextId: 'seriesCinemaRare' },
@@ -703,7 +702,7 @@ const CallScriptPage = () => {
     seriesCinemaRarePrice: {
       id: 'seriesCinemaRarePrice',
       title: 'Si prix',
-      text: 'Oui c’est vrai, j’ai pas mal de clients qui me disent qu’une sortie à deux on en a presque pour 30 à 35 euros maintenant.\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ?',
+      text: 'Oui c’est vrai, j’ai pas mal de clients qui me disent qu’une sortie à deux on en a presque pour 30 à 35 euros maintenant.\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ? \n(Jouer sur le decalading) Canal+ est au prix de 24€99/mois aujourd’hui je veux vraiment vous faire plaisir, \n et je vous offre un tarif de 19€99/mois pendant 24 mois pour profiter de l’intégralité du cinéma à la maison. \n',
       options: [
         { label: 'Continuer', nextId: 'closingIntro' },
       ],
@@ -721,7 +720,7 @@ const CallScriptPage = () => {
       title: 'Si FILM',
       text: 'Quel type (Aventure, Policier, Fantastique…) ?\nSouhaiteriez-vous voir plus souvent des films de qualité ?\nEt, vous vous et votre famille vous regardes cela ensemble ? chacun chez soi ? un peu des deux ?',
       options: [
-        { label: 'Proposer CANAL+ Ciné Séries', nextId: 'closingIntro' },
+        { label: 'Continuer ➜ Questions Cinéma', nextId: 'seriesCinemaStart' },
       ],
     },
     sportBranch: {
@@ -729,7 +728,65 @@ const CallScriptPage = () => {
       title: 'Si SPORT',
       text: 'Vous regardez un sport en particulier ?\nSupportez-vous une équipe ?\nComment voyez-vous les matchs aujourd’hui ?\nEt, vous vous et votre famille vous regardes cela ensemble ? chacun chez soi ? un peu des deux ?',
       options: [
-        { label: 'Proposer CANAL+ Sport', nextId: 'closingIntro' },
+        { label: 'Continuer', nextId: 'sportGroupDiscussion' },
+      ],
+    },
+    sportGroupDiscussion: {
+      id: 'sportGroupDiscussion',
+      title: 'Si plusieurs',
+      text: 'Et tout le monde regarde la même chose ou chacun a des goûts différents ?\nUn peu comme tout le monde 😉',
+      options: [
+        { label: 'Continuer ➜ Questions Cinéma', nextId: 'sportCinemaStart' },
+      ],
+    },
+    sportCinemaStart: {
+      id: 'sportCinemaStart',
+      title: 'Cinéma — Fréquence',
+      text: 'Et cela vous arrive d’aller au Cinéma ?\nune fois par mois ; 2-3 fois dans l’année ... ?',
+      options: [
+        { label: 'Si oui, fréquemment', nextId: 'sportCinemaYes' },
+        { label: 'Si rarement', nextId: 'sportCinemaRare' },
+      ],
+    },
+    sportCinemaYes: {
+      id: 'sportCinemaYes',
+      title: 'Si oui, fréquemment',
+      text: 'Super, vous êtes un vrai fan de cinéma …\n\nEt c’est quoi le dernier film que vous avez aimé ?\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ?',
+      options: [
+        { label: 'Continuer', nextId: 'closingIntroSport' },
+      ],
+    },
+    sportCinemaRare: {
+      id: 'sportCinemaRare',
+      title: 'Si rarement',
+      text: 'C’est parce que c’est loin de chez vous, c’est la programmation, le prix actuel des places ?',
+      options: [
+        { label: 'Si prix', nextId: 'sportCinemaRarePrice' },
+        { label: 'Autre raison', nextId: 'sportCinemaRareOther' },
+      ],
+    },
+    sportCinemaRarePrice: {
+      id: 'sportCinemaRarePrice',
+      title: 'Si prix',
+      text: 'Oui c’est vrai, j’ai pas mal de clients qui me disent qu’une sortie à deux on en a presque pour 30 à 35 euros maintenant.\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ?',
+      options: [
+        { label: 'Continuer', nextId: 'closingIntroSport' },
+      ],
+    },
+    sportCinemaRareOther: {
+      id: 'sportCinemaRareOther',
+      title: 'Remarques',
+      text: 'Et à la TV, vous êtes content de ce qui est programmé comme films ?',
+      options: [
+        { label: 'Continuer', nextId: 'closingIntroSport' },
+      ],
+    },
+    closingIntroSport: {
+      id: 'closingIntroSport',
+      title: 'Transition vers proposition — Sport',
+      text: 'Synthèse des goûts et introduction de l’offre adaptée (Sport).\nProposer CANAL+ 100% puis passage à la proposition et à la clôture.',
+      options: [
+        { label: 'Aller à la clôture', nextId: 'end' },
       ],
     },
     closingIntro: {
@@ -770,39 +827,6 @@ const CallScriptPage = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {showInfoPopup && (
-        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-xl px-6">
-          <div className="bg-white border border-cactus-300 shadow-lg rounded-xl p-5 flex flex-col gap-3 relative animate-fade-in">
-            <button
-              type="button"
-              className="absolute top-2 right-2 text-cactus-500 hover:text-cactus-700 text-lg font-bold"
-              onClick={() => setShowInfoPopup(false)}
-              title="Fermer"
-            >
-              ×
-            </button>
-            <h2 className="text-lg font-semibold text-cactus-700 mb-1">Mail d'accompagnement</h2>
-            <p className="text-sm text-black leading-relaxed">
-              <span className="font-semibold text-cactus-700">Ce texte est à utiliser comme mail d'accompagnement après votre appel.</span><br /><br />
-              Comme convenu, je vous transmets par ce mail le récapitulatif de l’offre présentée lors de notre échange.<br />
-              Je vous invite à en prendre connaissance et reste à votre disposition pour toute précision complémentaire.<br />
-              Vous pouvez me joindre directement au&nbsp;
-              <span className="font-bold text-cactus-800 bg-cactus-100 px-2 py-1 rounded">01 62 22 00 31</span>
-            </p>
-          </div>
-        </div>
-      )}
-      {!showInfoPopup && (
-        <button
-          type="button"
-          className="fixed top-6 right-8 z-50 bg-cactus-600 hover:bg-cactus-700 text-white rounded-full shadow-lg p-3 flex items-center justify-center transition-colors"
-          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
-          onClick={() => setShowInfoPopup(true)}
-          title="Afficher l'information"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="#fff"/><text x="12" y="16" textAnchor="middle" fontSize="12" fill="#2d7a46">i</text></svg>
-        </button>
-      )}
       <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
         <div className="flex justify-between items-center mb-4 bg-gradient-to-r from-cactus-50 to-white border border-cactus-100 rounded-lg px-4 py-3">
           <h1 className="text-2xl font-bold text-gray-900">Script d'appel</h1>

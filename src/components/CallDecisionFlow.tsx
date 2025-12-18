@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, ChevronLeft, Route, Sparkles, CornerDownRight, Undo2, Redo2, Info, Clock, Map as MapIcon } from "lucide-react";
+import { ChevronRight, ChevronLeft, Route, Sparkles, CornerDownRight, Undo2, Redo2, Info, Clock, Map as MapIcon, ZoomIn, ZoomOut, RefreshCw, HelpCircle } from "lucide-react";
 
 export type FlowOption = {
   label: string;
@@ -44,6 +44,25 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
   // Toast message
   const lastNodeRef = React.useRef<HTMLDivElement | null>(null);
   const [mapOpen, setMapOpen] = React.useState<boolean>(false);
+  const [helpOpen, setHelpOpen] = React.useState<boolean>(false);
+  // Zoom level for readability
+  const [scale, setScale] = React.useState<number>(() => {
+    try {
+      const v = sessionStorage.getItem('callFlowZoom');
+      return v ? Math.min(1.8, Math.max(0.8, parseFloat(v))) : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  const setScaleClamped = (val: number) => {
+    const s = Math.round(Math.min(1.8, Math.max(0.8, val)) * 100) / 100;
+    setScale(s);
+    try { sessionStorage.setItem('callFlowZoom', String(s)); } catch {}
+  };
+  const zoomIn = () => setScaleClamped(scale + 0.1);
+  const zoomOut = () => setScaleClamped(scale - 0.1);
+  const resetZoom = () => setScaleClamped(1);
 
   const goTo = (nextId: string | undefined, index: number) => {
     if (!nextId) return; // terminal option
@@ -54,6 +73,7 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
     newPath.push(nextId);
     setPath(newPath);
     setActiveOption(0);
+    setVisited((prev) => ({ ...prev, [nextId]: true }));
   };
 
   const backTo = (index: number) => {
@@ -68,6 +88,7 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
     setRedoStack([]);
     setPath([rootId]);
     setActiveOption(0);
+    setVisited({ [rootId]: true });
   };
 
   const undo = () => {
@@ -115,6 +136,24 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
           return;
         }
       }
+      // zoom shortcuts Ctrl(+/-/0)
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '+' || e.key === '=' ) { // Windows often sends '=' for '+'
+          e.preventDefault();
+          zoomIn();
+          return;
+        }
+        if (e.key === '-' ) {
+          e.preventDefault();
+          zoomOut();
+          return;
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          resetZoom();
+          return;
+        }
+      }
       // undo/redo shortcuts
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -154,6 +193,11 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
         const arr = JSON.parse(saved);
         if (Array.isArray(arr) && arr.length && arr[0] === rootId) {
           setPath(arr);
+          // Initialize visited from restored path
+          const v: Record<string, true> = {};
+          for (const id of arr) v[id] = true;
+          v[rootId] = true;
+          setVisited(v);
         }
       }
     } catch {}
@@ -176,6 +220,12 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
 
+  // Progress: track visited nodes across the session
+  const [visited, setVisited] = React.useState<Record<string, true>>({ [rootId]: true });
+  const totalNodes = React.useMemo(() => Object.keys(nodes).length, [nodes]);
+  const visitedCount = Object.keys(visited).length;
+  const visitedPct = totalNodes > 0 ? Math.min(100, Math.round((visitedCount / totalNodes) * 100)) : 0;
+
   return (
     <div className="space-y-6 relative">
       <div className="flex items-center justify-between sticky top-0 z-10 bg-white/80 backdrop-blur border border-emerald-100 rounded-lg px-3 py-2">
@@ -183,8 +233,21 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
         <div className="flex items-center gap-1">
           <span className="hidden md:flex items-center gap-1 text-xs text-gray-600 mr-2"><Info className="h-3.5 w-3.5" /> Flèches, Entrée, ⌫, 1..9, Ctrl+Z/Y</span>
           <span className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-700 mr-2"><Clock className="h-3.5 w-3.5" /> {currentNodes.length} étape(s)</span>
+          <div className="hidden sm:flex items-center gap-2 mr-2" title="Progression du parcours">
+            <div className="text-xs text-gray-700">{visitedPct}%</div>
+            <div className="h-2 w-20 rounded-full bg-gray-200">
+              <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${visitedPct}%` }} />
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center mr-2 rounded-md border border-gray-300 overflow-hidden" title="Zoom (Ctrl + / - / 0)">
+            <button type="button" onClick={zoomOut} className="px-2 py-1.5 text-sm text-black hover:bg-gray-50 border-r border-gray-300"><ZoomOut className="h-4 w-4" /></button>
+            <div className="px-2 py-1.5 text-xs min-w-[54px] text-center text-black bg-white">{Math.round(scale * 100)}%</div>
+            <button type="button" onClick={zoomIn} className="px-2 py-1.5 text-sm text-black hover:bg-gray-50 border-l border-gray-300"><ZoomIn className="h-4 w-4" /></button>
+            <button type="button" onClick={resetZoom} className="px-2 py-1.5 text-sm text-black hover:bg-gray-50 border-l border-gray-300" title="Réinitialiser le zoom"><RefreshCw className="h-4 w-4" /></button>
+          </div>
           <button type="button" onClick={undo} disabled={!canUndo} title="Annuler (Ctrl+Z)" className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-black inline-flex items-center gap-1"><Undo2 className="h-4 w-4" />Annuler</button>
           <button type="button" onClick={redo} disabled={!canRedo} title="Rétablir (Ctrl+Y)" className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-black inline-flex items-center gap-1"><Redo2 className="h-4 w-4" />Rétablir</button>
+          <button type="button" onClick={() => setHelpOpen((v) => !v)} title="Aide & Raccourcis" className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 text-black inline-flex items-center gap-1"><HelpCircle className="h-4 w-4" />Aide</button>
           <button type="button" onClick={() => setMapOpen((v) => !v)} title="Mini-carte du parcours" className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 text-black inline-flex items-center gap-1"><MapIcon className="h-4 w-4" />Carte</button>
           <button type="button" onClick={reset} className="px-2 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 text-black">Réinitialiser</button>
         </div>
@@ -211,6 +274,7 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
           ))}
         </nav>
       </div>
+      <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
       {currentNodes.map((node, idx) => (
         <div key={node.id} ref={idx === currentNodes.length - 1 ? lastNodeRef : null} className="relative anim-soft-in" style={{ animationDelay: `${idx * 80}ms` }}>
           <div className="rounded-2xl border border-emerald-200 bg-white/80 backdrop-blur p-5 shadow-lg transition duration-300 will-change-transform hover:shadow-xl hover:-translate-y-0.5">
@@ -367,6 +431,7 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
           )}
         </div>
       ))}
+      </div>
 
       {/* Mini-map overlay */}
       {mapOpen && (
@@ -388,6 +453,26 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {/* Help & Shortcuts overlay */}
+      {helpOpen && (
+        <div className="fixed right-4 top-[28rem] z-20 w-72 max-h-[50vh] overflow-auto rounded-lg border border-emerald-200 bg-white/95 backdrop-blur p-3 shadow-xl scroll-beauty-light">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-900"><HelpCircle className="h-4 w-4" /> Aide & Raccourcis</div>
+            <button type="button" onClick={() => setHelpOpen(false)} className="text-xs text-gray-600 hover:text-gray-900">Fermer</button>
+          </div>
+          <ul className="text-[13px] text-gray-800 space-y-1">
+            <li>Flèches: naviguer entre options</li>
+            <li>Entrée: valider l’option</li>
+            <li>Retour arrière: revenir à l’étape précédente</li>
+            <li>Chiffres 1..9: sélectionner une option</li>
+            <li>Ctrl+Z / Ctrl+Y: annuler / rétablir</li>
+            <li>Ctrl + / - / 0: zoom avant / arrière / réinitialiser</li>
+            <li>Breadcrumb: cliquez pour revenir à une étape</li>
+            <li>Carte: mini-map du parcours actuel</li>
+          </ul>
         </div>
       )}
     </div>
