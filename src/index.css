@@ -96,6 +96,13 @@
   100% { transform: scale(1); opacity: 0.1; }
 }
 .ping-soft { animation: pingSoft 1.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* Connector growth animation for arborescence */
+@keyframes connectorGrow {
+  0% { transform: scaleY(0); opacity: 0.4; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+.connector-grow { transform-origin: top; animation: connectorGrow 260ms ease-out both; }
 /* stylelint-disable */
 @tailwind base;
 @tailwind components;

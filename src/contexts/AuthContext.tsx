@@ -225,9 +225,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       if (Object.keys(params).length) {
         try { p.setCustomParameters(params); } catch {}
       }
-      // Demande permissions Graph utiles
+      // Permissions minimales pour éviter l'approbation admin
+      // Ne demander que le profil de l'utilisateur connecté
       try { p.addScope('User.Read'); } catch {}
-      try { p.addScope('User.ReadBasic.All'); } catch {}
       return p;
     };
 
@@ -404,9 +404,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         if (Object.keys(params).length) {
           try { p.setCustomParameters(params); } catch {}
         }
-        // Aligner les scopes Graph avec le flux login
+        // Aligner les scopes Graph avec le flux login — minimum rights
         try { p.addScope('User.Read'); } catch {}
-        try { p.addScope('User.ReadBasic.All'); } catch {}
         return p;
       };
       if (method === 'redirect') {

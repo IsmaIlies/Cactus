@@ -617,6 +617,7 @@ const CallScriptPage = () => {
         { label: 'Explorer les goûts ➜ Séries', nextId: 'seriesBranch' },
         { label: 'Explorer les goûts ➜ Films', nextId: 'filmsBranch' },
         { label: 'Explorer les goûts ➜ Sport', nextId: 'sportBranch' },
+        { label: 'Je ne regarde pas la TV', nextId: 'neverWatchTV' },
       ],
     },
     neverSubscribed: {

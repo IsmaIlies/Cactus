@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 // Use WebP by default with PNG fallback (files converted in /public by a script)
 const offers = [
@@ -21,13 +21,13 @@ const offers = [
     alt: "Offre Canal+ Sport",
   },
   {
-    title: "LA TOTALE",
-    webp: "/offre-la-totale.webp",
-    // PNG que vous allez déposer dans /public (nom exact conseillé: LA TOTALE.png)
-    png: "/LA TOTALE.png",
-    // Si la nouvelle image n'est pas encore présente, on retombera sur l'ancienne
+    title: "100% CANAL+",
+    webp: "/offre-100-canal-plus.webp",
+    // PNG (optionnel) à déposer dans /public si besoin
+    png: "/100% CANAL+.png",
+    // En cas d'absence de PNG, on retombe sur le WebP existant
     fallback: "/offre-100-canal-plus.webp",
-    alt: "Offre LA TOTALE",
+    alt: "Offre 100% Canal+",
   },
 ];
 
