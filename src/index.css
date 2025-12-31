@@ -198,6 +198,11 @@ select:-moz-ui-filled {
            hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-cactus-500 focus:ring-offset-2;
   }
 
+  /* Masquer l'avertissement de l'émulateur Firebase injecté en bas de page */
+  .firebase-emulator-warning {
+    display: none !important;
+  }
+
   .input-field {
     @apply w-full rounded-md border border-gray-300 px-4 py-2 text-gray-800 placeholder-gray-400
            focus:border-cactus-500 focus:outline-none focus:ring-2 focus:ring-cactus-500;

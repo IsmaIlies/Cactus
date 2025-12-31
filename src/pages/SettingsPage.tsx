@@ -93,10 +93,16 @@ const SettingsPage = () => {
       if (ok) {
         showMessage("success", "Compte Microsoft synchronisé avec succès.");
       } else {
-        showMessage("error", "Échec de la synchronisation Microsoft.");
+        const last = (window as any).__authLastMsError;
+        const code = last?.code ? String(last.code) : '';
+        const msg = last?.message ? String(last.message) : (last?.err?.message ? String(last.err.message) : '');
+        const detail = [code, msg].filter(Boolean).join(' - ');
+        showMessage("error", detail ? `Échec de la synchronisation Microsoft. ${detail}` : "Échec de la synchronisation Microsoft.");
       }
     } catch (e:any) {
-      showMessage("error", e?.message || "Échec de la synchronisation.");
+      const code = e?.code ? String(e.code) : '';
+      const msg = e?.message ? String(e.message) : '';
+      showMessage("error", `${code ? code + ' - ' : ''}${msg || 'Échec de la synchronisation.'}`);
     } finally {
       setLinking(false);
     }

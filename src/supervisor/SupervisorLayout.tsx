@@ -291,20 +291,7 @@ const SupervisorLayout: React.FC = () => {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold hidden md:block">{titleFor(area)}</h2>
-            {!hideSpaceSwitch && (
-              <div className="flex items-center gap-2">
-                <button
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15"
-                  onClick={() => {
-                    const a = String(area || '').toLowerCase();
-                    const targetRegion = a === 'civ' ? 'civ' : a === 'fr' ? 'fr' : 'fr';
-                    navigate(`/dashboard/${targetRegion}`);
-                  }}
-                >
-                  Changer d’espace
-                </button>
-              </div>
-            )}
+            {/* Redirection désormais automatisée par rôle: on retire le bouton manuel */}
           </div>
           <Outlet />
         </div>

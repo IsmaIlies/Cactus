@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import CallScriptStep5 from "../components/CallScriptStep5";
 import OfferSuggestionStep from "../components/OfferSuggestionStep";
+import CanalPitchStep from "../components/CanalPitchStep";
 import TeleSalesAssistant from "../components/TeleSalesAssistant";
 import CallDecisionFlow, { FlowNode } from "../components/CallDecisionFlow";
 
@@ -702,7 +703,7 @@ const CallScriptPage = () => {
     seriesCinemaRarePrice: {
       id: 'seriesCinemaRarePrice',
       title: 'Si prix',
-      text: 'Oui c’est vrai, j’ai pas mal de clients qui me disent qu’une sortie à deux on en a presque pour 30 à 35 euros maintenant.\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ? \n(Jouer sur le decalading) Canal+ est au prix de 24€99/mois aujourd’hui je veux vraiment vous faire plaisir, \n et je vous offre un tarif de 19€99/mois pendant 24 mois pour profiter de l’intégralité du cinéma à la maison. \n',
+      text: 'Oui c’est vrai, j’ai pas mal de clients qui me disent qu’une sortie à deux on en a presque pour 30 à 35 euros maintenant.\n\nEt à la TV, vous êtes content de ce qui est programmé comme films ?',
       options: [
         { label: 'Continuer', nextId: 'closingIntro' },
       ],
@@ -784,17 +785,165 @@ const CallScriptPage = () => {
     closingIntroSport: {
       id: 'closingIntroSport',
       title: 'Transition vers proposition — Sport',
-      text: 'Synthèse des goûts et introduction de l’offre adaptée (Sport).\nProposer CANAL+ 100% puis passage à la proposition et à la clôture.',
+      text: 'Synthèse des goûts et introduction de l’offre adaptée (Sport).\n\nFin de découverte ➜ proposer le choix parmi les 4 offres.',
+      imageSrc: '/offre-100-canal-plus.webp',
+      imageAlt: 'Offre CANAL+ 100% (Sport)',
       options: [
+        { label: 'Choisir une offre', nextId: 'closingIntro' },
         { label: 'Aller à la clôture', nextId: 'end' },
+      ],
+    },
+    sportCanalPitch: {
+      id: 'sportCanalPitch',
+      title: 'Canal+ 100% — Mise en perspective',
+      text: 'Par rapport à ce que vous venez de me dire,\nEst-ce que vous avez déjà pensé à Canal+ pour le sport ?\nBeaucoup de clients pensent que Canal+ c’est systématiquement 40€ par mois. On a des formules plus accessibles selon vos matchs/compétitions préférés.',
+      imageSrc: '/offre-100-canal-plus.webp',
+      imageAlt: 'Offre CANAL+ 100%',
+      options: [
+        { label: 'Continuer ➜ Dé-escalade (Sport)', nextId: 'sportDescalade' },
+        { label: 'Aller à la clôture', nextId: 'end' },
+      ],
+    },
+    sportDescalade: {
+      id: 'sportDescalade',
+      title: 'Dé-escalade — Sport',
+      text: 'On peut démarrer sur une formule sport adaptée pour suivre vos compétitions clés (championnats, coupes, etc.), à un tarif plus accessible.\nOn valide cette formule personnalisée et je vous accompagne pour la mise en place ?',
+      imageSrc: '/offre-100-canal-plus.webp',
+      imageAlt: 'CANAL+ Sport — offre adaptée',
+      options: [
+        { label: 'Valider et passer à la clôture', nextId: 'end' },
       ],
     },
     closingIntro: {
       id: 'closingIntro',
-      title: 'Transition vers proposition',
-      text: 'Synthèse des goûts et introduction de l’offre adaptée.\nPuis passage à la proposition et à la clôture.',
+      title: 'Choix de l’offre — fin de découverte',
+      text: 'À la fin de la découverte, sélectionnez l’offre la plus pertinente pour le client.\n\nChoix disponibles : CANAL+ Socle, CANAL+ Ciné Séries, CANAL+ Sport, CANAL+ 100%.',
       options: [
+        { label: 'CANAL+ Socle', nextId: 'pathSocleResume' },
+        { label: 'CANAL+ Ciné Séries', nextId: 'pathCineResume' },
+        { label: 'CANAL+ Sport', nextId: 'pathSportResume' },
+        { label: 'CANAL+ 100%', nextId: 'path100Resume' },
+      ],
+    },
+    // --- Parcours CANAL+ Socle ---
+    pathSocleResume: {
+      id: 'pathSocleResume',
+      title: 'Résumé des besoins',
+      text: '« Très bien, par rapport à ce que vous venez de me dire… »\n\nRésumé des besoins du client (éléments recueillis lors de la découverte).',
+      options: [ { label: 'OK', nextId: 'pathSocleIntro' } ],
+    },
+    pathSocleIntro: {
+      id: 'pathSocleIntro',
+      title: 'Introduction CANAL+',
+      text: '« En ce moment nous avons un partenariat avec CANAL+, et ce qui est intéressant pour vous, c’est que par rapport à ce que vous aimez… »',
+      options: [ { label: 'OK', nextId: 'focusSocle' } ],
+    },
+    focusSocle: {
+      id: 'focusSocle',
+      title: 'Focus offre — CANAL+',
+      text: 'CANAL+ :\n• 300 films ~6 mois après la sortie cinéma\n• Les meilleures affiches du sport\n• Inclus : Apple TV\n\nTarifs visibles :\n• Prix public (hors engagement) : 24€99/mois\n• Prix pendant engagement : 19€99/mois',
+      options: [ { label: 'OK', nextId: 'descaladeSocle' } ],
+    },
+    descaladeSocle: {
+      id: 'descaladeSocle',
+      title: 'Désescalade — CANAL+',
+      text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 24€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 19€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
+      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+    },
+    // --- Parcours CANAL+ Ciné Séries ---
+    pathCineResume: {
+      id: 'pathCineResume',
+      title: 'Résumé des besoins',
+      text: '« Très bien, par rapport à ce que vous venez de me dire… »\n\nRésumé des besoins du client (éléments recueillis lors de la découverte).',
+      options: [ { label: 'OK', nextId: 'pathCineIntro' } ],
+    },
+    pathCineIntro: {
+      id: 'pathCineIntro',
+      title: 'Introduction CANAL+',
+      text: '« En ce moment nous avons un partenariat avec CANAL+, et ce qui est intéressant pour vous, c’est que par rapport à ce que vous aimez… »',
+      options: [ { label: 'OK', nextId: 'focusCineSeries' } ],
+    },
+    focusCineSeries: {
+      id: 'focusCineSeries',
+      title: 'Focus offre — CANAL+ Ciné Séries',
+      text: 'Toutes les plateformes de streaming dans le pack (valeur ~80€) :\n• Netflix — AVEC PUBLICITÉS\n• HBO Max\n• Paramount+\n• Ciné OCS\n• Insomnia\n\nTarifs visibles :\n• Prix public (hors engagement) : 34€99/mois\n• Prix pendant engagement (24 mois) : 29€99/mois',
+      options: [ { label: 'OK', nextId: 'descaladeCine' } ],
+    },
+    descaladeCine: {
+      id: 'descaladeCine',
+      title: 'Désescalade — CANAL+ Ciné Séries',
+      text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 34€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 29€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
+      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+    },
+    // --- Parcours CANAL+ Sport ---
+    pathSportResume: {
+      id: 'pathSportResume',
+      title: 'Résumé des besoins',
+      text: '« Très bien, par rapport à ce que vous venez de me dire… »\n\nRésumé des besoins du client (éléments recueillis lors de la découverte).',
+      options: [ { label: 'OK', nextId: 'pathSportIntro' } ],
+    },
+    pathSportIntro: {
+      id: 'pathSportIntro',
+      title: 'Introduction CANAL+',
+      text: '« En ce moment nous avons un partenariat avec CANAL+, et ce qui est intéressant pour vous, c’est que par rapport à ce que vous aimez… »',
+      options: [ { label: 'OK', nextId: 'focusSport' } ],
+    },
+    focusSport: {
+      id: 'focusSport',
+      title: 'Focus offre — CANAL+ Sport',
+      text: '• beIN SPORTS et Eurosport\n• 100% des coupes européennes\n• 100% de la Liga, Premier League, Bundesliga, Liga Portugal Bwin, un match de Ligue 1\n• 100% du Top 14 et Pro D2\n• 100% des sports mécaniques\n• Sports américains : NBA, NFL, NHL, MLB\n• Inclus : Apple TV\n\nTarifs visibles :\n• Prix public (hors engagement) : 45€99/mois\n• Prix pendant engagement : 34€99/mois',
+      options: [ { label: 'OK', nextId: 'descaladeSport' } ],
+    },
+    descaladeSport: {
+      id: 'descaladeSport',
+      title: 'Désescalade — CANAL+ Sport',
+      text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 45€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 34€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
+      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+    },
+    // --- Parcours CANAL+ 100% ---
+    path100Resume: {
+      id: 'path100Resume',
+      title: 'Résumé des besoins',
+      text: '« Très bien, par rapport à ce que vous venez de me dire… »\n\nRésumé des besoins du client (éléments recueillis lors de la découverte).',
+      options: [ { label: 'OK', nextId: 'path100Intro' } ],
+    },
+    path100Intro: {
+      id: 'path100Intro',
+      title: 'Introduction CANAL+',
+      text: '« En ce moment nous avons un partenariat avec CANAL+, et ce qui est intéressant pour vous, c’est que par rapport à ce que vous aimez… »',
+      options: [ { label: 'OK', nextId: 'focus100' } ],
+    },
+    focus100: {
+      id: 'focus100',
+      title: 'Focus offre — CANAL+ 100%',
+      text: '• 100% des coupes européennes\n• 100% du rugby\n• 10 chaînes CANAL+\n• Sans Apple TV\n\nTarifs visibles :\n• Prix public (hors engagement) : 32€99/mois\n• Prix pendant engagement : 19€99/mois',
+      options: [ { label: 'OK', nextId: 'descalade100' } ],
+    },
+    descalade100: {
+      id: 'descalade100',
+      title: 'Désescalade — CANAL+ 100%',
+      text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 32€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 19€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
+      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+    },
+    seriesCanalPitch: {
+      id: 'seriesCanalPitch',
+      title: 'Canal+ — Mise en perspective',
+      text: 'Par rapport à ce que vous venez de me dire,\nEst-ce que vous avez déjà pensé à Canal+ ?\nJe vous en parle car beaucoup de clients pensent que Canal+ c’est 40€ par mois. Je vous rassure, ce n’est plus tout à fait le cas.',
+      imageSrc: '/offre-canal-plus-cine-series.webp',
+      imageAlt: 'Offre CANAL+ Ciné Séries',
+      options: [
+        { label: 'Continuer ➜ Dé-escalade (Ciné Séries)', nextId: 'seriesDescalade' },
         { label: 'Aller à la clôture', nextId: 'end' },
+      ],
+    },
+    seriesDescalade: {
+      id: 'seriesDescalade',
+      title: 'Dé-escalade — Ciné Séries',
+      text: 'Pour être transparent, Canal+ est aujourd’hui proposé à un tarif bien plus accessible.\nEt comme je veux vraiment vous faire plaisir, je peux vous positionner sur un tarif préférentiel pendant 24 mois pour profiter de l’intégralité du cinéma et des séries à la maison.\n\nOn valide cette formule adaptée à vos usages, puis je vous accompagne pour la suite ?',
+      imageSrc: '/offre-canal-plus-cine-series.webp',
+      imageAlt: 'CANAL+ Ciné Séries — offre adaptée',
+      options: [
+        { label: 'Valider et passer à la clôture', nextId: 'end' },
       ],
     },
     stopCall: {
@@ -807,6 +956,10 @@ const CallScriptPage = () => {
       id: 'end',
       title: 'Fin du parcours',
       text: 'Passez à la proposition détaillée et clôture.',
+      images: [
+        { src: '/offre-canal-plus.webp', alt: 'Offre CANAL+' },
+        { src: '/offre-canal-plus-cine-series.webp', alt: 'Offre CANAL+ Ciné Séries' },
+      ],
       options: [],
     },
   };

@@ -93,6 +93,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const [loading, setLoading] = useState(true);
 
+  const rememberMicrosoftAuthError = (phase: string, err: any) => {
+    const code: string = err?.code || 'auth/unknown';
+    const message: string = err?.message || '';
+    const payload = { when: Date.now(), phase, code, message };
+    try {
+      (window as any).__authLastMsError = { ...payload, err };
+    } catch {}
+    try {
+      window.localStorage.setItem('lastMicrosoftError', JSON.stringify(payload));
+    } catch {}
+    return payload;
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -283,11 +296,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       // If domain changed (@orange) and an old account exists (@mars), link to preserve old UID
       try {
         const email = (u.email || '').toLowerCase();
-          const functions = getFunctions(firebaseApp, 'europe-west9');
         const credFromResult = OAuthProvider.credentialFromResult?.(result) as any;
         if (email && email.endsWith('@orange.mars-marketing.fr')) {
           const local = email.split('@')[0];
           const legacyEmail = `${local}@mars-marketing.fr`;
+          const functions = getFunctions(firebaseApp, 'europe-west9');
           const mintToken = httpsCallable(functions, 'mintCustomTokenByEmail');
           const resp: any = await mintToken({ email: legacyEmail }).catch(() => null);
           if (resp && resp.data && resp.data.uid && resp.data.token && resp.data.uid !== u.uid && credFromResult) {
@@ -325,7 +338,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return true;
     } catch (err: any) {
       const code: string = err?.code || 'auth/unknown';
-      try { (window as any).__authLastMsError = { when: Date.now(), phase: 'loginWithMicrosoft', code, err }; } catch {}
+      rememberMicrosoftAuthError('loginWithMicrosoft', err);
       if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
         try {
           await signInWithRedirect(auth, buildProvider());
@@ -392,22 +405,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   // Link Microsoft SSO to an already signed-in account (email/password users)
   const linkMicrosoft = async (emailHint?: string): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
+    const buildProvider = () => {
+      const p = new OAuthProvider('microsoft.com');
+      const tenant = ((import.meta as any)?.env?.VITE_MICROSOFT_TENANT_ID as string) || "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
+      const params: Record<string, string> = {};
+      if (tenant) params.tenant = tenant;
+      if (emailHint && /@/.test(emailHint)) params.login_hint = emailHint;
+      if (Object.keys(params).length) {
+        try {
+          p.setCustomParameters(params);
+        } catch {}
+      }
+      try {
+        p.addScope('User.Read');
+      } catch {}
+      return p;
+    };
+
     try {
-      if (!auth.currentUser) return false;
-      const method = (import.meta as any)?.env?.VITE_AUTH_SSO_METHOD || 'popup';
-      const buildProvider = () => {
-        const p = new OAuthProvider('microsoft.com');
-        const tenant = ((import.meta as any)?.env?.VITE_MICROSOFT_TENANT_ID as string) || "120a0b01-6d2a-4b3c-90c9-09366b19f4f7";
-        const params: Record<string,string> = {};
-        if (tenant) params.tenant = tenant;
-        if (emailHint && /@/.test(emailHint)) params.login_hint = emailHint;
-        if (Object.keys(params).length) {
-          try { p.setCustomParameters(params); } catch {}
-        }
-        // Aligner les scopes Graph avec le flux login — minimum rights
-        try { p.addScope('User.Read'); } catch {}
-        return p;
-      };
       if (method === 'redirect') {
         await linkWithRedirect(auth.currentUser, buildProvider());
         return true;
@@ -433,7 +450,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return true;
     } catch (err: any) {
       const code: string = err?.code || 'auth/unknown';
-      try { (window as any).__authLastMsError = { when: Date.now(), phase: 'linkMicrosoft', code, err }; } catch {}
+      rememberMicrosoftAuthError('linkMicrosoft', err);
+
+      // Popup bloqué => fallback redirect (cas fréquent en entreprise / mobiles)
+      if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request' || code === 'auth/operation-not-supported-in-this-environment') {
+        try {
+          await linkWithRedirect(auth.currentUser!, buildProvider());
+          return true;
+        } catch (e) {
+          if (localStorage.getItem('authDebug') === '1') {
+            console.warn('[auth] linkMicrosoft redirect fallback failed', (e as any)?.code, e);
+          }
+          return false;
+        }
+      }
+
       // Gestion du cas credential-already-in-use
       if (code === 'auth/credential-already-in-use') {
         // Essayer de dériver la credential depuis l'erreur

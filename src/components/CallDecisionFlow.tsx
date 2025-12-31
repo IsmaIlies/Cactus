@@ -10,6 +10,9 @@ export type FlowNode = {
   id: string;
   title: string;
   text?: string;
+  imageSrc?: string;
+  imageAlt?: string;
+  images?: Array<{ src: string; alt?: string }>;
   options?: FlowOption[];
   kind?: 'default' | 'checklist';
   checklistItems?: Array<{
@@ -31,6 +34,7 @@ type Props = {
 const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
   const [path, setPath] = React.useState<string[]>([rootId]);
   const currentNodes = React.useMemo(() => path.map((id) => nodes[id]).filter(Boolean), [path, nodes]);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [checks, setChecks] = React.useState<Record<string, Record<string, boolean>>>({});
   // Manage per-item open/closed state for checklist descriptions without hooks-in-loops
   const [openItems, setOpenItems] = React.useState<Record<string, Record<string, boolean>>>({});
@@ -54,6 +58,40 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
       return 1;
     }
   });
+
+  // Image zoom modal (for offer visuals)
+  const [zoomOpen, setZoomOpen] = React.useState<boolean>(false);
+  const [zoomSrc, setZoomSrc] = React.useState<string | null>(null);
+  const [zoomAlt, setZoomAlt] = React.useState<string>('');
+  const [zoomLevel, setZoomLevel] = React.useState<number>(1);
+
+  const openZoom = (src: string, alt?: string) => {
+    setZoomSrc(src);
+    setZoomAlt(alt || '');
+    setZoomLevel(1);
+    setZoomOpen(true);
+  };
+  const closeZoom = () => {
+    setZoomOpen(false);
+    setZoomSrc(null);
+    setZoomAlt('');
+    setZoomLevel(1);
+  };
+  const zoomInImg = () => setZoomLevel((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100));
+  const zoomOutImg = () => setZoomLevel((z) => Math.max(0.75, Math.round((z - 0.25) * 100) / 100));
+  const resetZoomImg = () => setZoomLevel(1);
+
+  React.useEffect(() => {
+    if (!zoomOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeZoom();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [zoomOpen]);
 
   const setScaleClamped = (val: number) => {
     const s = Math.round(Math.min(1.8, Math.max(0.8, val)) * 100) / 100;
@@ -116,6 +154,21 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
   // Keyboard navigation on the last node
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // This component stays mounted even when hidden (Dashboard uses display:none).
+      // Avoid hijacking keys for other pages/inputs.
+      const el = containerRef.current;
+      if (!el) return;
+      if (el.offsetParent === null) return; // not visible (display:none)
+
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        const isEditableTag = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+        if (isEditableTag || target.isContentEditable || target.closest('[contenteditable="true"]')) {
+          return;
+        }
+      }
+
       const lastIdx = currentNodes.length - 1;
       if (lastIdx < 0) return;
       const last = currentNodes[lastIdx];
@@ -227,7 +280,48 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
   const visitedPct = totalNodes > 0 ? Math.min(100, Math.round((visitedCount / totalNodes) * 100)) : 0;
 
   return (
-    <div className="space-y-6 relative">
+    <div ref={containerRef} className="space-y-6 relative">
+      {zoomOpen && zoomSrc && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeZoom();
+          }}
+        >
+          <div className="w-full max-w-5xl">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-white/90 text-sm truncate">{zoomAlt || 'Aperçu'}</div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={zoomOutImg} className="inline-flex items-center justify-center h-8 w-8 rounded bg-white/10 border border-white/15 text-white hover:bg-white/20" aria-label="Zoom out">
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={resetZoomImg} className="h-8 px-2 rounded bg-white/10 border border-white/15 text-white hover:bg-white/20 text-xs" aria-label="Reset zoom">
+                  {Math.round(zoomLevel * 100)}%
+                </button>
+                <button type="button" onClick={zoomInImg} className="inline-flex items-center justify-center h-8 w-8 rounded bg-white/10 border border-white/15 text-white hover:bg-white/20" aria-label="Zoom in">
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={closeZoom} className="h-8 px-3 rounded bg-white/10 border border-white/15 text-white hover:bg-white/20 text-xs" aria-label="Close">
+                  Fermer
+                </button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/15 bg-black/20 overflow-auto max-h-[80vh]">
+              <div className="p-3 flex items-center justify-center">
+                <img
+                  src={zoomSrc}
+                  alt={zoomAlt || 'Aperçu'}
+                  style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }}
+                  className="max-w-full h-auto select-none"
+                  draggable={false}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between sticky top-0 z-10 bg-white/80 backdrop-blur border border-emerald-100 rounded-lg px-3 py-2">
         <h3 className="text-lg font-semibold text-black flex items-center gap-2"><Route className="h-4 w-4 text-emerald-700" /> Arborescence du script</h3>
         <div className="flex items-center gap-1">
@@ -294,6 +388,44 @@ const CallDecisionFlow: React.FC<Props> = ({ nodes, rootId }) => {
                 {node.text && (
                   <p className="mt-2 text-sm text-gray-700 whitespace-pre-line">{node.text}</p>
                 )}
+                {(Array.isArray(node.images) && node.images.length > 0) || node.imageSrc ? (
+                  <div className="mt-3">
+                    {Array.isArray(node.images) && node.images.length > 0 ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {node.images.map((img, j) => (
+                          <button
+                            key={`${node.id}-img-${j}`}
+                            type="button"
+                            onClick={() => openZoom(img.src, img.alt || node.title)}
+                            className="w-full rounded-xl border border-emerald-200 shadow-sm overflow-hidden group"
+                            aria-label="Agrandir l'image"
+                          >
+                            <img
+                              src={img.src}
+                              alt={img.alt || node.title}
+                              className="w-full h-auto block transition-transform duration-200 group-hover:scale-[1.01]"
+                              loading="lazy"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openZoom(node.imageSrc!, node.imageAlt || node.title)}
+                        className="w-full max-w-xl rounded-xl border border-emerald-200 shadow-sm overflow-hidden group"
+                        aria-label="Agrandir l'image"
+                      >
+                        <img
+                          src={node.imageSrc}
+                          alt={node.imageAlt || node.title}
+                          className="w-full h-auto block transition-transform duration-200 group-hover:scale-[1.01]"
+                          loading="lazy"
+                        />
+                      </button>
+                    )}
+                  </div>
+                ) : null}
                 {/* Quick note area */}
                 <div className="mt-3">
                   <details className="group">

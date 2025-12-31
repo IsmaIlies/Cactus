@@ -8,7 +8,38 @@ service cloud.firestore {
     match /users/{userId}/chatHistories/{historyId}/messages/{messageId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    function hasAdminRole() { return request.auth != null && (request.auth.token.admin == true); }
+    function hasAdminRole() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        request.auth.token.isAdmin == true
+      );
+    }
+
+    // Fallbacks when custom claims aren't refreshed yet:
+    // - allow known supervisor/admin emails
+    // - allow role stored in /users/{uid}.role
+    function isSupervisorByEmail() {
+      return request.auth != null && (
+        request.auth.token.email == 'i.brai@mars-marketing.fr' ||
+        request.auth.token.email == 'i.brai@orange.mars-marketing.fr' ||
+        request.auth.token.email == 'i.boultame@mars-marketing.fr' ||
+        request.auth.token.email == 'i.boultame@orange.mars-marketing.fr' ||
+        request.auth.token.email == 'j.allione@mars-marketing.fr' ||
+        request.auth.token.email == 'j.allione@orange.mars-marketing.fr'
+      );
+    }
+    function hasSupervisorRoleInUserDoc() {
+      return request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in [
+          'SUPERVISEUR C+ FR',
+          'SUPERVISEUR C+ CIV',
+          'SUPERVISEUR LEADS FR',
+          'SUPERVISEUR LEADS CIV',
+          'ADMINISTRATEUR',
+          'DIRECTION'
+        ]
+      );
+    }
     // Supervisors FR (Canal+) authorized for attendance writes
     function isFrSupervisor() {
       return hasAdminRole() || (
@@ -67,13 +98,26 @@ service cloud.firestore {
     match /sales/{saleId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-      // Allow full update/delete by owner or admin
-      // Additionally, allow CIV supervisors (any authenticated user) to toggle only the 'ecouteStatus' field on CIV sales
+      // Allow full update/delete by owner or admin.
+      // Allow supervisors to adjust ONLY the sale time ('date') for FR/CIV sales.
+      // Additionally, allow authenticated users to toggle only the 'ecouteStatus' field on FR/CIV sales.
       allow update, delete: if request.auth != null && (
-        request.auth.uid == resource.data.userId || hasAdminRole() || (
-          // Restrict to strictly changing the 'ecouteStatus' field on CIV/FR documents
-          (resource.data.region in ['CIV','FR']) &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(['ecouteStatus'])
+        request.auth.uid == resource.data.userId
+        || hasAdminRole()
+        || (
+          // Supervisor-only: change only 'date'
+          (resource.data.region in ['CIV','FR'])
+          && (
+            request.auth.token.supervisor == true
+            || isSupervisorByEmail()
+            || hasSupervisorRoleInUserDoc()
+          )
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['date'])
+        )
+        || (
+          // Any authenticated user: change only 'ecouteStatus'
+          (resource.data.region in ['CIV','FR'])
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['ecouteStatus'])
         )
       );
     }

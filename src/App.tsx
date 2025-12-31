@@ -14,6 +14,7 @@ import AutoLogout from "./components/AutoLogout";
 import UserPresenceManager from "./components/UserPresenceManager";
 import { RegionProvider } from './contexts/RegionContext';
 import ProtectedRoute from "./components/ProtectedRoute";
+import RoleRedirect from "./components/RoleRedirect";
 import PublicRoute from "./components/PublicRoute";
 import DiagnosticPage from "./pages/DiagnosticPage";
 import ChecklistReminderPopup from "./components/ChecklistReminderPopup";
@@ -166,7 +167,7 @@ function App() {
             </ProtectedRoute>
           }
         />  <Route path="/dashboard/:region/*" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-  <Route path="/dashboard" element={<Navigate to="/dashboard/fr" replace />} />
+  <Route path="/dashboard" element={<ProtectedRoute><RoleRedirect /></ProtectedRoute>} />
         <Route
           path="/elearning"
           element={<ELearningPage />}

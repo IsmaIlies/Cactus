@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { LayoutDashboard, Users, UserCheck2, BarChart3, Tv, LineChart, Crown, X, Trophy, ArrowUpDown, ChevronUp, ChevronDown, Award, Search, Check } from "lucide-react";
 import { collection, getDocs, onSnapshot, QuerySnapshot, DocumentData, query, where, doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from "firebase/functions";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db, auth as firebaseAuth } from "../firebase";
 import { getIdToken } from "firebase/auth";
 // AdminPresenceDebugBadge retiré définitivement
@@ -214,17 +214,7 @@ const AdminDashboardPage: React.FC = () => {
   const { isAuthenticated, user: authUser } = useAuth();
 
   const functions = React.useMemo(() => {
-    const instance = getFunctions(undefined, "europe-west9");
-    if (typeof window !== "undefined") {
-      try {
-        if (localStorage.getItem("functions:mode") === "local") {
-          connectFunctionsEmulator(instance, "127.0.0.1", 5001);
-        }
-      } catch (error) {
-        // ignore and keep remote configuration
-      }
-    }
-    return instance;
+    return getFunctions(undefined, "europe-west9");
   }, []);
 
   const [activeSection, setActiveSection] = React.useState<string>("dashboard");
@@ -271,7 +261,9 @@ const AdminDashboardPage: React.FC = () => {
   // Only specific admins can assign roles (frontend guard)
   const roleAdmins = React.useMemo(() => ([
     "i.brai@mars-marketing.fr",
+    "i.brai@orange.mars-marketing.fr",
     "i.boultame@mars-marketing.fr",
+    "i.boultame@orange.mars-marketing.fr",
   ]), []);
   const canAssignRoles = React.useMemo(() => {
     const email = authUser?.email?.toLowerCase() || "";
@@ -2034,8 +2026,14 @@ const AdminDashboardPage: React.FC = () => {
               const callable = httpsCallable(functions, "setUserRole");
               const res = await callable({ userIds: selectedUserIds, role });
               const payload: any = res?.data || {};
-              if (!payload?.success) {
-                const msg = typeof payload?.message === 'string' ? payload.message : 'Impossible d\'assigner le rôle.';
+              const isOk = payload?.ok === true || payload?.success === true;
+              if (!isOk) {
+                const msg =
+                  typeof payload?.message === 'string'
+                    ? payload.message
+                    : typeof payload?.error === 'string'
+                      ? payload.error
+                      : 'Impossible d\'assigner le rôle.';
                 setAssignRoleFeedback({ type: "error", message: msg });
                 return;
               }
@@ -2068,7 +2066,14 @@ const AdminDashboardPage: React.FC = () => {
                 requestAuthStatsRefresh();
                 setSelectedUserIds([]);
               } catch (e2: any) {
-              setAssignRoleFeedback({ type: "error", message: e?.message || "Erreur réseau lors de l'assignation du rôle." });
+              // Prefer the original callable error if present
+              const msg =
+                typeof e2?.message === 'string'
+                  ? e2.message
+                  : typeof e?.message === 'string'
+                    ? e.message
+                    : "Erreur réseau lors de l'assignation du rôle.";
+              setAssignRoleFeedback({ type: "error", message: msg });
               }
             } finally {
               setAssignRoleLoading(false);

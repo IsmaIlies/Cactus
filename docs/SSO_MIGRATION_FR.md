@@ -7,13 +7,20 @@ Objectif: basculer les comptes Email/Mot de passe vers Microsoft (SSO) en liant 
 - Firebase Console → Authentication → Sign-in method → Microsoft
   - Tenant: `120a0b01-6d2a-4b3c-90c9-09366b19f4f7` (ou domaine du tenant)
   - Client ID / Client Secret: ceux de l’app Azure "[MM] Cactus"
-  - Authorized domains: `<project>.web.app`, `<project>.firebaseapp.com`, domaine custom éventuel
+  - Authorized domains: `<project>.web.app`, `<project>.firebaseapp.com`, domaine custom (ex: `cactus.labs.fr`)
 - Azure AD → App registrations → [MM] Cactus → Authentication
   - Supported account types: Single tenant (ou multi-tenant si désiré)
   - Redirect URIs:
     - `https://<project-id>.firebaseapp.com/__/auth/handler`
     - `https://<project-id>.web.app/__/auth/handler`
+    - `https://cactus.labs.fr/__/auth/handler` (si l'app est servie sur ce domaine)
   - Secret client actif (utilisé côté Firebase)
+
+> Réseau/proxy: si vous observez un `403` sur une URL `https://<project>.firebaseapp.com/...` pendant la popup Microsoft,
+> basculez l'app pour utiliser `authDomain=<project>.web.app`.
+>
+> Si l'app tourne sur `cactus.labs.fr`, vous pouvez aussi utiliser `authDomain=cactus.labs.fr` (souvent mieux accepté par les proxys),
+> à condition que `cactus.labs.fr` soit bien dans "Authorized domains" côté Firebase Auth et dans les Redirect URIs Azure.
 
 > Si non conforme, vous verrez l’erreur AADSTS50194 ("/common" non autorisé).
 

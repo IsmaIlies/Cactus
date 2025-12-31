@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { firebaseConfig } from "../firebase";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../firebase";
 import SpacePickerModal from "../components/SpacePickerModal";
 import { fetchUserSpaces, AppSpace, spaceToRoute, getSpacesFromRole } from "../services/userSpaces";
 // auth import removed (region selection is manual, no Firestore region fetch needed)
 import { useRegion } from '../contexts/RegionContext';
-import { Eye, EyeOff, Cpu, ShieldCheck, Sparkles } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 
 const LoginPage = () => {
   const { user } = useAuth();
@@ -17,16 +16,15 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [networkOk, setNetworkOk] = useState<boolean | null>(null);
-  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [testing, setTesting] = useState(false);
-  const [advRunning, setAdvRunning] = useState(false);
-  const [advResults, setAdvResults] = useState<any | null>(null);
-  const [showDiag, setShowDiag] = useState(false);
   const [spaceModalOpen, setSpaceModalOpen] = useState(false);
   const [spaceChoices, setSpaceChoices] = useState<AppSpace[]>([]);
   const [spaceEmail, setSpaceEmail] = useState<string | null>(null);
+  const [msAuthDetail, setMsAuthDetail] = useState<{ code?: string; message?: string } | null>(null);
   // Option B: whitelist temporary supervisor access based on email typed on login screen
   const SUPERVISOR_WHITELIST = [
+    "m.sahraoui@orange.mars-marketing.fr",
+    "f.moursi@orange.mars-marketing.fr",
     "i.brai@orange.mars-marketing.fr",
     "l.raynaud@mars-marketing.fr",
     "l.raynaud@orange.mars-marketing.fr",
@@ -47,17 +45,6 @@ const LoginPage = () => {
   type SupervisorChoice = 'fr' | 'civ' | 'leads' | null;
   const [supervisorChoice, setSupervisorChoice] = useState<SupervisorChoice>(null);
 
-  useEffect(() => {
-    const handlerOnline = () => setIsOnline(true);
-    const handlerOffline = () => setIsOnline(false);
-    window.addEventListener('online', handlerOnline);
-    window.addEventListener('offline', handlerOffline);
-    return () => {
-      window.removeEventListener('online', handlerOnline);
-      window.removeEventListener('offline', handlerOffline);
-    };
-  }, []);
-
   const testConnectivity = async () => {
     setTesting(true);
     setNetworkOk(null);
@@ -75,67 +62,9 @@ const LoginPage = () => {
     }
   };
 
-  interface DiagResultEntry {
-    name: string;
-    ok: boolean;
-    status?: number;
-    code?: string;
-    detail?: string;
-    latencyMs?: number;
-  }
-
-  const runAdvancedDiagnostics = async () => {
-    setAdvRunning(true);
-    setAdvResults(null);
-    const results: DiagResultEntry[] = [];
-    const apiKey = firebaseConfig.apiKey;
-    const signInUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
-
-    const timedFetch = async (name: string, fn: () => Promise<Response>) => {
-      const start = performance.now();
-      try {
-        const r = await fn();
-        const latencyMs = Math.round(performance.now() - start);
-        return { name, response: r, latencyMs };
-      } catch (e: any) {
-        const latencyMs = Math.round(performance.now() - start);
-        throw { name, error: e, latencyMs };
-      }
-    };
-
-    // 1. Endpoint IdentityToolkit (attendu: HTTP 400 avec erreur JSON)
-    try {
-      const { response, latencyMs } = await timedFetch('identity_signin', () => fetch(signInUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'diag@example.com', password: 'wrong', returnSecureToken: true })
-      }));
-      let code: string | undefined;
-      try {
-        const data = await response.json();
-        code = data?.error?.message;
-      } catch {}
-      results.push({ name: 'API IdentityToolkit (signIn)', ok: true, status: response.status, code, latencyMs, detail: code ? `Réponse: ${code}` : 'Pas de code' });
-    } catch (e: any) {
-      results.push({ name: 'API IdentityToolkit (signIn)', ok: false, detail: e?.error?.message || String(e), latencyMs: e?.latencyMs });
-    }
-
-    // 2. Requête vers ton propre hosting (pour vérifier qu’il accède bien à ton domaine)
-    try {
-      const { response, latencyMs } = await timedFetch('self_host', () => fetch('/', { cache: 'no-store' }));
-      results.push({ name: 'Accès domaine application', ok: response.ok, status: response.status, latencyMs });
-    } catch (e: any) {
-      results.push({ name: 'Accès domaine application', ok: false, detail: e?.error?.message || String(e) });
-    }
-
-    // 3. Vérifier si hors ligne entre temps
-    results.push({ name: 'Statut navigateur', ok: navigator.onLine, detail: navigator.onLine ? 'en ligne' : 'hors ligne' });
-
-    setAdvResults({ timestamp: new Date().toISOString(), results });
-    setAdvRunning(false);
-  };
   const { login, loginWithMicrosoft } = useAuth();
   const { setRegion } = useRegion();
+  const [searchParams] = useSearchParams();
   const [selectedRegion, setSelectedRegion] = useState<'FR' | 'CIV'>(() => (localStorage.getItem('activeRegion') as 'FR' | 'CIV') || 'FR');
   const [mission, setMission] = useState<'CANAL_PLUS' | 'ORANGE_LEADS'>(() => {
     try {
@@ -159,6 +88,45 @@ const LoginPage = () => {
     ? `/dashboard/superviseur/${supervisorChoice}`
     : null;
 
+  // Détecte si le domaine courant est autorisé pour SSO OAuth (Firebase Authorized Domains)
+  const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+  const isLocalHost = /^(localhost|127\.0\.0\.1)$/.test(host);
+  const allowedAuthDomains = useMemo(() => [
+    'cactus-labs.fr',
+    'cactus-mm.web.app',
+    'cactus-mm.firebaseapp.com',
+  ], []);
+  const isOnAllowedDomain = useMemo(() => {
+    if (!host) return true; // SSR/unknown, ne bloque pas
+    if (isLocalHost) return true;
+    return allowedAuthDomains.some(d => host === d || host.endsWith('.' + d));
+  }, [host, allowedAuthDomains, isLocalHost]);
+
+  // Récupération des détails d'erreur SSO Microsoft si disponibles (posés par AuthContext)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('lastMicrosoftError');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setMsAuthDetail({ code: parsed?.code, message: parsed?.message });
+      }
+    } catch {}
+  }, []);
+
+  // Auto-SignIn si "?sso=1&hint=..." présent (utile après redirection vers domaine canonique)
+  useEffect(() => {
+    const sso = searchParams.get('sso');
+    const hint = (searchParams.get('hint') || '').trim();
+    if (sso === '1') {
+      if (hint && !email) setEmail(hint);
+      // Lance SSO automatiquement avec le hint
+      setTimeout(() => {
+        handleMicrosoftLogin();
+      }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleMissionSelect = (value: 'CANAL_PLUS' | 'ORANGE_LEADS') => {
     setMission(value);
     try {
@@ -177,15 +145,80 @@ const LoginPage = () => {
         localStorage.setItem('activeRegion', selectedRegion);
         localStorage.setItem('activeMission', mission);
         setRegion(selectedRegion);
-        // If supervisor choice is selected and allowed, prioritize supervisor dashboards
-        if (isSupervisorAllowed && supervisorTargetPath) {
-          try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
-          navigate(supervisorTargetPath);
-          try { sessionStorage.removeItem('supervisorTarget'); } catch {}
-        } else if (mission === 'ORANGE_LEADS') {
-          navigate('/leads/dashboard');
-        } else {
-          navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+        // Préférer les espaces basés sur le rôle/groupe lorsqu'ils sont disponibles (même logique que le flux SSO Microsoft)
+        try {
+          const currentEmail = (auth.currentUser?.email || email || '').toLowerCase();
+          // Résoudre le rôle à partir des claims pour déterminer les espaces
+          let roleSpaces: AppSpace[] = [];
+          try {
+            const tokenResult = await (await import('firebase/auth')).getIdTokenResult(auth.currentUser!, true);
+            const role = typeof tokenResult.claims.role === 'string' ? tokenResult.claims.role : undefined;
+            roleSpaces = getSpacesFromRole(role);
+          } catch {}
+          const { spaces: fsSpaces, defaultSpace } = await fetchUserSpaces(currentEmail);
+          const spaces = roleSpaces.length ? roleSpaces : fsSpaces;
+
+          const last = ((): AppSpace | null => {
+            const v = localStorage.getItem('lastSpace');
+            return v === 'CANAL_FR' || v === 'CANAL_CIV' || v === 'LEADS' ? (v as AppSpace) : null;
+          })();
+
+          const pickSupervisorSpace = (choice: SupervisorChoice | null): AppSpace | null => {
+            if (!choice) return null;
+            if (choice === 'fr') return 'CANAL_FR';
+            if (choice === 'civ') return 'CANAL_CIV';
+            if (choice === 'leads') return 'LEADS';
+            return null;
+          };
+
+          const navigateToSpace = (space: AppSpace, supervisor?: boolean) => {
+            try { localStorage.setItem('lastSpace', space); } catch {}
+            if (space === 'LEADS') {
+              try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+            } else {
+              try { localStorage.setItem('activeMission', 'CANAL_PLUS'); } catch {}
+            }
+            if (space === 'CANAL_FR') { try { localStorage.setItem('activeRegion', 'FR'); } catch {}; setRegion('FR'); }
+            if (space === 'CANAL_CIV') { try { localStorage.setItem('activeRegion', 'CIV'); } catch {}; setRegion('CIV'); }
+            const path = spaceToRoute(space, supervisor);
+            navigate(path);
+          };
+
+          if (spaces.length === 0) {
+            // Repli sur la sélection mission/région lorsqu'aucun mapping n'existe
+            if (isSupervisorAllowed && supervisorTargetPath) {
+              try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
+              navigate(supervisorTargetPath);
+              try { sessionStorage.removeItem('supervisorTarget'); } catch {}
+            } else if (mission === 'ORANGE_LEADS') {
+              navigate('/leads/dashboard');
+            } else {
+              navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+            }
+          } else if (spaces.length === 1) {
+            const sole = spaces[0];
+            const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
+            const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && sole === requestedSupSpace;
+            navigateToSpace(sole, supervisorOk);
+          } else {
+            const preferred = (last && spaces.includes(last)) ? last : (defaultSpace && spaces.includes(defaultSpace) ? defaultSpace : null);
+            if (preferred) {
+              const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
+              const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && preferred === requestedSupSpace;
+              navigateToSpace(preferred, supervisorOk);
+            } else {
+              setSpaceChoices(spaces);
+              setSpaceEmail(currentEmail);
+              setSpaceModalOpen(true);
+            }
+          }
+        } catch {
+          // En cas d'échec, revenir au choix mission/région
+          if (mission === 'ORANGE_LEADS') {
+            navigate('/leads/dashboard');
+          } else {
+            navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+          }
         }
       } else {
         setError(message || "Identifiants invalides");
@@ -276,7 +309,23 @@ const LoginPage = () => {
           }
         }
       } else {
-        setError("Échec de la connexion avec Microsoft. Veuillez réessayer.");
+        // Lire le dernier code d'erreur conservé par AuthContext pour afficher un message précis
+        let detail: { code?: string; message?: string } | null = null;
+        try {
+          const raw = localStorage.getItem('lastMicrosoftError');
+          if (raw) detail = JSON.parse(raw);
+        } catch {}
+        setMsAuthDetail(detail);
+        const code = (detail?.code || '').toLowerCase();
+        if (code === 'auth/unauthorized-domain' || code === 'auth/invalid-auth-domain') {
+          setError("Domaine non autorisé pour l'authentification. Utilisez le bouton ci‑dessous pour basculer vers le domaine officiel.");
+        } else if (code === 'auth/network-request-failed') {
+          setError("Échec réseau pendant la connexion Microsoft. Vérifiez la connexion ou un éventuel proxy/VPN.");
+        } else if (code === 'auth/popup-closed-by-user') {
+          setError("Fenêtre Microsoft fermée avant la validation.");
+        } else {
+          setError("Échec de la connexion avec Microsoft. Veuillez réessayer.");
+        }
       }
     } catch (err) {
       setError("Une erreur est survenue. Veuillez réessayer plus tard.");
@@ -384,6 +433,26 @@ const LoginPage = () => {
                 </div>
                 <span className="pointer-events-none absolute inset-x-6 bottom-0 h-[1px] animate-[shimmer_2.6s_ease_infinite] bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent" />
               </div>
+
+              {/* Alerte domaine non autorisé + bouton bascule */}
+              {!isOnAllowedDomain && (
+                <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4 text-amber-100">
+                  <p className="text-sm font-medium">Ce domaine n’est pas autorisé pour le SSO Microsoft.</p>
+                  <p className="mt-1 text-[13px]">Cliquez ci‑dessous pour ouvrir la page de connexion sur le domaine officiel puis reprendre l’authentification.</p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const hint = encodeURIComponent(normalizedEmail);
+                        window.location.href = `https://cactus-labs.fr/login?sso=1&hint=${hint}`;
+                      }}
+                      className="rounded-lg border border-amber-300/50 bg-amber-500/10 px-3 py-2 text-sm font-semibold hover:border-amber-300/80 hover:bg-amber-500/20"
+                    >
+                      Basculer vers cactus-labs.fr
+                    </button>
+                  </div>
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="space-y-6">
                 {error && (
                   <div className="space-y-2">
@@ -393,6 +462,13 @@ const LoginPage = () => {
                     >
                       <span className="block sm:inline">{error}</span>
                     </div>
+                    {msAuthDetail?.code && (
+                      <div className="rounded-lg border border-white/10 bg-slate-900/70 px-4 py-3 text-[11px] text-slate-200">
+                        <p className="font-medium">Détails techniques:</p>
+                        <p className="mt-1">{msAuthDetail.code}</p>
+                        {msAuthDetail.message && <p className="mt-1 opacity-80 truncate">{msAuthDetail.message}</p>}
+                      </div>
+                    )}
                     {error.toLowerCase().includes('réseau') && (
                       <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-[11px] leading-relaxed text-amber-100">
                         <p className="mb-1 font-medium">Dépannage réseau rapide :</p>
@@ -599,14 +675,7 @@ const LoginPage = () => {
                   </button>
                 </div>
 
-                <div className="flex justify-center">
-                  <Link
-                    to="/register"
-                    className="inline-flex items-center gap-2 rounded-full border border-cactus-400/30 bg-cactus-500/10 px-4 py-2 text-sm font-medium text-cactus-100 transition hover:border-cactus-300/60 hover:bg-cactus-500/20"
-                  >
-                    Créer un compte
-                  </Link>
-                </div>
+                {/* Bouton "Créer un compte" retiré */}
               </form>
 
               <div className="mt-10 flex justify-center pb-2">

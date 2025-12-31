@@ -3,15 +3,224 @@ const {
   HttpsError,
   onRequest,
 } = require("firebase-functions/v2/https");
+const {
+  beforeUserCreated,
+  beforeUserSignedIn,
+  HttpsError: IdentityHttpsError,
+} = require('firebase-functions/v2/identity');
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const axios = require("axios");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require('firebase-functions/params');
+const ipaddr = require('ipaddr.js');
 
 admin.initializeApp();
 
 const cors = require('cors')({ origin: true });
+
+// ---------------------------------------------------------------------------
+// Optional .env loader (local/dev). In production, prefer Firebase env/Secrets.
+// This lets you place AUTH_IP_* variables in functions/.env without changing code.
+// Files loaded in order (first found wins per-key):
+//  - functions/.env.local
+//  - functions/.env
+//  - projectRoot/.env.local
+//  - projectRoot/.env
+// ---------------------------------------------------------------------------
+try {
+  const path = require('path');
+  const dotenv = require('dotenv');
+  const envFiles = [
+    path.resolve(__dirname, '.env.local'),
+    path.resolve(__dirname, '.env'),
+    path.resolve(__dirname, '../.env.local'),
+    path.resolve(__dirname, '../.env'),
+  ];
+  for (const p of envFiles) {
+    try { dotenv.config({ path: p, override: false }); } catch {}
+  }
+} catch {}
+
+// ---------------------------------------------------------------------------
+// Auth Blocking Functions: IP allowlist (Identity Platform required)
+//
+// Env vars (recommended to set via: firebase functions:config:set or .env / CI):
+// - AUTH_IP_ENFORCE: 'true' | 'false' (default false)
+// - AUTH_IP_ALLOWLIST: comma/space separated IPs and CIDRs
+//   e.g. "203.0.113.4,198.51.100.0/24,2001:db8::/32"
+// - AUTH_IP_BYPASS_EMAILS: comma/space separated emails allowed from anywhere (optional)
+//
+// Safety: if AUTH_IP_ENFORCE is not true, requests are allowed (log-only).
+// ---------------------------------------------------------------------------
+
+// No hardcoded allowlist for security.
+// Configure AUTH_IP_ALLOWLIST via environment (.env/.env.local or Firebase env).
+
+function parseCsvList(raw) {
+  return (raw || '')
+    .toString()
+    .split(/[\s,]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function normalizeIp(ip) {
+  if (!ip) return null;
+  const raw = ip.toString().trim();
+  if (!raw) return null;
+  // Identity Platform provides plain IP, but be defensive.
+  const withoutPort = raw.includes(':') && raw.includes('.') === false && raw.includes(']') === false
+    ? raw
+    : raw;
+  // Handle IPv6-mapped IPv4 like ::ffff:203.0.113.4
+  const cleaned = withoutPort.replace(/^::ffff:/i, '');
+  try {
+    return ipaddr.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+function parseAllowlistEntries(raw) {
+  const parts = parseCsvList(raw);
+  const entries = [];
+  for (const part of parts) {
+    // CIDR
+    if (part.includes('/')) {
+      const [ipStr, prefixStr] = part.split('/');
+      const parsed = normalizeIp(ipStr);
+      const prefix = Number(prefixStr);
+      if (!parsed || !Number.isFinite(prefix)) continue;
+      // normalize kind to match ipaddr expectations
+      const kind = parsed.kind();
+      const maxPrefix = kind === 'ipv6' ? 128 : 32;
+      if (prefix < 0 || prefix > maxPrefix) continue;
+      entries.push({ type: 'cidr', ip: parsed, prefix });
+      continue;
+    }
+    // Single IP
+    const parsed = normalizeIp(part);
+    if (!parsed) continue;
+    entries.push({ type: 'ip', ip: parsed });
+  }
+  return entries;
+}
+
+function ipMatchesAllowlist(ipParsed, allowlist) {
+  if (!ipParsed) return false;
+  const ipKind = ipParsed.kind();
+  for (const entry of allowlist) {
+    if (!entry || !entry.ip) continue;
+    if (entry.ip.kind() !== ipKind) {
+      // Compare IPv4 vs IPv6-mapped IPv4 by coercing when possible
+      if (ipKind === 'ipv6' && ipParsed.isIPv4MappedAddress && ipParsed.isIPv4MappedAddress()) {
+        const asV4 = ipParsed.toIPv4Address();
+        if (entry.ip.kind() !== 'ipv4') continue;
+        if (entry.type === 'ip') {
+          if (asV4.toString() === entry.ip.toString()) return true;
+        } else if (entry.type === 'cidr') {
+          if (asV4.match(entry.ip, entry.prefix)) return true;
+        }
+      }
+      continue;
+    }
+
+    if (entry.type === 'ip') {
+      if (ipParsed.toString() === entry.ip.toString()) return true;
+    } else if (entry.type === 'cidr') {
+      if (ipParsed.match(entry.ip, entry.prefix)) return true;
+    }
+  }
+  return false;
+}
+
+function shouldEnforceIpAllowlist() {
+  const v = (process.env.AUTH_IP_ENFORCE || '').toString().trim().toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+}
+
+function isBypassEmail(email) {
+  if (!email) return false;
+  const bypass = parseCsvList(process.env.AUTH_IP_BYPASS_EMAILS);
+  if (bypass.length === 0) return false;
+  return bypass.includes(email.toLowerCase());
+}
+
+function enforceIpPolicyOrThrow(event, phase) {
+  const ipRaw = event?.ipAddress || '';
+  const ipParsed = normalizeIp(ipRaw);
+  const email = (event?.data?.email || '').toString().toLowerCase();
+  if (email && isBypassEmail(email)) return;
+
+  const allowlistRaw = (process.env.AUTH_IP_ALLOWLIST || '').toString().trim();
+  const allowlist = parseAllowlistEntries(allowlistRaw);
+  const enforce = shouldEnforceIpAllowlist();
+  const allowed = ipMatchesAllowlist(ipParsed, allowlist);
+
+  if (!enforce) {
+    if (!allowed) {
+      console.warn(`[auth-ip] NOT enforced (${phase}) ip=${ipRaw || 'n/a'} email=${email || 'n/a'} allowlistCount=${allowlist.length} allowlistSource=${allowlistRaw ? 'env' : 'none'}`);
+    }
+    return;
+  }
+
+  // Enforced mode: if allowlist is empty, block (safer than allowing everyone)
+  if (allowlist.length === 0) {
+    console.error(`[auth-ip] Enforced but allowlist empty (${phase}) - blocking for safety`);
+    throw new IdentityHttpsError('permission-denied', 'Connexion refusée: réseau non autorisé (allowlist manquante).');
+  }
+
+  if (!allowed) {
+    console.warn(`[auth-ip] BLOCK (${phase}) ip=${ipRaw || 'n/a'} email=${email || 'n/a'}`);
+    throw new IdentityHttpsError('permission-denied', 'Connexion refusée: réseau non autorisé.');
+  }
+}
+
+// Blocks sign-in attempts not coming from allowed IP ranges.
+exports.authBeforeUserSignedIn = beforeUserSignedIn((event) => {
+  enforceIpPolicyOrThrow(event, 'beforeSignIn');
+});
+
+// Blocks new account creation from disallowed IP ranges.
+exports.authBeforeUserCreated = beforeUserCreated((event) => {
+  enforceIpPolicyOrThrow(event, 'beforeCreate');
+});
+
+// Simple local test endpoint to check current IP policy against the caller IP.
+// Not exposed in hosting rewrites; used via emulator: http://127.0.0.1:5001/<project>/us-central1/authIpCheck
+exports.authIpCheck = onRequest((req, res) => {
+  try {
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      return res.status(204).send('');
+    }
+
+    const xff = (req.headers['x-forwarded-for'] || '').toString();
+    const ipRaw = xff ? xff.split(',')[0].trim() : (req.headers['x-real-ip'] || req.ip || '').toString();
+    const ipParsed = normalizeIp(ipRaw);
+    const allowlistRaw = (process.env.AUTH_IP_ALLOWLIST || '').toString().trim();
+    const allowlist = parseAllowlistEntries(allowlistRaw);
+    const enforce = shouldEnforceIpAllowlist();
+    const allowed = ipMatchesAllowlist(ipParsed, allowlist);
+
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.set('Vary', 'Origin');
+    const payload = {
+      ok: allowed || !enforce,
+      enforce,
+      ip: ipRaw || null,
+      allowed,
+      allowlistCount: allowlist.length,
+      allowlistRaw: allowlistRaw || ''
+    };
+    return res.status(allowed || !enforce ? 200 : 403).json(payload);
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e && e.message ? e.message : 'internal' });
+  }
+});
 
 // Migré depuis functions.config() vers Firebase Secret Manager (post-2026 compliant).
 const LEADS_API_TOKEN = defineSecret('LEADS_API_TOKEN');
@@ -921,42 +1130,122 @@ exports.getAdminUserStatsHttp = onRequest({ region: 'europe-west9' }, async (req
 //   Useful to link a new Microsoft SSO credential to an existing UID
 //   even when emails/domains changed (e.g., mars-marketing.fr -> orange.mars-marketing.fr)
 // =============================================================
-exports.mintCustomTokenByEmail = onCall({ region: 'europe-west9' }, async (req) => {
-  const { email } = req.data || {};
-  if (!email || typeof email !== 'string') {
-    throw new HttpsError('invalid-argument', 'email requis');
-  }
-  const dbEmail = email.trim().toLowerCase();
-  const candidates = [dbEmail];
-  // If called with the new domain, also try legacy mars-marketing.fr
-  if (dbEmail.endsWith('@orange.mars-marketing.fr')) {
-    const local = dbEmail.split('@')[0];
-    candidates.push(`${local}@mars-marketing.fr`);
-  }
-  if (dbEmail.endsWith('@mars-marketing.fr')) {
-    const local = dbEmail.split('@')[0];
-    candidates.push(`${local}@orange.mars-marketing.fr`);
-  }
-
-  let found = null;
-  for (const e of candidates) {
-    try {
-      // getUserByEmail throws if not found
-      const rec = await admin.auth().getUserByEmail(e);
-      found = rec;
-      break;
-    } catch (e2) {
-      // continue
-    }
-  }
-  if (!found) {
-    throw new HttpsError('not-found', 'Aucun utilisateur pour cet email (ni alias)');
-  }
+exports.mintCustomTokenByEmail = onCall({
+  region: 'europe-west9',
+  // This callable is used *before* auth in some flows (SSO linking),
+  // so it must be accessible without Firebase Auth.
+  allowUnauthenticated: true,
+}, async (req) => {
   try {
+    const { email } = req.data || {};
+    if (!email || typeof email !== 'string') {
+      throw new HttpsError('invalid-argument', 'email requis');
+    }
+    const dbEmail = email.trim().toLowerCase();
+    const candidates = [dbEmail];
+    // If called with the new domain, also try legacy mars-marketing.fr
+    if (dbEmail.endsWith('@orange.mars-marketing.fr')) {
+      const local = dbEmail.split('@')[0];
+      candidates.push(`${local}@mars-marketing.fr`);
+    }
+    if (dbEmail.endsWith('@mars-marketing.fr')) {
+      const local = dbEmail.split('@')[0];
+      candidates.push(`${local}@orange.mars-marketing.fr`);
+    }
+
+    let found = null;
+    for (const e of candidates) {
+      try {
+        // getUserByEmail throws if not found
+        const rec = await admin.auth().getUserByEmail(e);
+        found = rec;
+        break;
+      } catch {
+        // continue
+      }
+    }
+    if (!found) {
+      throw new HttpsError('not-found', 'Aucun utilisateur pour cet email (ni alias)');
+    }
+
     const token = await admin.auth().createCustomToken(found.uid, { migrated: true });
     return { ok: true, uid: found.uid, token, email: found.email };
   } catch (e) {
-    throw new HttpsError('internal', 'Echec création custom token');
+    console.error('[mintCustomTokenByEmail] error', e);
+    if (e instanceof HttpsError) throw e;
+    throw new HttpsError('internal', e?.message || 'Echec création custom token');
+  }
+});
+
+// HTTP variant for environments where callable requests are blocked/misconfigured.
+// Expects JSON body: {"email":"..."} and returns { ok, uid, token, email }.
+exports.mintCustomTokenByEmailHttp = onRequest({ region: 'europe-west9' }, async (req, res) => {
+  const allowedOrigins = [
+    'https://cactus-labs.fr',
+    'http://localhost:5173', 'http://127.0.0.1:5173',
+    'http://localhost:5174', 'http://127.0.0.1:5174',
+  ];
+  const origin = req.headers.origin;
+  const allowOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+  const setCors = () => {
+    const reqAllowed = (req.headers['access-control-request-headers'] || 'Content-Type').toString();
+    res.set({
+      'Access-Control-Allow-Origin': allowOrigin,
+      'Vary': 'Origin',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': reqAllowed,
+      'Access-Control-Max-Age': '86400',
+    });
+  };
+
+  if (req.method === 'OPTIONS') {
+    setCors();
+    return res.status(204).send('');
+  }
+  if (req.method !== 'POST') {
+    setCors();
+    return res.status(405).json({ ok: false, error: 'Méthode non autorisée' });
+  }
+  setCors();
+
+  try {
+    let body;
+    try {
+      body = typeof req.body === 'object' ? req.body : JSON.parse(req.rawBody?.toString('utf8') || '{}');
+    } catch {
+      body = {};
+    }
+    const email = typeof body.email === 'string' ? body.email : '';
+    if (!email) return res.status(400).json({ ok: false, error: 'email requis' });
+
+    const dbEmail = email.trim().toLowerCase();
+    const candidates = [dbEmail];
+    if (dbEmail.endsWith('@orange.mars-marketing.fr')) {
+      const local = dbEmail.split('@')[0];
+      candidates.push(`${local}@mars-marketing.fr`);
+    }
+    if (dbEmail.endsWith('@mars-marketing.fr')) {
+      const local = dbEmail.split('@')[0];
+      candidates.push(`${local}@orange.mars-marketing.fr`);
+    }
+
+    let found = null;
+    for (const e of candidates) {
+      try {
+        found = await admin.auth().getUserByEmail(e);
+        break;
+      } catch {
+        // continue
+      }
+    }
+    if (!found) return res.status(404).json({ ok: false, error: 'Aucun utilisateur pour cet email (ni alias)' });
+
+    const token = await admin.auth().createCustomToken(found.uid, { migrated: true });
+    return res.json({ ok: true, uid: found.uid, token, email: found.email });
+  } catch (e) {
+    console.error('[mintCustomTokenByEmailHttp] error', e);
+    return res.status(500).json({ ok: false, error: e?.message || 'Erreur serveur' });
   }
 });
 

@@ -56,7 +56,8 @@ export function spaceToRoute(space: AppSpace, supervisor?: boolean): string {
       case 'CANAL_CIV':
         return '/dashboard/superviseur/civ';
       case 'LEADS':
-        return '/dashboard/superviseur/leads';
+        // Variante superviseur Leads : utilise la nouvelle vue « dashboard2 »
+        return '/dashboard/superviseur/leads/dashboard2';
     }
   }
   switch (space) {
@@ -69,10 +70,11 @@ export function spaceToRoute(space: AppSpace, supervisor?: boolean): string {
   }
 }
 
-// Role → spaces mapping helper
+// Assistant de mapping rôle → espaces
 export function getSpacesFromRole(role?: string | null): AppSpace[] {
   const r = (role || '').trim().toUpperCase();
   switch (r) {
+    // Superviseurs
     case 'SUPERVISEUR C+ FR':
     case 'SUPERVISEUR CANAL+ FR':
     case 'SUPERVISEUR FR':
@@ -84,11 +86,25 @@ export function getSpacesFromRole(role?: string | null): AppSpace[] {
     case 'SUPERVISEUR LEADS FR':
     case 'SUPERVISEUR LEADS':
       return ['LEADS'];
+    // Rôles Agents d'Équipe (TA)
+    case 'TA C+ FR':
+    case 'TA CANAL+ FR':
+      return ['CANAL_FR'];
+    case 'TA C+ CIV':
+    case 'TA CANAL+ CIV':
+      return ['CANAL_CIV'];
+    case 'TA LEADS FR':
+    case 'TA LEADS':
+      return ['LEADS'];
     case 'DIRECTION':
     case 'ADMINISTRATEUR':
     case 'ADMIN':
       return ['CANAL_FR', 'CANAL_CIV', 'LEADS'];
     default:
+      // Heuristiques génériques pour les nouveaux rôles non listés
+      if (r.includes('LEADS')) return ['LEADS'];
+      if (r.includes('CIV')) return ['CANAL_CIV'];
+      if (r.includes('FR')) return ['CANAL_FR'];
       return [];
   }
 }

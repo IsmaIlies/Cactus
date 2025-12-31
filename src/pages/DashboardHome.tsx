@@ -590,12 +590,11 @@ const DashboardHome = () => {
       if (ok) {
         setActionMsg('Compte Microsoft synchronisé.');
       } else {
-        // On va essayer de récupérer le dernier message d’erreur détaillé
-        let lastError = '';
-        try {
-          lastError = window.localStorage.getItem('lastMicrosoftError') || '';
-        } catch {}
-        setActionMsg(`Échec de la synchronisation Microsoft.${lastError ? ' Détail: ' + lastError : ''}`);
+        const last = (window as any).__authLastMsError;
+        const code = last?.code ? String(last.code) : '';
+        const msg = last?.message ? String(last.message) : (last?.err?.message ? String(last.err.message) : '');
+        const detail = [code, msg].filter(Boolean).join(' - ');
+        setActionMsg(`Échec de la synchronisation Microsoft.${detail ? ' Détail: ' + detail : ''}`);
       }
     } catch (e:any) {
       // Affiche le code et le message si possible

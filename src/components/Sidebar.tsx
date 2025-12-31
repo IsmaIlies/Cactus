@@ -1,4 +1,4 @@
-import { NavLink, Link, useParams } from "react-router-dom";
+import { NavLink, Link, useLocation, useParams } from "react-router-dom";
 import {
   LayoutDashboard,
   LogOut,
@@ -11,6 +11,7 @@ import {
   Gift,
   HelpCircle,
   CalendarRange,
+  ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import React from "react";
@@ -23,6 +24,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [showNewNouveautes, setShowNewNouveautes] = React.useState<boolean>(false);
 
   React.useEffect(() => {
@@ -46,6 +48,142 @@ const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
   const params = useParams();
   const region = (params.region as 'fr' | 'civ') || (localStorage.getItem('activeRegion')?.toLowerCase() as 'fr' | 'civ') || 'fr';
   const base = `/dashboard/${region}`;
+
+  type NavItem = {
+    key: string;
+    label: string;
+    to: string;
+    exact?: boolean;
+    kind?: 'default' | 'nouveautes';
+    icon?: React.ReactNode;
+  };
+
+  type NavSection = {
+    id: 'activite' | 'outils' | 'ressources';
+    label: string;
+    items: NavItem[];
+  };
+
+  const navLinkClass = (isActive: boolean) =>
+    `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
+      isActive ? "bg-cactus-700 text-white" : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
+    }`;
+
+  const isPathActive = React.useCallback(
+    (item: NavItem) => {
+      const p = location.pathname;
+      if (item.exact) return p === item.to;
+      return p === item.to || p.startsWith(`${item.to}/`);
+    },
+    [location.pathname]
+  );
+
+  const sections: NavSection[] = React.useMemo(
+    () => [
+      {
+        id: 'activite',
+        label: 'Activité',
+        items: [
+          {
+            key: 'dashboard',
+            label: 'Dashboard',
+            to: base,
+            exact: true,
+            icon: <LayoutDashboard className="w-5 h-5 mr-3" />,
+          },
+          {
+            key: 'sales',
+            label: 'Ventes',
+            to: `${base}/sales`,
+            icon: <DollarSign className="w-5 h-5 mr-3" />,
+          },
+          {
+            key: 'offers',
+            label: 'Offres Canal+',
+            to: `${base}/offers`,
+            icon: <Gift className="w-5 h-5 mr-3" />,
+          },
+        ],
+      },
+      {
+        id: 'outils',
+        label: 'Outils',
+        items: [
+          {
+            key: 'script',
+            label: "Script d'appel",
+            to: `${base}/script`,
+            icon: <FileText className="w-5 h-5 mr-3" />,
+          },
+          {
+            key: 'catalog',
+            label: 'Catalogue',
+            to: `${base}/catalog`,
+            icon: <Search className="w-5 h-5 mr-3" />,
+          },
+          {
+            key: 'ai',
+            label: 'Assistant IA',
+            to: `${base}/ai`,
+            icon: <Bot className="w-5 h-5 mr-3" />,
+          },
+        ],
+      },
+      {
+        id: 'ressources',
+        label: 'Ressources',
+        items: [
+          {
+            key: 'nouveautes',
+            label: 'Nouveautés',
+            to: `${base}/nouveautes`,
+            kind: 'nouveautes',
+          },
+          {
+            key: 'elearning',
+            label: 'E-learning',
+            to: '/elearning',
+            icon: (
+              <span className="inline-block w-5 h-5 mr-3 bg-cactus-600 rounded-full flex items-center justify-center text-white font-bold">
+                📚
+              </span>
+            ),
+          },
+          {
+            key: 'faq',
+            label: 'FAQ & Suggestions',
+            to: `${base}/faq`,
+            icon: <HelpCircle className="w-5 h-5 mr-3" />,
+          },
+        ],
+      },
+    ],
+    [base]
+  );
+
+  const detectActiveSection = React.useCallback((): NavSection['id'] => {
+    for (const s of sections) {
+      if (s.items.some(isPathActive)) return s.id;
+    }
+    return 'activite';
+  }, [sections, isPathActive]);
+
+  const [openSections, setOpenSections] = React.useState<Record<NavSection['id'], boolean>>(() => ({
+    activite: true,
+    outils: false,
+    ressources: false,
+  }));
+
+  // Auto-open the section containing the active route.
+  React.useEffect(() => {
+    const active = detectActiveSection();
+    setOpenSections((prev) => ({
+      activite: prev.activite,
+      outils: prev.outils,
+      ressources: prev.ressources,
+      [active]: true,
+    }));
+  }, [detectActiveSection]);
 
     // remove unused state openChecklist
     // const [openChecklist, setOpenChecklist] = React.useState(false);
@@ -78,164 +216,80 @@ const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
           )}
         </div>
 
-  <nav className="flex-1 overflow-y-auto py-6 space-y-1">
+  <nav className="flex-1 overflow-y-auto py-6 space-y-3">
+        {sections.map((section) => {
+          const isOpen = !!openSections[section.id];
+          const activeInside = section.items.some(isPathActive);
+          return (
+            <div key={section.id} className="px-3">
+              <button
+                type="button"
+                onClick={() => setOpenSections((prev) => ({ ...prev, [section.id]: !prev[section.id] }))}
+                aria-expanded={isOpen}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors ${
+                  activeInside ? 'bg-cactus-700/60 text-white' : 'text-cactus-100 hover:bg-cactus-700/40 hover:text-white'
+                }`}
+              >
+                <span className="text-xs font-semibold tracking-wide uppercase">{section.label}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
+              </button>
 
-        <NavLink
-          to={base}
-          end
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <LayoutDashboard className="w-5 h-5 mr-3" />
-          Dashboard
-        </NavLink>
+              {isOpen && (
+                <div className="mt-1 space-y-1">
+                  {section.items.map((item) => {
+                    if (item.kind === 'nouveautes') {
+                      return (
+                        <NavLink
+                          key={item.key}
+                          to={item.to}
+                          onClick={acknowledgeNouveautes}
+                          className={({ isActive }) =>
+                            `relative flex items-center px-6 py-3 text-sm font-medium transition-colors group ${
+                              isActive
+                                ? "bg-cactus-700 text-white"
+                                : "text-cactus-100 hover:bg-cactus-700/80 hover:text-white"
+                            }`
+                          }
+                        >
+                          <span className="w-5 h-5 mr-3 flex items-center justify-center text-cactus-100 relative">
+                            <CalendarRange className="w-5 h-5" />
+                            {showNewNouveautes && (
+                              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 shadow ring-2 ring-cactus-800 animate-ping" />
+                            )}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span>{item.label}</span>
+                            {showNewNouveautes && (
+                              <span className="text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500/40 to-cactus-500/40 text-emerald-50 border border-emerald-400/40 shadow-sm flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                                Nouveau
+                              </span>
+                            )}
+                          </span>
+                          {showNewNouveautes && (
+                            <span className="pointer-events-none absolute inset-0 rounded-md ring-1 ring-emerald-400/30 group-hover:ring-emerald-300/50 transition" />
+                          )}
+                        </NavLink>
+                      );
+                    }
 
-        {/* Onglet Export retiré */}
-
-    <NavLink
-      to={`${base}/nouveautes`}
-              onClick={acknowledgeNouveautes}
-              className={({ isActive }) =>
-                `relative flex items-center px-6 py-3 text-sm font-medium transition-colors group ${
-                  isActive
-                    ? "bg-cactus-700 text-white"
-                    : "text-cactus-100 hover:bg-cactus-700/80 hover:text-white"
-                }`
-              }
-            >
-              <span className="w-5 h-5 mr-3 flex items-center justify-center text-cactus-100 relative">
-                <CalendarRange className="w-5 h-5" />
-                {showNewNouveautes && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 shadow ring-2 ring-cactus-800 animate-ping" />
-                )}
-              </span>
-              <span className="flex items-center gap-2">
-                <span>Nouveautés</span>
-                {showNewNouveautes && (
-                  <span className="text-[9px] font-semibold tracking-wide px-1.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500/40 to-cactus-500/40 text-emerald-50 border border-emerald-400/40 shadow-sm flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                    Nouveau
-                  </span>
-                )}
-              </span>
-              {showNewNouveautes && (
-                <span className="pointer-events-none absolute inset-0 rounded-md ring-1 ring-emerald-400/30 group-hover:ring-emerald-300/50 transition" />
+                    return (
+                      <NavLink
+                        key={item.key}
+                        to={item.to}
+                        end={!!item.exact}
+                        className={({ isActive }) => navLinkClass(isActive)}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </NavLink>
+                    );
+                  })}
+                </div>
               )}
-            </NavLink>
-
-        <NavLink
-          to="/elearning"
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <span className="inline-block w-5 h-5 mr-3 bg-cactus-600 rounded-full flex items-center justify-center text-white font-bold">📚</span>
-          <span>E-learning</span>
-        </NavLink>
-
-        <NavLink
-          to={`${base}/script`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <FileText className="w-5 h-5 mr-3" />
-          Script d'appel
-        </NavLink>
-
-        <NavLink
-          to={`${base}/catalog`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <Search className="w-5 h-5 mr-3" />
-          Catalogue
-        </NavLink>
-
-        <NavLink
-          to={`${base}/sales`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <DollarSign className="w-5 h-5 mr-3" />
-          Ventes
-        </NavLink>
-
-
-        <NavLink
-              to="/checklist"
-              className={({ isActive }) =>
-                `flex items-center px-6 py-3 text-sm font-medium rounded-md transition-colors ${
-                  isActive ? "bg-cactus-700 text-white" : "text-cactus-100 hover:bg-cactus-700/80 hover:text-white"
-                }`
-              }
-            >
-              <span className="w-4 h-4 mr-3 flex items-center justify-center">✅</span>
-              <span>Faire ma checklist</span>
-            </NavLink>
-
-          <NavLink
-              to="/checklist-archive"
-              className={({ isActive }) =>
-                `flex items-center px-6 py-3 text-sm font-medium rounded-md transition-colors ${
-                  isActive ? "bg-cactus-700 text-white" : "text-cactus-100 hover:bg-cactus-700/80 hover:text-white"
-                }`
-              }
-            >
-              <span className="w-4 h-4 mr-3 flex items-center justify-center">🗂️</span>
-              <span>Archives</span>
-            </NavLink>
-
-
-        <NavLink
-          to={`${base}/ai`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <Bot className="w-5 h-5 mr-3" />
-          Assistant IA
-        </NavLink>
-        <NavLink
-          to={`${base}/offers`}
-          className={({ isActive }) =>
-            `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-cactus-700 text-white"
-                : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-            }`
-          }
-        >
-          <Gift className="w-5 h-5 mr-3" />
-          Offres Canal+
-        </NavLink>
+            </div>
+          );
+        })}
         {/*
         <NavLink
           to="/dashboard/modetv"
@@ -251,21 +305,22 @@ const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
           Mode TV Poker
         </NavLink>
         */}
-
-  <NavLink
-  to={`${base}/faq`}
-        className={({ isActive }) =>
-          `flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-            isActive
-              ? "bg-cactus-700 text-white"
-              : "text-cactus-100 hover:bg-cactus-700 hover:text-white"
-          }`
-        }
-      >
-        <HelpCircle className="w-5 h-5 mr-3" />
-        FAQ & Suggestions
-      </NavLink>
       </nav>
+
+      {/* CTA pinned near the bottom */}
+      <div className="px-3 pb-3">
+        <NavLink
+          to="/checklist"
+          onClick={onCloseMobile}
+          className={() =>
+            "flex items-center justify-center gap-2 w-full px-4 py-3 text-sm font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+          }
+        >
+          <span className="w-4 h-4 flex items-center justify-center">✅</span>
+          <span>Faire ma checklist</span>
+        </NavLink>
+      </div>
+
   <div className="p-4 border-t border-cactus-700 space-y-4 mt-auto md:sticky md:bottom-0 bg-cactus-800/95 backdrop-blur supports-[backdrop-filter]:bg-cactus-800/80">
         <Link
           to={`${base}/settings`}
@@ -309,7 +364,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
           <ul className="space-y-2">
             <li><a href="/dashboard/fr" className="text-cactus-100">Dashboard</a></li>
             <li><a href="/checklist" className="text-cactus-100">Faire ma checklist</a></li>
-            <li><a href="/checklist-archive" className="text-cactus-100">Archives</a></li>
           </ul>
         </nav>
       </div>

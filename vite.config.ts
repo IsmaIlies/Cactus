@@ -23,8 +23,8 @@ export default defineConfig({
   },
   server: {
     port: 5173, // keep stable so it's whitelisted in allowedOrigins
-    // If 5173 is busy and you REALLY need auto-increment, remove strictPort and also add 5174 in allowedOrigins (done in function)
-    strictPort: false,
+    // Revenir au port de base et ne plus changer automatiquement
+    strictPort: true,
     proxy: {
       // Forward the relative frontend call /api/justwatch to the Cloud Function
       '/api/justwatch': {

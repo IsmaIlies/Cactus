@@ -4,64 +4,83 @@
   },
   "hosting": {
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "headers": [
       {
         "source": "**/*.html",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
         ]
       },
       {
         "source": "assets/**",
         "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
         ]
       },
       {
         "source": "**/*.{js,css,json}",
         "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
         ]
       },
       {
         "source": "**/*.{webp,png,jpg,jpeg,gif,svg}",
         "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
         ]
       },
       {
         "source": "**/*.{woff2,woff,ttf,eot}",
         "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
         ]
       }
     ],
     "rewrites": [
       {
-      "source": "/api/justwatch",
-      "function": "justwatchProxy",
-      "functionRegion": "europe-west9"
+        "source": "/api/justwatch",
+        "function": "justwatchProxy",
+        "region": "europe-west9"
       },
       {
         "source": "/api/update-email",
         "function": "updatePrimaryEmailIfMicrosoftLinkedHttp",
-        "functionRegion": "europe-west9"
+        "region": "europe-west9"
       },
       {
         "source": "/api/leads-stats-forward",
         "function": "leadsStatsForward",
-        "functionRegion": "europe-west1"
+        "region": "europe-west1"
       },
       {
         "source": "/api/leads-stats",
         "function": "leadsStats",
-        "functionRegion": "europe-west1"
+        "region": "europe-west1"
       },
       {
         "source": "/api/request-password-reset",
         "function": "requestPasswordReset",
-        "functionRegion": "europe-west9"
+        "region": "europe-west9"
       },
       {
         "source": "/auth/action",
@@ -79,5 +98,14 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 9099 },
+    "functions": { "host": "127.0.0.1", "port": 5001 },
+    "firestore": { "host": "127.0.0.1", "port": 8080 },
+    "hosting": { "host": "127.0.0.1", "port": 5000 },
+    "storage": { "host": "127.0.0.1", "port": 9199 },
+    "ui": { "enabled": true, "host": "127.0.0.1", "port": 4000 },
+    "singleProjectMode": true
   }
 }
