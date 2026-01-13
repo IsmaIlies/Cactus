@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone, History, BarChart3, Menu, X } from 'lucide-react';
+import { LogOut, LayoutDashboard, Clock3, FileDown, ClipboardList, ListChecks, Gauge, FlaskConical, PlusCircle, Phone, History, BarChart3, Menu, X, ExternalLink } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const titleFor = (area?: string) => {
@@ -29,6 +29,17 @@ const SupervisorLayout: React.FC = () => {
       navigate(`${base}/dashboard2`, { replace: true });
     }
   }, [area, base, location.pathname, navigate]);
+
+  // Verrou global LEADS: si une session impose LEADS, empêcher toute bascule vers FR/CIV
+  React.useEffect(() => {
+    try {
+      const lock = sessionStorage.getItem('forceSupervisorLeads') === '1';
+      const normalizedArea = String(area || '').toLowerCase();
+      if (lock && normalizedArea !== 'leads') {
+        navigate('/dashboard/superviseur/leads/dashboard2', { replace: true });
+      }
+    } catch {}
+  }, [area, navigate]);
 
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const closeSidebar = () => setSidebarOpen(false);
@@ -291,7 +302,18 @@ const SupervisorLayout: React.FC = () => {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold hidden md:block">{titleFor(area)}</h2>
-            {/* Redirection désormais automatisée par rôle: on retire le bouton manuel */}
+            <button
+              onClick={() => { try { window.location.href = 'https://cactus-labs.fr/leads/dashboard'; } catch {} }}
+              title="Passer au côté agent"
+              className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full border border-cyan-400/40 bg-gradient-to-r from-cyan-500/20 via-emerald-500/20 to-transparent px-5 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-cyan-100 shadow-[0_18px_48px_rgba(56,189,248,0.35)] transition-all duration-300 hover:scale-105 hover:border-cyan-300/70 hover:bg-cyan-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
+            >
+              <span className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.25),transparent_55%),radial-gradient(circle_at_80%_80%,rgba(16,185,129,0.25),transparent_60%)]" />
+              <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-cyan-200">
+                <span className="absolute inset-0 rounded-lg border border-white/15 opacity-0 transition group-hover:opacity-100" />
+                <ExternalLink className="relative h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="relative">Passer au côté agent</span>
+            </button>
           </div>
           <Outlet />
         </div>

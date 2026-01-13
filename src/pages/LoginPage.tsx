@@ -3,12 +3,14 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../firebase";
 import SpacePickerModal from "../components/SpacePickerModal";
-import { fetchUserSpaces, AppSpace, spaceToRoute, getSpacesFromRole } from "../services/userSpaces";
+import { fetchUserSpaces, AppSpace, spaceToRoute, getSpacesFromRole, roleFromAzureGroups } from "../services/userSpaces";
+import { spacesFromAzureGroups } from "../services/userSpaces";
 // auth import removed (region selection is manual, no Firestore region fetch needed)
 import { useRegion } from '../contexts/RegionContext';
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 
 const LoginPage = () => {
+  
   const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -117,15 +119,18 @@ const LoginPage = () => {
   useEffect(() => {
     const sso = searchParams.get('sso');
     const hint = (searchParams.get('hint') || '').trim();
-    if (sso === '1') {
+    const already = sessionStorage.getItem('ssoTriggered') === '1';
+    const isLogged = !!user || !!auth.currentUser;
+    // Ne pas déclencher le SSO auto si l'utilisateur est déjà connecté ou si déjà tenté
+    if (sso === '1' && !isLogged && !already) {
       if (hint && !email) setEmail(hint);
+      try { sessionStorage.setItem('ssoTriggered', '1'); } catch {}
       // Lance SSO automatiquement avec le hint
       setTimeout(() => {
         handleMicrosoftLogin();
       }, 0);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, user]);
 
   const handleMissionSelect = (value: 'CANAL_PLUS' | 'ORANGE_LEADS') => {
     setMission(value);
@@ -142,6 +147,15 @@ const LoginPage = () => {
     try {
       const { success, message } = await login(email, password);
       if (success) {
+        // Si une session impose LEADS, appliquer immédiatement et sortir
+        try {
+          if (sessionStorage.getItem('forceSupervisorLeads') === '1') {
+            try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+            navigate('/dashboard/superviseur/leads/dashboard2');
+            return;
+          }
+        } catch {}
         localStorage.setItem('activeRegion', selectedRegion);
         localStorage.setItem('activeMission', mission);
         setRegion(selectedRegion);
@@ -156,7 +170,73 @@ const LoginPage = () => {
             roleSpaces = getSpacesFromRole(role);
           } catch {}
           const { spaces: fsSpaces, defaultSpace } = await fetchUserSpaces(currentEmail);
-          const spaces = roleSpaces.length ? roleSpaces : fsSpaces;
+          // Si le groupe LEADS est présent, router immédiatement vers LEADS (superviseur)
+          try {
+            let groupsLocal: Array<{ id?: string; displayName?: string }> = [];
+            const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+            if (idToken && idToken.split('.').length === 3) {
+              const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+              if (Array.isArray(payload?.groups)) {
+                const raw = payload.groups as string[];
+                const guid = /^[0-9a-fA-F-]{36}$/;
+                groupsLocal = raw.map(v => guid.test(String(v)) ? { id: String(v) } : { displayName: String(v) });
+              }
+            }
+            const idsLower = groupsLocal.map(g => String(g?.id || '').toLowerCase());
+            const namesUpper = groupsLocal.map(g => String(g?.displayName || '').toUpperCase());
+            const hasLeadsGroup = idsLower.includes('54ef3c7c-1ec1-4c1c-aece-7db95d00737d') || namesUpper.some((n: string) => n.includes('SUP') && n.includes('LEADS'));
+            if (hasLeadsGroup) {
+              try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+              try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+              try { sessionStorage.setItem('forceSupervisorLeads', '1'); } catch {}
+              navigate('/dashboard/superviseur/leads/dashboard2');
+              return;
+            }
+            // Fallback interactif Graph: tenter une fois de récupérer les groupes pour détecter LEADS avant tout FR/CIV
+            try {
+              const alreadyInteractive = sessionStorage.getItem('ms_graph_groups_interactive_login') === '1';
+              if (!alreadyInteractive) {
+                const tokenI = await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All','Directory.Read.All'], interactive: true });
+                if (tokenI) {
+                  const resI = await fetch('https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName', { headers: { Authorization: `Bearer ${tokenI}` } });
+                  if (resI.ok) {
+                    const jI = await resI.json().catch(() => ({}));
+                    const itemsI: any[] = Array.isArray(jI?.value) ? jI.value : [];
+                    const idsI = itemsI.map(it => String(it?.id || '').toLowerCase());
+                    const namesI = itemsI.map(it => String(it?.displayName || '').toUpperCase());
+                    const hasLeadsI = idsI.includes('54ef3c7c-1ec1-4c1c-aece-7db95d00737d') || namesI.some((n: string) => n.includes('SUP') && n.includes('LEADS'));
+                    if (hasLeadsI) {
+                      try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+                      try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+                      try { sessionStorage.setItem('forceSupervisorLeads', '1'); } catch {}
+                      navigate('/dashboard/superviseur/leads/dashboard2');
+                      return;
+                    }
+                  }
+                }
+                try { sessionStorage.setItem('ms_graph_groups_interactive_login', '1'); } catch {}
+              }
+            } catch {}
+          } catch {}
+          // Préférence forte: espaces dérivés des groupes Azure (LEADS prioritaire), puis rôle, puis Firestore
+          const spacesFromGroups = (() => {
+            try {
+              // Reutiliser la détection effectuée au-dessus
+              // On re-compute groups pour extraire aussi les espaces
+              let groups: (string | { id?: string; displayName?: string })[] = [];
+              const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+              if (idToken && idToken.split('.').length === 3) {
+                const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+                if (Array.isArray(payload?.groups)) {
+                  const raw = payload.groups as string[];
+                  const guid = /^[0-9a-fA-F-]{36}$/;
+                  groups = raw.map(v => guid.test(String(v)) ? { id: String(v) } : { displayName: String(v) });
+                }
+              }
+              return spacesFromAzureGroups(groups);
+            } catch { return []; }
+          })();
+          const spaces = spacesFromGroups.length ? spacesFromGroups : (roleSpaces.length ? roleSpaces : fsSpaces);
 
           const last = ((): AppSpace | null => {
             const v = localStorage.getItem('lastSpace');
@@ -170,6 +250,40 @@ const LoginPage = () => {
             if (choice === 'leads') return 'LEADS';
             return null;
           };
+          // Détection automatique du statut superviseur via groupes Azure (ID token ou Graph)
+          let supervisorFromAzure = false;
+          try {
+            let groups: (string | { id?: string; displayName?: string })[] = [];
+            const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+            if (idToken && idToken.split('.').length === 3) {
+              const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+              if (Array.isArray(payload?.groups)) {
+                const raw = payload.groups as string[];
+                const guid = /^[0-9a-fA-F-]{36}$/;
+                groups = raw.map(v => guid.test(String(v)) ? { id: String(v) } : { displayName: String(v) });
+              }
+            }
+            if (!groups.length) {
+              const token = await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All','Directory.Read.All'] });
+              if (token) {
+                const res = await fetch('https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName', { headers: { Authorization: `Bearer ${token}` } });
+                if (res.ok) {
+                  const j = await res.json().catch(() => ({}));
+                  const items: any[] = Array.isArray(j?.value) ? j.value : [];
+                  groups = items.map(it => ({ id: it?.id, displayName: it?.displayName }));
+                }
+              }
+            }
+            const r = roleFromAzureGroups(groups);
+            supervisorFromAzure = !!r && String(r).toUpperCase().includes('SUPERVISEUR');
+            // Fallback direct par ID via variable d'env ou ID connu
+            try {
+              const moId = (import.meta as any)?.env?.VITE_AZURE_GROUP_MO_SUP_CANAL_ID as string | undefined;
+              const ids = groups.map(g => typeof g === 'string' ? String(g).toLowerCase() : String((g as any)?.id || '').toLowerCase());
+              if (moId && ids.includes(String(moId).toLowerCase())) supervisorFromAzure = true;
+              if (ids.includes('c38dce07-743e-40c6-aab9-f46dc0ea9adb')) supervisorFromAzure = true;
+            } catch {}
+          } catch {}
 
           const navigateToSpace = (space: AppSpace, supervisor?: boolean) => {
             try { localStorage.setItem('lastSpace', space); } catch {}
@@ -180,31 +294,60 @@ const LoginPage = () => {
             }
             if (space === 'CANAL_FR') { try { localStorage.setItem('activeRegion', 'FR'); } catch {}; setRegion('FR'); }
             if (space === 'CANAL_CIV') { try { localStorage.setItem('activeRegion', 'CIV'); } catch {}; setRegion('CIV'); }
-            const path = spaceToRoute(space, supervisor);
+            const path = spaceToRoute(space, supervisorFromAzure || supervisor);
             navigate(path);
           };
 
           if (spaces.length === 0) {
-            // Repli sur la sélection mission/région lorsqu'aucun mapping n'existe
-            if (isSupervisorAllowed && supervisorTargetPath) {
-              try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
-              navigate(supervisorTargetPath);
-              try { sessionStorage.removeItem('supervisorTarget'); } catch {}
-            } else if (mission === 'ORANGE_LEADS') {
-              navigate('/leads/dashboard');
+            // Si l'utilisateur est détecté superviseur via Azure, router directement vers dashboard superviseur FR/CIV
+            if (supervisorFromAzure) {
+              try {
+                const token = await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({ scopes: ['User.Read'] });
+                let region: 'FR' | 'CIV' = 'FR';
+                if (token) {
+                  const res = await fetch('https://graph.microsoft.com/v1.0/me?$select=country,usageLocation', { headers: { Authorization: `Bearer ${token}` } });
+                  if (res.ok) {
+                    const j = await res.json().catch(() => ({}));
+                    const usage = String(j?.usageLocation || '').trim().toUpperCase();
+                    const rawCountry = String(j?.country || '').trim().toUpperCase();
+                    if (['CI','CIV','CÔTE D’IVOIRE',"COTE D'IVOIRE"].includes(usage) || ['CI','CIV','CÔTE D’IVOIRE',"COTE D'IVOIRE"].includes(rawCountry)) {
+                      region = 'CIV';
+                    } else {
+                      region = 'FR';
+                    }
+                  }
+                }
+                try { localStorage.setItem('activeRegion', region); } catch {}
+                setRegion(region);
+                navigate(region === 'CIV' ? '/dashboard/superviseur/civ' : '/dashboard/superviseur/fr');
+              } catch {
+                // Fallback superviseur France
+                try { localStorage.setItem('activeRegion', 'FR'); } catch {}
+                setRegion('FR');
+                navigate('/dashboard/superviseur/fr');
+              }
             } else {
-              navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+              // Repli sur la sélection mission/région lorsqu'aucun mapping n'existe
+              if (isSupervisorAllowed && supervisorTargetPath) {
+                try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
+                navigate(supervisorTargetPath);
+                try { sessionStorage.removeItem('supervisorTarget'); } catch {}
+              } else if (mission === 'ORANGE_LEADS') {
+                navigate('/leads/dashboard');
+              } else {
+                navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+              }
             }
           } else if (spaces.length === 1) {
             const sole = spaces[0];
             const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
-            const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && sole === requestedSupSpace;
+            const supervisorOk = (supervisorFromAzure) || (isSupervisorAllowed && !!requestedSupSpace && sole === requestedSupSpace);
             navigateToSpace(sole, supervisorOk);
           } else {
             const preferred = (last && spaces.includes(last)) ? last : (defaultSpace && spaces.includes(defaultSpace) ? defaultSpace : null);
             if (preferred) {
               const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
-              const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && preferred === requestedSupSpace;
+              const supervisorOk = (supervisorFromAzure) || (isSupervisorAllowed && !!requestedSupSpace && preferred === requestedSupSpace);
               navigateToSpace(preferred, supervisorOk);
             } else {
               setSpaceChoices(spaces);
@@ -238,12 +381,170 @@ const LoginPage = () => {
       // Passer l'email saisi comme login_hint et pour tentative de pré-liaison
       const success = await loginWithMicrosoft(normalizedEmail);
       if (success) {
+        // Raccourci explicite : si l'utilisateur est dans la whitelist superviseur
+        // ET que la mission sélectionnée est ORANGE_LEADS, on le route directement
+        // vers le dashboard superviseur LEADS, sans dépendre des groupes Azure.
+        try {
+          const supLeadsShortcut = isSupervisorAllowed && mission === 'ORANGE_LEADS';
+          if (supLeadsShortcut) {
+            try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+            try { sessionStorage.setItem('forceSupervisorLeads', '1'); } catch {}
+            navigate('/dashboard/superviseur/leads/dashboard2');
+            return;
+          }
+        } catch {}
+        // Si une session impose LEADS, appliquer immédiatement et sortir (flux SSO)
+        try {
+          if (sessionStorage.getItem('forceSupervisorLeads') === '1') {
+            try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+            navigate('/dashboard/superviseur/leads/dashboard2');
+            return;
+          }
+        } catch {}
+        // Rafraîchissement conditionnel du token Microsoft: uniquement si le claim "groups" manque
+        try {
+          const alreadyRefreshed = sessionStorage.getItem('ms_token_refreshed') === '1';
+          const idToken0 = sessionStorage.getItem('ms_id_token') || undefined;
+          const hasGroups = (() => {
+            if (idToken0 && idToken0.split('.').length === 3) {
+              try {
+                const payload = JSON.parse(atob(idToken0.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+                return Array.isArray(payload?.groups) && (payload.groups as any[]).length > 0;
+              } catch { return false; }
+            }
+            return false;
+          })();
+          if (!hasGroups && !alreadyRefreshed) {
+            await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({
+              scopes: ['openid','profile','email','User.Read','Group.Read.All','Directory.Read.All'],
+            });
+            try { sessionStorage.setItem('ms_token_refreshed', '1'); } catch {}
+          }
+        } catch {}
         // Nouveau flux: détermine l'espace autorisé via Firestore userSpaces
         const emailAfter = (auth.currentUser?.email || normalizedEmail || '').toLowerCase();
         // 1) Prefer role-based spaces from user claims to be fully automatic
         const roleSpaces = getSpacesFromRole(user?.role);
+        // Détection automatique du statut superviseur via groupes Azure (ID token ou Graph)
+        let supervisorFromAzure = false;
+        try {
+          let groups: (string | { id?: string; displayName?: string })[] = [];
+          const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+          if (idToken && idToken.split('.').length === 3) {
+            const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+            if (Array.isArray(payload?.groups)) {
+              const raw = payload.groups as string[];
+              const guid = /^[0-9a-fA-F-]{36}$/;
+              groups = raw.map(v => guid.test(String(v)) ? { id: String(v) } : { displayName: String(v) });
+            }
+          }
+          if (!groups.length) {
+            const token = await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All','Directory.Read.All'] });
+            if (token) {
+              const res = await fetch('https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName', { headers: { Authorization: `Bearer ${token}` } });
+              if (res.ok) {
+                const j = await res.json().catch(() => ({}));
+                const items: any[] = Array.isArray(j?.value) ? j.value : [];
+                groups = items.map(it => ({ id: it?.id, displayName: it?.displayName }));
+              }
+            }
+          }
+          const r = roleFromAzureGroups(groups);
+          supervisorFromAzure = !!r && String(r).toUpperCase().includes('SUPERVISEUR');
+          try {
+            const moId = (import.meta as any)?.env?.VITE_AZURE_GROUP_MO_SUP_CANAL_ID as string | undefined;
+            const ids = groups.map(g => typeof g === 'string' ? String(g).toLowerCase() : String((g as any)?.id || '').toLowerCase());
+            if (moId && ids.includes(String(moId).toLowerCase())) supervisorFromAzure = true;
+            if (ids.includes('c38dce07-743e-40c6-aab9-f46dc0ea9adb')) supervisorFromAzure = true;
+          } catch {}
+        } catch {}
         const { spaces: fsSpaces, defaultSpace } = await fetchUserSpaces(emailAfter);
-        const spaces = roleSpaces.length ? roleSpaces : fsSpaces;
+        // Si le groupe LEADS est présent, router immédiatement vers LEADS (superviseur)
+        try {
+          const groupsLocal: any[] = [];
+          const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+          if (idToken && idToken.split('.').length === 3) {
+            const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+            if (Array.isArray(payload?.groups)) {
+              const raw = payload.groups as string[];
+              const guid = /^[0-9a-fA-F-]{36}$/;
+              for (const v of raw) groupsLocal.push(guid.test(String(v)) ? { id: String(v) } : { displayName: String(v) });
+            }
+          }
+          const idsLower = groupsLocal.map((g: any) => String(g?.id || '').toLowerCase());
+          const namesUpper = groupsLocal.map((g: any) => String(g?.displayName || '').toUpperCase());
+          // Redirection immédiate pour Agent LEADS (GUID strict) vers l'espace agent LEADS
+          const hasAgentLeadsStrictGuid = idsLower.includes('2fc9a8c8-f140-49fc-9ca8-8501b1b954d6');
+          if (hasAgentLeadsStrictGuid) {
+            try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+            navigate('/leads/dashboard');
+            return;
+          }
+          // Redirection immédiate pour Agent CANAL (GUID strict) vers l'espace agent FR
+          const hasAgentCanalStrictGuid = idsLower.includes('6a2b7859-58d6-430f-a23a-e856956b333d');
+          if (hasAgentCanalStrictGuid) {
+            try { localStorage.setItem('lastSpace', 'CANAL_FR'); } catch {}
+            try { localStorage.setItem('activeMission', 'CANAL_PLUS'); } catch {}
+            try { localStorage.setItem('activeRegion', 'FR'); } catch {}
+            try { setRegion('FR'); } catch {}
+            navigate('/dashboard/fr');
+            return;
+          }
+          // Redirection superviseur LEADS si groupe superviseur détecté
+          const hasLeadsGroup = idsLower.includes('54ef3c7c-1ec1-4c1c-aece-7db95d00737d') || namesUpper.some((n: string) => n.includes('SUP') && n.includes('LEADS'));
+          if (hasLeadsGroup) {
+            try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+            try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+            try { sessionStorage.setItem('forceSupervisorLeads', '1'); } catch {}
+            navigate('/dashboard/superviseur/leads/dashboard2');
+            return;
+          }
+          // Fallback interactif Graph (flux Microsoft): une seule tentative pour détecter LEADS si le token ID ne contient pas les groupes
+          try {
+            const alreadyInteractive = sessionStorage.getItem('ms_graph_groups_interactive_login') === '1';
+            if (!alreadyInteractive) {
+              const tokenI = await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All','Directory.Read.All'], interactive: true });
+              if (tokenI) {
+                const resI = await fetch('https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName', { headers: { Authorization: `Bearer ${tokenI}` } });
+                if (resI.ok) {
+                  const jI = await resI.json().catch(() => ({}));
+                  const itemsI: any[] = Array.isArray(jI?.value) ? jI.value : [];
+                  const idsI = itemsI.map(it => String(it?.id || '').toLowerCase());
+                  const namesI = itemsI.map(it => String(it?.displayName || '').toUpperCase());
+                  const hasLeadsI = idsI.includes('54ef3c7c-1ec1-4c1c-aece-7db95d00737d') || namesI.some((n: string) => n.includes('SUP') && n.includes('LEADS'));
+                  if (hasLeadsI) {
+                    try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+                    try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+                    try { sessionStorage.setItem('forceSupervisorLeads', '1'); } catch {}
+                    navigate('/dashboard/superviseur/leads/dashboard2');
+                    return;
+                  }
+                }
+              }
+              try { sessionStorage.setItem('ms_graph_groups_interactive_login', '1'); } catch {}
+            }
+          } catch {}
+        } catch {}
+        // Préférence forte: espaces dérivés des groupes Azure (LEADS prioritaire), puis rôle, puis Firestore
+        const spacesFromGroups = (() => {
+          try {
+            let groups: (string | { id?: string; displayName?: string })[] = [];
+            const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+            if (idToken && idToken.split('.').length === 3) {
+              const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+              if (Array.isArray(payload?.groups)) {
+                const raw = payload.groups as string[];
+                const guid = /^[0-9a-fA-F-]{36}$/;
+                groups = raw.map(v => guid.test(String(v)) ? { id: String(v) } : { displayName: String(v) });
+              }
+            }
+            return spacesFromAzureGroups(groups);
+          } catch { return []; }
+        })();
+        const spaces = spacesFromGroups.length ? spacesFromGroups : (roleSpaces.length ? roleSpaces : fsSpaces);
 
         const last = ((): AppSpace | null => {
           const v = localStorage.getItem('lastSpace');
@@ -273,25 +574,53 @@ const LoginPage = () => {
             try { localStorage.setItem('activeRegion', 'CIV'); } catch {}
             setRegion('CIV');
           }
-          const path = spaceToRoute(space, supervisor);
+          const path = spaceToRoute(space, supervisorFromAzure || supervisor);
           navigate(path);
         };
 
         if (spaces.length === 0) {
-          // Aucun mapping trouvé: fallback sur logique actuelle pour ne pas bloquer
-          if (isSupervisorAllowed && supervisorTargetPath) {
-            try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
-            navigate(supervisorTargetPath);
-            try { sessionStorage.removeItem('supervisorTarget'); } catch {}
-          } else if (mission === 'ORANGE_LEADS') {
-            navigate('/leads/dashboard');
+          // Aucun mapping trouvé: si superviseur détecté via Azure, router direct vers dashboard superviseur FR/CIV
+          if (supervisorFromAzure) {
+            try {
+              const token = await (await import('../services/msGraphToken')).getFreshMicrosoftAccessToken({ scopes: ['User.Read'] });
+              let region: 'FR' | 'CIV' = 'FR';
+              if (token) {
+                const res = await fetch('https://graph.microsoft.com/v1.0/me?$select=country,usageLocation', { headers: { Authorization: `Bearer ${token}` } });
+                if (res.ok) {
+                  const j = await res.json().catch(() => ({}));
+                  const usage = String(j?.usageLocation || '').trim().toUpperCase();
+                  const rawCountry = String(j?.country || '').trim().toUpperCase();
+                  if (['CI','CIV','CÔTE D’IVOIRE',"COTE D'IVOIRE"].includes(usage) || ['CI','CIV','CÔTE D’IVOIRE',"COTE D'IVOIRE"].includes(rawCountry)) {
+                    region = 'CIV';
+                  } else {
+                    region = 'FR';
+                  }
+                }
+              }
+              try { localStorage.setItem('activeRegion', region); } catch {}
+              setRegion(region);
+              navigate(region === 'CIV' ? '/dashboard/superviseur/civ' : '/dashboard/superviseur');
+            } catch {
+              try { localStorage.setItem('activeRegion', 'FR'); } catch {}
+              setRegion('FR');
+              navigate('/dashboard/superviseur');
+            }
           } else {
-            navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+            // Fallback logique actuelle pour ne pas bloquer
+            if (isSupervisorAllowed && supervisorTargetPath) {
+              try { sessionStorage.setItem('supervisorTarget', supervisorTargetPath); } catch {}
+              navigate(supervisorTargetPath);
+              try { sessionStorage.removeItem('supervisorTarget'); } catch {}
+            } else if (mission === 'ORANGE_LEADS') {
+              navigate('/leads/dashboard');
+            } else {
+              navigate(selectedRegion === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+            }
           }
         } else if (spaces.length === 1) {
           const sole = spaces[0];
           const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
-          const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && sole === requestedSupSpace;
+          const supervisorOk = (supervisorFromAzure) || (isSupervisorAllowed && !!requestedSupSpace && sole === requestedSupSpace);
           navigateToSpace(sole, supervisorOk);
         } else {
           // Multi-espaces: tenter default/last sinon ouvrir modal
@@ -300,7 +629,7 @@ const LoginPage = () => {
             : (defaultSpace && spaces.includes(defaultSpace) ? defaultSpace : null);
           if (preferred) {
             const requestedSupSpace = pickSupervisorSpace(supervisorChoice);
-            const supervisorOk = isSupervisorAllowed && !!requestedSupSpace && preferred === requestedSupSpace;
+            const supervisorOk = (supervisorFromAzure) || (isSupervisorAllowed && !!requestedSupSpace && preferred === requestedSupSpace);
             navigateToSpace(preferred, supervisorOk);
           } else {
             setSpaceChoices(spaces);
@@ -675,7 +1004,15 @@ const LoginPage = () => {
                   </button>
                 </div>
 
-                {/* Bouton "Créer un compte" retiré */}
+                {/* Bouton "Créer un compte" rétabli */}
+                <div className="mt-4 text-center">
+                  <Link
+                    to="/register"
+                    className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-white/20 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cactus-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                  >
+                    Créer un compte
+                  </Link>
+                </div>
               </form>
 
               <div className="mt-10 flex justify-center pb-2">

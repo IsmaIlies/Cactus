@@ -12,7 +12,56 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
+    
     <div id="root"></div>
+    <script>
+      // Gate all access by IP BEFORE loading the app.
+      (async () => {
+        try {
+          const endpoints = ['/ip-check'];
+          const ipEcho = async () => {
+            try {
+              const r = await fetch('https://api.ipify.org?format=json', { credentials: 'omit' });
+              const j = await r.json().catch(() => null);
+              return j && j.ip ? j.ip : '';
+            } catch { return ''; }
+          };
+
+          let result = null;
+          let gotPolicy = false;
+          for (const url of endpoints) {
+            try {
+              const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'omit' });
+              result = await res.json().catch(() => null);
+              if (result && typeof result.enforce === 'boolean') { gotPolicy = true; break; }
+            } catch {}
+          }
+
+          // Fail-open (temporaire): si la politique n'est pas récupérée, on n'applique pas le blocage.
+          const allowed = gotPolicy ? !!(result && result.allowed === true) : false;
+
+          // Strict front gate: if policy is retrieved and allowed === false, block immediately.
+          if (gotPolicy && !allowed) {
+            // Remove the app entry script so React never loads.
+            const entry = document.querySelector('script[type="module"][data-app-entry]');
+            if (entry) entry.remove();
+
+            // Render a simple full-screen error page.
+            const ip = (result && result.ip) || await ipEcho();
+            document.body.innerHTML = `
+              <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0f172a;color:#e5e7eb;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif">
+                <div style="max-width:480px;width:100%;padding:28px;border-radius:16px;background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.4);box-shadow:0 10px 20px rgba(0,0,0,0.25)">
+                  <h1 style="margin:0 0 8px 0;font-size:18px;font-weight:600;color:#fecaca">Accès refusé</h1>
+                  <p style="margin:6px 0 0 0;font-size:14px;color:#fee2e2">Votre adresse IP n’est pas autorisée pour accéder à cette application.</p>
+                  <p style="margin:8px 0 0 0;font-size:12px;color:#fecaca">IP détectée: <span style="font-family:ui-monospace,Menlo,Consolas,monospace">${ip || 'inconnue'}</span></p>
+                  <p style="margin:10px 0 0 0;font-size:12px;color:#fecaca">Contactez l’administrateur.</p>
+                </div>
+              </div>
+            `;
+          }
+        } catch {}
+      })();
+    </script>
     <script>
       // Runtime emergency injection for Gemini key if Vite env failed.
       // Set window.__INITIAL_GEMINI_KEY manually (only local dev) before React loads.
@@ -20,6 +69,6 @@
       // This avoids bundling the key; still not for production.
       window.__INITIAL_GEMINI_KEY = window.__INITIAL_GEMINI_KEY || '';
     </script>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" data-app-entry src="/src/main.tsx"></script>
   </body>
 </html>

@@ -15,7 +15,7 @@ import { useAuth } from "../contexts/AuthContext";
 import NotificationSystem from "../components/NotificationSystem";
 import CallClosuresPanel from "../components/CallClosuresPanel";
 import callClosures from "../data/callClosures";
-import { getUserCredits, ensureUserCredits } from "../services/gameService";
+// Casino/game credits supprimés
 import { listenToRealTimeEvents } from "../services/realTimeService";
 
 // ⚠️ On importe maintenant la fonction qui ramène **toutes** les ventes du mois
@@ -80,7 +80,7 @@ const DashboardHome = () => {
   const { user, linkMicrosoft, reloadUser } = useAuth();
   const { sales } = useMonthlySales();
   const { region } = useRegion();
-  const [casinoCredits, setCasinoCredits] = useState<number | null>(null);
+  // Crédits casino retirés
   // ventes mensuelles fournies par hook
   const [objectives, setObjectives] = useState<Objective[]>([]);
   // Bouton Clôtures d'appel (affichage à venir)
@@ -114,23 +114,7 @@ const DashboardHome = () => {
     };
   }, []);
 
-  // Load / ensure casino credits une fois user chargé
-  useEffect(() => {
-    let mounted = true;
-    if (!currentUserId) return;
-    (async () => {
-      try {
-        await ensureUserCredits(currentUserId);
-        const c = await getUserCredits(currentUserId);
-        if (mounted) setCasinoCredits(c);
-      } catch {
-        if (mounted) setCasinoCredits(null);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [currentUserId]);
+  // Crédit casino: supprimé.
 
 
   // Rafraîchir ventes/objectifs quand on change de mois
@@ -1003,12 +987,7 @@ const DashboardHome = () => {
 
   {/* LiveStatsWidget temporairement désactivé */}
 
-      {/* Bonus : petits crédits si tu veux les afficher */}
-      {casinoCredits != null && (
-        <div className="text-xs text-gray-600">
-          🎰 Crédits casino : <span className="font-semibold">{casinoCredits}</span>
-        </div>
-      )}
+      {/* Crédits casino supprimés */}
 
       {/* Bouton flottant: Clôtures d'appel (UI uniquement, contenu à venir) */}
       <div className="fixed bottom-24 right-6 z-40 select-none">

@@ -58,6 +58,11 @@
     ],
     "rewrites": [
       {
+        "source": "/ip-check",
+        "function": "authIpCheckV1",
+        "region": "us-central1"
+      },
+      {
         "source": "/api/justwatch",
         "function": "justwatchProxy",
         "region": "europe-west9"

@@ -18,7 +18,7 @@ import RoleRedirect from "./components/RoleRedirect";
 import PublicRoute from "./components/PublicRoute";
 import DiagnosticPage from "./pages/DiagnosticPage";
 import ChecklistReminderPopup from "./components/ChecklistReminderPopup";
-import GameNotification from "./components/GameNotification";
+import IpAccessGate from "./components/IpAccessGate";
 import ELearningPage from "./pages/ELearningPage";
 import AdminProgrammePdfUploader from "./components/AdminProgrammePdfUploader";
 import AdminLoginPage from "./pages/AdminLoginPage";
@@ -63,6 +63,7 @@ import AuthDebugPage from "./pages/AuthDebugPage";
 function App() {
   return (
     <AuthProvider>
+      <IpAccessGate />
       <AutoLogout />
       <UserPresenceManager />
       <RegionProvider>
@@ -176,8 +177,7 @@ function App() {
       </Routes>
       {/* Popup global de rappel checklist */}
       <ChecklistReminderPopup />
-      {/* Notifications globales pour Mr. White */}
-      <GameNotification />
+      {/* Notifications casino supprimées */}
   {/* Microsoft SSO linking prompt disabled */}
       </RegionProvider>
     </AuthProvider>

@@ -6,6 +6,8 @@ import React, {
   useEffect,
 } from "react";
 import { auth } from "../firebase";
+import { getFreshMicrosoftAccessToken } from "../services/msGraphToken";
+import { roleFromAzureGroups } from "../services/userSpaces";
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -41,6 +43,7 @@ interface User {
   email: string;
   emailVerified: boolean;
   role?: string; // Ajout du rôle
+  country?: string; // Pays (Azure AD Graph)
 }
 
 interface AuthContextType {
@@ -109,6 +112,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        let country: string | undefined = undefined;
         try {
           const tokenResult = await getIdTokenResult(firebaseUser, true);
           const role = typeof tokenResult.claims.role === 'string' ? tokenResult.claims.role : undefined;
@@ -126,12 +130,69 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
               mergedRole = fsRole || undefined;
             } catch {}
           }
+          // Dernière chance: dériver le rôle via groupes Azure AD (ID token ou Graph)
+          if (!mergedRole) {
+            try {
+              const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+              let groups: (string | { id?: string; displayName?: string })[] = [];
+              if (idToken && idToken.split('.').length === 3) {
+                try {
+                  const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                  if (Array.isArray(payload?.groups)) groups = payload.groups as string[];
+                } catch {}
+              }
+              if (!groups.length) {
+                const alreadyFetched = sessionStorage.getItem('ms_graph_groups_fetched') === '1';
+                if (!alreadyFetched) {
+                  const token = await getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All', 'Directory.Read.All'], interactive: false });
+                  if (token) {
+                    const res = await fetch('https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName', {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (res.ok) {
+                      const json = await res.json().catch(() => ({}));
+                      const items: any[] = Array.isArray(json?.value) ? json.value : [];
+                      groups = items.map(it => ({ id: it?.id, displayName: it?.displayName }));
+                    }
+                  }
+                  try { sessionStorage.setItem('ms_graph_groups_fetched', '1'); } catch {}
+                }
+              }
+              const derived = roleFromAzureGroups(groups);
+              if (derived) mergedRole = derived;
+            } catch {}
+          }
+          // Déduire country via Graph /me si non présent
+          try {
+            const alreadyFetchedMe = sessionStorage.getItem('ms_graph_me_fetched') === '1';
+            if (!alreadyFetchedMe) {
+              const token = await getFreshMicrosoftAccessToken({ scopes: ['User.Read'], interactive: false });
+              if (token) {
+                const meUrl = 'https://graph.microsoft.com/v1.0/me?$select=country,usageLocation';
+                const res = await fetch(meUrl, { headers: { Authorization: `Bearer ${token}` } });
+                if (res.ok) {
+                  const j = await res.json().catch(() => ({}));
+                  const rawCountry = (j?.country || '').trim();
+                  const usage = String(j?.usageLocation || '').trim().toUpperCase();
+                  if (rawCountry) country = rawCountry;
+                  else if (usage) {
+                    if (['FR','FRA','FRANCE'].includes(usage)) country = 'France';
+                    else if (['CI','CIV','CÔTE D’IVOIRE','COTE D’IVOIRE'].includes(usage)) country = 'Côte d’ivoire';
+                    else country = usage;
+                  }
+                }
+              }
+              try { sessionStorage.setItem('ms_graph_me_fetched', '1'); } catch {}
+            }
+          } catch {}
+
           setUser({
             id: firebaseUser.uid,
             displayName: firebaseUser.displayName || "",
             email: firebaseUser.email || "",
             emailVerified: firebaseUser.emailVerified,
             role: mergedRole,
+            country,
           });
         } catch (e) {
           // Récupère photoURL depuis Firestore (compatible v9)
@@ -142,6 +203,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
             displayName: firebaseUser.displayName || "",
             email: firebaseUser.email || "",
             emailVerified: firebaseUser.emailVerified,
+            country,
           });
         }
       } else {

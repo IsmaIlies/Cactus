@@ -12,9 +12,7 @@ import SettingsPage from "./SettingsPage";
 import AiAssistantPage from "./AiAssistantPage";
 import CatalogPage from "./CatalogPage";
 import CallScriptPage from "./CallScriptPage";
-import MrWhitePage from "./MrWhitePage";
-import PokerDuelPage from "./PokerDuelPage";
-import MyCoverPage from "./MyCoverPage";
+// Pages casino supprimées (MrWhite, PokerDuel, MyCover)
 import OffersPage from "./OffersPage";
 import FaqPage from "./FaqPage";
 import NouveautesPage from "./NouveautesPage";
@@ -26,7 +24,6 @@ import { Menu, X } from "lucide-react";
 const DashboardPage: React.FC = () => {
   const location = useLocation();
   const { user } = useAuth();
-  // Right sidebar enabled except on ModeTVCasino page
   const [isRightSidebarOpen, setIsRightSidebarOpen] = React.useState(true);
 
   // Ferme automatiquement la sidebar droite sur la page Nouveautés (plein focus contenu)
@@ -87,9 +84,7 @@ const DashboardPage: React.FC = () => {
   else if (p.startsWith(`${base}/sales`)) activePage = "sales";
   else if (p.startsWith(`${base}/my-sales`)) activePage = "my-sales";
   else if (p.startsWith(`${base}/ai`)) activePage = "ai";
-  else if (p.startsWith(`${base}/mrwhite`)) activePage = "mrwhite";
-  else if (p.startsWith(`/modetv-disabled`)) activePage = "modetv"; // legacy path kept
-  else if (p.startsWith(`${base}/mycover`)) activePage = "mycover";
+  // Pages casino retirées: mrwhite / modetv / mycover
   else if (p.startsWith(`${base}/offers`)) activePage = "offers";
   else if (p.startsWith(`${base}/faq`)) activePage = "faq";
   else if (p.startsWith(`${base}/nouveautes`)) activePage = "nouveautes";
@@ -99,7 +94,7 @@ const DashboardPage: React.FC = () => {
   React.useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
   const pageTitleMap: Record<string,string> = {
-    home:'Dashboard', script:'Script', catalog:'Catalogue', sales:'Ventes', 'my-sales':'Mes ventes', ai:'Assistant IA', mrwhite:'Mr White', modetv:'Mode TV', mycover:'MyCover', offers:'Offres', faq:'FAQ & Suggestions', settings:'Paramètres', nouveautes:'Nouveautés'
+    home:'Dashboard', script:'Script', catalog:'Catalogue', sales:'Ventes', 'my-sales':'Mes ventes', ai:'Assistant IA', offers:'Offres', faq:'FAQ & Suggestions', settings:'Paramètres', nouveautes:'Nouveautés'
   };
   const mobileTitle = pageTitleMap[activePage] || 'Dashboard';
 
@@ -137,11 +132,7 @@ const DashboardPage: React.FC = () => {
         />
       )}
       <div
-        className={`flex-1 overflow-hidden transition-all duration-300 ${
-          activePage !== 'modetv'
-            ? (isRightSidebarOpen ? 'md:mr-64' : 'md:mr-6')
-            : ''
-        }`}
+        className={`flex-1 overflow-hidden transition-all duration-300 ${isRightSidebarOpen ? 'md:mr-64' : 'md:mr-6'}`}
       >
         <div className="h-full overflow-hidden space-y-6 md:space-y-8">
           <div 
@@ -180,23 +171,7 @@ const DashboardPage: React.FC = () => {
           >
             <AiAssistantPage />
           </div>
-          <div 
-            style={{ display: activePage === "mrwhite" ? "block" : "none" }}
-            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
-          >
-            <MrWhitePage />
-          </div>
-          <div 
-            style={{ display: activePage === "modetv" ? "block" : "none" }}
-            className="h-full overflow-auto p-0"
-          > {activePage === 'modetv' ? <PokerDuelPage /> : null}
-          </div>
-          <div 
-            style={{ display: activePage === "mycover" ? "block" : "none" }}
-            className="h-full overflow-auto p-4 sm:p-6 lg:p-8"
-          >
-            <MyCoverPage />
-          </div>
+          {/* Pages casino supprimées */}
           <div
             style={{ display: activePage === "offers" ? "block" : "none" }}
             className="h-full overflow-auto p-4 sm:p-6"
@@ -223,12 +198,10 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
-      {activePage !== 'modetv' && (
-        <RightSidebar
-          isOpen={isRightSidebarOpen}
-          onToggle={setIsRightSidebarOpen}
-        />
-      )}
+      <RightSidebar
+        isOpen={isRightSidebarOpen}
+        onToggle={setIsRightSidebarOpen}
+      />
     {/* Notifications nouveaux messages (global) */}
     <NewMessageNotifier />
     {/* Badge debug (visible admin/flag) */}

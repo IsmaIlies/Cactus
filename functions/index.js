@@ -57,6 +57,33 @@ try {
 // No hardcoded allowlist for security.
 // Configure AUTH_IP_ALLOWLIST via environment (.env/.env.local or Firebase env).
 
+// ---------------------------------------------------------------------------
+// Helpers to read configuration from multiple sources
+// Priority order:
+// 1) Explicit environment variables (process.env.*)
+// 2) Firebase Functions runtime config (functions.config()) — useful for Gen1
+// ---------------------------------------------------------------------------
+let functionsV1Config = null;
+try {
+  const functionsV1 = require('firebase-functions');
+  functionsV1Config = typeof functionsV1.config === 'function' ? functionsV1.config() : null;
+} catch {}
+
+function readRaw(keyPath, envKey) {
+  // First, environment variable
+  const envVal = (process.env[envKey] || '').toString().trim();
+  if (envVal) return envVal;
+  // Next, Firebase runtime config (Gen1 style), keyPath like 'authip.allowlist'
+  try {
+    if (functionsV1Config && keyPath) {
+      const [ns, prop] = keyPath.split('.');
+      const val = (functionsV1Config?.[ns]?.[prop] || '').toString().trim();
+      if (val) return val;
+    }
+  } catch {}
+  return '';
+}
+
 function parseCsvList(raw) {
   return (raw || '')
     .toString()
@@ -136,13 +163,22 @@ function ipMatchesAllowlist(ipParsed, allowlist) {
 }
 
 function shouldEnforceIpAllowlist() {
-  const v = (process.env.AUTH_IP_ENFORCE || '').toString().trim().toLowerCase();
-  return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+  const raw = readRaw('authip.enforce', 'AUTH_IP_ENFORCE').toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+function flagEnabled(keyPath, envKey, defaultVal = false) {
+  try {
+    const raw = readRaw(keyPath, envKey).toLowerCase();
+    if (!raw) return defaultVal;
+    return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+  } catch { return defaultVal; }
 }
 
 function isBypassEmail(email) {
   if (!email) return false;
-  const bypass = parseCsvList(process.env.AUTH_IP_BYPASS_EMAILS);
+  const raw = readRaw('authip.bypass_emails', 'AUTH_IP_BYPASS_EMAILS');
+  const bypass = parseCsvList(raw);
   if (bypass.length === 0) return false;
   return bypass.includes(email.toLowerCase());
 }
@@ -153,7 +189,7 @@ function enforceIpPolicyOrThrow(event, phase) {
   const email = (event?.data?.email || '').toString().toLowerCase();
   if (email && isBypassEmail(email)) return;
 
-  const allowlistRaw = (process.env.AUTH_IP_ALLOWLIST || '').toString().trim();
+  const allowlistRaw = readRaw('authip.allowlist', 'AUTH_IP_ALLOWLIST');
   const allowlist = parseAllowlistEntries(allowlistRaw);
   const enforce = shouldEnforceIpAllowlist();
   const allowed = ipMatchesAllowlist(ipParsed, allowlist);
@@ -177,31 +213,45 @@ function enforceIpPolicyOrThrow(event, phase) {
   }
 }
 
-// Blocks sign-in attempts not coming from allowed IP ranges.
-exports.authBeforeUserSignedIn = beforeUserSignedIn((event) => {
-  enforceIpPolicyOrThrow(event, 'beforeSignIn');
-});
+// Allow disabling blocking triggers on environments where Gen2/Eventarc is not ready.
+const BLOCKING_ENABLED = flagEnabled('authip.blocking_enabled', 'AUTH_IP_BLOCKING_ENABLED', true);
+if (BLOCKING_ENABLED) {
+  // Blocks sign-in attempts not coming from allowed IP ranges.
+  exports.authBeforeUserSignedIn = beforeUserSignedIn((event) => {
+    enforceIpPolicyOrThrow(event, 'beforeSignIn');
+  });
 
-// Blocks new account creation from disallowed IP ranges.
-exports.authBeforeUserCreated = beforeUserCreated((event) => {
-  enforceIpPolicyOrThrow(event, 'beforeCreate');
-});
+  // Blocks new account creation from disallowed IP ranges.
+  exports.authBeforeUserCreated = beforeUserCreated((event) => {
+    enforceIpPolicyOrThrow(event, 'beforeCreate');
+  });
+} else {
+  console.warn('[auth-ip] Blocking functions disabled for this environment');
+}
 
 // Simple local test endpoint to check current IP policy against the caller IP.
 // Not exposed in hosting rewrites; used via emulator: http://127.0.0.1:5001/<project>/us-central1/authIpCheck
+// Allow disabling v2 HTTP when Eventarc/Run causes deployment issues.
+const V2_HTTP_ENABLED = flagEnabled('v2.http_enabled', 'V2_HTTP_ENABLED', false);
+if (V2_HTTP_ENABLED) {
 exports.authIpCheck = onRequest((req, res) => {
   try {
     if (req.method === 'OPTIONS') {
       res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
       res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      // Echo requested headers to satisfy preflight (Accept, etc.)
+      const reqHeaders = (req.headers['access-control-request-headers'] || '').toString();
+      res.set('Access-Control-Allow-Headers', reqHeaders || 'Content-Type, Authorization, Accept');
+      res.set('Vary', 'Origin, Access-Control-Request-Headers');
       return res.status(204).send('');
     }
 
     const xff = (req.headers['x-forwarded-for'] || '').toString();
-    const ipRaw = xff ? xff.split(',')[0].trim() : (req.headers['x-real-ip'] || req.ip || '').toString();
+    const remote = (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || '';
+    const cfip = (req.headers['cf-connecting-ip'] || '').toString();
+    const ipRaw = xff ? xff.split(',')[0].trim() : (cfip || req.headers['x-real-ip'] || remote || req.ip || '').toString();
     const ipParsed = normalizeIp(ipRaw);
-    const allowlistRaw = (process.env.AUTH_IP_ALLOWLIST || '').toString().trim();
+    const allowlistRaw = readRaw('authip.allowlist', 'AUTH_IP_ALLOWLIST');
     const allowlist = parseAllowlistEntries(allowlistRaw);
     const enforce = shouldEnforceIpAllowlist();
     const allowed = ipMatchesAllowlist(ipParsed, allowlist);
@@ -221,6 +271,54 @@ exports.authIpCheck = onRequest((req, res) => {
     return res.status(500).json({ ok: false, error: e && e.message ? e.message : 'internal' });
   }
 });
+} else {
+  console.warn('[auth-ip] v2 HTTP authIpCheck disabled; using v1 fallback');
+}
+
+// ---------------------------------------------------------------------------
+// Fallback v1 HTTP endpoint for authIpCheck (no Eventarc/Run requirements)
+// Useful when v2 onRequest deployment is blocked by missing GCP services.
+// URL: https://us-central1-<projectId>.cloudfunctions.net/authIpCheckV1
+// ---------------------------------------------------------------------------
+try {
+  const functionsV1 = require('firebase-functions');
+  exports.authIpCheckV1 = functionsV1.https.onRequest((req, res) => {
+    try {
+      if (req.method === 'OPTIONS') {
+        res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+        res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        const reqHeaders = (req.headers['access-control-request-headers'] || '').toString();
+        res.set('Access-Control-Allow-Headers', reqHeaders || 'Content-Type, Authorization, Accept');
+        res.set('Vary', 'Origin, Access-Control-Request-Headers');
+        return res.status(204).send('');
+      }
+
+      const xff = (req.headers['x-forwarded-for'] || '').toString();
+      const remote = (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || '';
+      const cfip = (req.headers['cf-connecting-ip'] || '').toString();
+      const ipRaw = xff ? xff.split(',')[0].trim() : (cfip || req.headers['x-real-ip'] || remote || req.ip || '').toString();
+      const ipParsed = normalizeIp(ipRaw);
+      const allowlistRaw = readRaw('authip.allowlist', 'AUTH_IP_ALLOWLIST');
+      const allowlist = parseAllowlistEntries(allowlistRaw);
+      const enforce = shouldEnforceIpAllowlist();
+      const allowed = ipMatchesAllowlist(ipParsed, allowlist);
+
+      res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.set('Vary', 'Origin');
+      const payload = {
+        ok: allowed || !enforce,
+        enforce,
+        ip: ipRaw || null,
+        allowed,
+        allowlistCount: allowlist.length,
+        allowlistRaw: allowlistRaw || ''
+      };
+      return res.status(allowed || !enforce ? 200 : 403).json(payload);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e && e.message ? e.message : 'internal' });
+    }
+  });
+} catch {}
 
 // Migré depuis functions.config() vers Firebase Secret Manager (post-2026 compliant).
 const LEADS_API_TOKEN = defineSecret('LEADS_API_TOKEN');

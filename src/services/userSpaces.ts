@@ -108,3 +108,109 @@ export function getSpacesFromRole(role?: string | null): AppSpace[] {
       return [];
   }
 }
+
+// --- Intégration Azure AD groupes → rôle/espaces ---
+export interface AdGroup {
+  id?: string;
+  displayName?: string;
+}
+
+// Map configurable pour correspondances par ID
+// Renseignez VITE_AZURE_GROUP_MO_SUP_CANAL_ID dans .env pour le groupe « [MO] Sup Canal »
+const GROUP_ID_MAP: Record<string, { role: string; spaces: AppSpace[] }> = (() => {
+  const moSupCanal = (import.meta as any)?.env?.VITE_AZURE_GROUP_MO_SUP_CANAL_ID as string | undefined;
+  const moAgentCanal = (import.meta as any)?.env?.VITE_AZURE_GROUP_MO_AGENT_CANAL_ID as string | undefined;
+  const moAgentLeads = (import.meta as any)?.env?.VITE_AZURE_GROUP_MO_AGENT_LEADS_ID as string | undefined;
+  const map: Record<string, { role: string; spaces: AppSpace[] }> = {};
+  // Env override
+  if (moSupCanal) {
+    map[String(moSupCanal).toLowerCase()] = { role: 'SUPERVISEUR CANAL+ FR', spaces: ['CANAL_FR'] };
+  }
+  if (moAgentCanal) {
+    map[String(moAgentCanal).toLowerCase()] = { role: 'AGENT CANAL+ FR', spaces: ['CANAL_FR'] };
+  }
+  if (moAgentLeads) {
+    map[String(moAgentLeads).toLowerCase()] = { role: 'AGENT LEADS', spaces: ['LEADS'] };
+  }
+  // Mappage codé en dur demandé : c38dce07-743e-40c6-aab9-f46dc0ea9adb → Superviseur Canal+ FR
+  map['c38dce07-743e-40c6-aab9-f46dc0ea9adb'] = { role: 'SUPERVISEUR CANAL+ FR', spaces: ['CANAL_FR'] };
+  // Nouveau mappage : « [MO] Sup LEADS » (GUID fourni) → Superviseur LEADS
+  map['54ef3c7c-1ec1-4c1c-aece-7db95d00737d'] = { role: 'SUPERVISEUR LEADS', spaces: ['LEADS'] };
+  // Mappage agents LEADS (GUID fourni) → Agent LEADS
+  map['2fc9a8c8-f140-49fc-9ca8-8501b1b954d6'] = { role: 'AGENT LEADS', spaces: ['LEADS'] };
+  return map;
+})();
+
+// Map par nom d'affichage du groupe (exact ou contenant)
+const GROUP_NAME_MAP: Array<{ match: (name: string) => boolean; role: string; spaces: AppSpace[] }> = [
+  {
+    // Groupe demandé: « [MO] Sup Canal »
+    match: (n: string) => n === '[MO] Sup Canal' || (n.includes('SUP') && n.includes('CANAL') && n.includes('MO')),
+    role: 'SUPERVISEUR CANAL+ FR',
+    spaces: ['CANAL_FR'],
+  },
+  {
+    // Groupe demandé: « [MO] Sup LEADS »
+    match: (n: string) => n === '[MO] Sup LEADS' || (n.includes('SUP') && n.toUpperCase().includes('LEADS') && n.includes('MO')),
+    role: 'SUPERVISEUR LEADS',
+    spaces: ['LEADS'],
+  },
+  {
+    // Groupe demandé: « [MO] Agent Canal » (agents côté FR)
+    match: (n: string) => n === '[MO] Agent Canal' || (n.toUpperCase().includes('AGENT') && n.toUpperCase().includes('CANAL') && n.includes('MO')),
+    role: 'AGENT CANAL+ FR',
+    spaces: ['CANAL_FR'],
+  },
+  {
+    // Groupe demandé: « [MO] Agent LEADS » (agents côté LEADS)
+    match: (n: string) => n === '[MO] Agent LEADS' || (n.toUpperCase().includes('AGENT') && n.toUpperCase().includes('LEADS') && n.includes('MO')),
+    role: 'AGENT LEADS',
+    spaces: ['LEADS'],
+  },
+];
+
+export function roleFromAzureGroups(groups: (AdGroup | string)[]): string | undefined {
+  const norm = (v: any) => String(v || '').trim();
+  const hits = new Set<string>();
+  for (const g of groups) {
+    const id = typeof g === 'string' ? norm(g) : norm((g as AdGroup)?.id);
+    const name = typeof g === 'string' ? '' : norm((g as AdGroup)?.displayName);
+    // Par ID (configurable via env + mappages codés)
+    if (id) {
+      const hit = GROUP_ID_MAP[id.toLowerCase()];
+      if (hit) hits.add(hit.role);
+    }
+    // Par nom (règles explicites)
+    const n = name.toUpperCase();
+    for (const rule of GROUP_NAME_MAP) {
+      if (name && rule.match(name)) hits.add(rule.role);
+    }
+    // Heuristiques génériques (précisées pour éviter les faux positifs)
+    // Superviseur LEADS uniquement si le nom contient explicitement SUP + LEADS
+    if (n.includes('SUP') && n.includes('LEADS')) hits.add('SUPERVISEUR LEADS');
+    // Superviseur CANAL CIV si SUP + CIV (ou variantes pays)
+    if (n.includes('SUP') && (n.includes('CIV') || n.includes('CÔTE D’IVOIRE') || n.includes("COTE D'IVOIRE"))) {
+      hits.add('SUPERVISEUR CANAL+ CIV');
+    }
+    // Superviseur CANAL FR si SUP + CANAL sans CIV
+    if (n.includes('SUP') && n.includes('CANAL') && !n.includes('CIV')) hits.add('SUPERVISEUR CANAL+ FR');
+    // Agents génériques (si pas déjà couverts par GROUP_NAME_MAP)
+    if (n.includes('AGENT') && n.includes('LEADS')) hits.add('AGENT LEADS');
+    if (n.includes('AGENT') && n.includes('CANAL') && !n.includes('CIV')) hits.add('AGENT CANAL+ FR');
+  }
+  // Priorité: LEADS > CANAL CIV > CANAL FR
+  if (hits.has('SUPERVISEUR LEADS')) return 'SUPERVISEUR LEADS';
+  if (hits.has('SUPERVISEUR CANAL+ CIV')) return 'SUPERVISEUR CANAL+ CIV';
+  if (hits.has('SUPERVISEUR CANAL+ FR')) return 'SUPERVISEUR CANAL+ FR';
+  // Agents: retourner un rôle agent si détecté
+  if (hits.has('AGENT CANAL+ FR')) return 'AGENT CANAL+ FR';
+  if (hits.has('AGENT LEADS')) return 'AGENT LEADS';
+  return undefined;
+}
+
+export function spacesFromAzureGroups(groups: (AdGroup | string)[]): AppSpace[] {
+  const out = new Set<AppSpace>();
+  const role = roleFromAzureGroups(groups);
+  for (const s of getSpacesFromRole(role)) out.add(s);
+  return Array.from(out);
+}

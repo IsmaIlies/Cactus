@@ -790,7 +790,7 @@ const CallScriptPage = () => {
       imageAlt: 'Offre CANAL+ 100% (Sport)',
       options: [
         { label: 'Choisir une offre', nextId: 'closingIntro' },
-        { label: 'Aller à la clôture', nextId: 'end' },
+        { label: 'Aller à la clôture', nextId: 'endSport' },
       ],
     },
     sportCanalPitch: {
@@ -801,7 +801,7 @@ const CallScriptPage = () => {
       imageAlt: 'Offre CANAL+ 100%',
       options: [
         { label: 'Continuer ➜ Dé-escalade (Sport)', nextId: 'sportDescalade' },
-        { label: 'Aller à la clôture', nextId: 'end' },
+        { label: 'Aller à la clôture', nextId: 'endSport' },
       ],
     },
     sportDescalade: {
@@ -811,7 +811,7 @@ const CallScriptPage = () => {
       imageSrc: '/offre-100-canal-plus.webp',
       imageAlt: 'CANAL+ Sport — offre adaptée',
       options: [
-        { label: 'Valider et passer à la clôture', nextId: 'end' },
+        { label: 'Valider et passer à la clôture', nextId: 'endSport' },
       ],
     },
     closingIntro: {
@@ -848,7 +848,7 @@ const CallScriptPage = () => {
       id: 'descaladeSocle',
       title: 'Désescalade — CANAL+',
       text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 24€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 19€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
-      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+      options: [ { label: 'OK ➜ Clôture', nextId: 'endSocle' } ],
     },
     // --- Parcours CANAL+ Ciné Séries ---
     pathCineResume: {
@@ -873,7 +873,7 @@ const CallScriptPage = () => {
       id: 'descaladeCine',
       title: 'Désescalade — CANAL+ Ciné Séries',
       text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 34€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 29€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
-      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+      options: [ { label: 'OK ➜ Clôture', nextId: 'endCine' } ],
     },
     // --- Parcours CANAL+ Sport ---
     pathSportResume: {
@@ -898,7 +898,7 @@ const CallScriptPage = () => {
       id: 'descaladeSport',
       title: 'Désescalade — CANAL+ Sport',
       text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 45€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 34€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
-      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+      options: [ { label: 'OK ➜ Clôture', nextId: 'endSport' } ],
     },
     // --- Parcours CANAL+ 100% ---
     path100Resume: {
@@ -923,7 +923,7 @@ const CallScriptPage = () => {
       id: 'descalade100',
       title: 'Désescalade — CANAL+ 100%',
       text: '« Selon vous, CANAL+ peut coûter combien ? Parce que les clients généralement me disent entre 40€ et 60€. »\n\nLe prix public est de : 32€99/mois\nEt pour vous, vu que vous êtes client fidèle Orange : 19€99/mois\n\n« Il faut savoir que ce prix est stable pendant 24 mois et ça vous évite de subir des variations tarifaires. »\n« Moi ce que je vous propose, c’est d’en profiter dès aujourd’hui, comme ça vous en profitez dès ce soir. »',
-      options: [ { label: 'OK ➜ Clôture', nextId: 'end' } ],
+      options: [ { label: 'OK ➜ Clôture', nextId: 'end100' } ],
     },
     seriesCanalPitch: {
       id: 'seriesCanalPitch',
@@ -933,7 +933,7 @@ const CallScriptPage = () => {
       imageAlt: 'Offre CANAL+ Ciné Séries',
       options: [
         { label: 'Continuer ➜ Dé-escalade (Ciné Séries)', nextId: 'seriesDescalade' },
-        { label: 'Aller à la clôture', nextId: 'end' },
+        { label: 'Aller à la clôture', nextId: 'endCine' },
       ],
     },
     seriesDescalade: {
@@ -943,7 +943,7 @@ const CallScriptPage = () => {
       imageSrc: '/offre-canal-plus-cine-series.webp',
       imageAlt: 'CANAL+ Ciné Séries — offre adaptée',
       options: [
-        { label: 'Valider et passer à la clôture', nextId: 'end' },
+        { label: 'Valider et passer à la clôture', nextId: 'endCine' },
       ],
     },
     stopCall: {
@@ -952,13 +952,39 @@ const CallScriptPage = () => {
       text: 'Si Canal ➜ STOP APPEL (selon consignes).',
       options: [],
     },
-    end: {
-      id: 'end',
+    endSocle: {
+      id: 'endSocle',
       title: 'Fin du parcours',
       text: 'Passez à la proposition détaillée et clôture.',
       images: [
         { src: '/offre-canal-plus.webp', alt: 'Offre CANAL+' },
+      ],
+      options: [],
+    },
+    endCine: {
+      id: 'endCine',
+      title: 'Fin du parcours',
+      text: 'Passez à la proposition détaillée et clôture.',
+      images: [
         { src: '/offre-canal-plus-cine-series.webp', alt: 'Offre CANAL+ Ciné Séries' },
+      ],
+      options: [],
+    },
+    endSport: {
+      id: 'endSport',
+      title: 'Fin du parcours',
+      text: 'Passez à la proposition détaillée et clôture.',
+      images: [
+        { src: '/offre-canal-plus-sport.webp', alt: 'Offre CANAL+ Sport' },
+      ],
+      options: [],
+    },
+    end100: {
+      id: 'end100',
+      title: 'Fin du parcours',
+      text: 'Passez à la proposition détaillée et clôture.',
+      images: [
+        { src: '/offre-100-canal-plus.webp', alt: 'Offre CANAL+ 100%' },
       ],
       options: [],
     },

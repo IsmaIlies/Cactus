@@ -16,12 +16,52 @@ const AuthDebugPage: React.FC = () => {
   const [providerData, setProviderData] = React.useState<any[]>([]);
   const [tokens, setTokens] = React.useState<{ accessToken?: string; idToken?: string } | null>(null);
   const [msClaims, setMsClaims] = React.useState<any | null>(null);
+  const [msIdClaims, setMsIdClaims] = React.useState<any | null>(null);
   const [graphLoading, setGraphLoading] = React.useState(false);
   const [graphMe, setGraphMe] = React.useState<any | null>(null);
   const [graphError, setGraphError] = React.useState<string | null>(null);
   const [usersLoading, setUsersLoading] = React.useState(false);
   const [usersData, setUsersData] = React.useState<any | null>(null);
   const [usersError, setUsersError] = React.useState<string | null>(null);
+  const [groupsLoading, setGroupsLoading] = React.useState(false);
+  const [groupsData, setGroupsData] = React.useState<any[] | null>(null);
+  const [groupsError, setGroupsError] = React.useState<string | null>(null);
+  const [resolveLoading, setResolveLoading] = React.useState(false);
+  const [resolveError, setResolveError] = React.useState<string | null>(null);
+
+  const computedDisplayName = React.useMemo(() => {
+    const nameFromClaims = typeof claims?.name === 'string' ? claims.name : undefined;
+    const graphName = typeof graphMe?.displayName === 'string' && graphMe.displayName.trim() ? graphMe.displayName : undefined;
+    const graphGiven = typeof graphMe?.givenName === 'string' ? graphMe.givenName : '';
+    const graphSurname = typeof graphMe?.surname === 'string' ? graphMe.surname : '';
+    const graphComposed = `${graphGiven} ${graphSurname}`.trim();
+    const composedOk = graphComposed.length > 0 ? graphComposed : undefined;
+    return info?.displayName || graphName || composedOk || nameFromClaims || null;
+  }, [info?.displayName, graphMe, claims]);
+
+  const computedCountry = React.useMemo(() => {
+    try {
+      const fromLocal = (typeof window !== 'undefined') ? String(localStorage.getItem('activeRegion') || '').toUpperCase() : '';
+      if (fromLocal === 'FR') return 'France';
+      if (fromLocal === 'CIV') return 'Côte d’ivoire';
+    } catch {}
+    // Préférer la valeur exacte configurée dans Azure AD
+    if (typeof graphMe?.country === 'string' && graphMe.country.trim().length > 0) {
+      return graphMe.country.trim(); // ex: "France" ou "Côte d’ivoire"
+    }
+    const usage = String(graphMe?.usageLocation || graphMe?.officeLocation || '').trim().toUpperCase();
+    if (usage) {
+      if (['FR','FRA','FRANCE'].includes(usage)) return 'France';
+      if (['CI','CIV','CÔTE D’IVOIRE','COTE D’IVOIRE','CÔTE D\'IVOIRE','COTE D\'IVOIRE'].includes(usage)) return 'Côte d’ivoire';
+      return usage;
+    }
+    const namesBlob = Array.isArray(groupsData)
+      ? groupsData.map(g => `${String(g?.displayName || '')} ${String(g?.id || '')}`).join(' ').toUpperCase()
+      : '';
+    if (namesBlob.includes('CIV') || namesBlob.includes('CÔTE D’IVOIRE') || namesBlob.includes('COTE D’IVOIRE')) return 'Côte d’ivoire';
+    if (namesBlob.includes('FR')) return 'France';
+    return null;
+  }, [graphMe, groupsData]);
 
   React.useEffect(() => {
     const u = auth.currentUser;
@@ -71,9 +111,21 @@ const AuthDebugPage: React.FC = () => {
       } else {
         setMsClaims(null);
       }
+      // Decode Microsoft ID token to inspect potential group claims
+      if (idToken && idToken.split('.').length === 3) {
+        try {
+          const idPayload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+          setMsIdClaims(idPayload);
+        } catch {
+          setMsIdClaims(null);
+        }
+      } else {
+        setMsIdClaims(null);
+      }
     } catch {
       setTokens(null);
       setMsClaims(null);
+      setMsIdClaims(null);
     }
   }, []);
 
@@ -82,16 +134,26 @@ const AuthDebugPage: React.FC = () => {
     setGraphError(null);
     setGraphMe(null);
     try {
-      let token = tokens?.accessToken;
-      if (!token) {
-        // Pas de token en session: tenter d'en obtenir un frais
-        token = await getFreshMicrosoftAccessToken({ scopes: ['User.Read'] }) || undefined;
-      }
+      // Always try to get a fresh token to avoid expiry issues
+      let token = await getFreshMicrosoftAccessToken({ scopes: ['User.Read'] }) || tokens?.accessToken || undefined;
+      // Sync local state from sessionStorage when we try fresh acquisition
+      try {
+        const accessToken = sessionStorage.getItem('ms_access_token') || undefined;
+        const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+        setTokens({ accessToken, idToken });
+        if (accessToken && accessToken.split('.').length === 3) {
+          try { setMsClaims(JSON.parse(atob(accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))); } catch { setMsClaims(null); }
+        }
+        if (idToken && idToken.split('.').length === 3) {
+          try { setMsIdClaims(JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))); } catch { setMsIdClaims(null); }
+        }
+      } catch {}
       if (!token) {
         setGraphError('Impossible d’acquérir un jeton Microsoft. Réessaie la connexion Microsoft.');
         return;
       }
-      let res = await fetch('https://graph.microsoft.com/v1.0/me', {
+      const meUrl = 'https://graph.microsoft.com/v1.0/me?$select=displayName,givenName,surname,mail,userPrincipalName,country,usageLocation,officeLocation';
+      let res = await fetch(meUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -103,7 +165,12 @@ const AuthDebugPage: React.FC = () => {
           const fresh = await getFreshMicrosoftAccessToken({ scopes: ['User.Read'] });
           if (fresh) {
             token = fresh;
-            res = await fetch('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: `Bearer ${fresh}` } });
+            res = await fetch(meUrl, { headers: { Authorization: `Bearer ${fresh}` } });
+            try {
+              const accessToken = sessionStorage.getItem('ms_access_token') || undefined;
+              const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+              setTokens({ accessToken, idToken });
+            } catch {}
           }
         }
         if (!res.ok) {
@@ -112,7 +179,43 @@ const AuthDebugPage: React.FC = () => {
         }
       }
       const data = await res.json();
-      setGraphMe(data);
+      // Try to fetch groups to present everything together
+      const fetchMemberOf = async (bearer: string) => {
+        const url = 'https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName';
+        return fetch(url, { headers: { Authorization: `Bearer ${bearer}` } });
+      };
+      let memberGroups: any[] | null = null;
+      try {
+        let gr = await fetchMemberOf(token!);
+        if (!gr.ok) {
+          const txt = await gr.text().catch(() => '');
+          if (gr.status === 401 || gr.status === 403) {
+            const fresh2 = await getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All', 'Directory.Read.All'] });
+            if (fresh2) {
+              token = fresh2;
+              gr = await fetchMemberOf(fresh2);
+              try {
+                const accessToken = sessionStorage.getItem('ms_access_token') || undefined;
+                const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+                setTokens({ accessToken, idToken });
+              } catch {}
+            }
+          }
+          if (!gr.ok) {
+            // keep /me data but surface groups error in dedicated section
+            setGroupsError(`Graph /me/memberOf HTTP ${gr.status}: ${txt}`);
+          }
+        }
+        if (gr.ok) {
+          const j = await gr.json();
+          const items: any[] = Array.isArray(j?.value) ? j.value : [];
+          const groups = items.filter((it) => String(it?.['@odata.type'] || '').toLowerCase().includes('group'))
+                               .map((g) => ({ id: g?.id, displayName: g?.displayName }));
+          memberGroups = groups;
+          setGroupsData(groups);
+        }
+      } catch {}
+      setGraphMe(memberGroups ? { ...data, memberOf: memberGroups } : data);
     } catch (e: any) {
       setGraphError(String(e?.message || e));
     } finally {
@@ -148,6 +251,109 @@ const AuthDebugPage: React.FC = () => {
     }
   };
 
+  const testGraphGroups = async () => {
+    setGroupsLoading(true);
+    setGroupsError(null);
+    setGroupsData(null);
+    try {
+      // Always try to get a fresh token with Group.Read.All and Directory.Read.All
+      let token = await getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All', 'Directory.Read.All'] }) || tokens?.accessToken || undefined;
+      try {
+        const accessToken = sessionStorage.getItem('ms_access_token') || undefined;
+        const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+        setTokens({ accessToken, idToken });
+      } catch {}
+      // Even if we have a token, ensure it has the needed scope by reauth if memberOf fails
+      const fetchMemberOf = async (bearer: string) => {
+        const url = 'https://graph.microsoft.com/v1.0/me/memberOf?$select=id,displayName';
+        return fetch(url, { headers: { Authorization: `Bearer ${bearer}` } });
+      };
+      if (!token) { setGroupsError('Impossible d’acquérir un jeton Microsoft avec Group.Read.All.'); return; }
+      let res = await fetchMemberOf(token);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        // If unauthorized or insufficient scope, try reauth with explicit Group.Read.All once
+        if ((res.status === 401 || res.status === 403)) {
+          const fresh = await getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All', 'Directory.Read.All'] });
+          if (fresh) {
+            token = fresh;
+            res = await fetchMemberOf(fresh);
+            try {
+              const accessToken = sessionStorage.getItem('ms_access_token') || undefined;
+              const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+              setTokens({ accessToken, idToken });
+            } catch {}
+          }
+        }
+        if (!res.ok) { setGroupsError(`Graph /me/memberOf HTTP ${res.status}: ${txt}`); return; }
+      }
+      const json = await res.json();
+      const items: any[] = Array.isArray(json?.value) ? json.value : [];
+      // Keep only items that look like groups
+      const groups = items.filter((it) => {
+        const t = String(it?.['@odata.type'] || '').toLowerCase();
+        return t.includes('group');
+      }).map((g) => ({ id: g?.id, displayName: g?.displayName }));
+      setGroupsData(groups);
+    } catch (e: any) {
+      setGroupsError(String(e?.message || e));
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  const resolveGroupNames = async () => {
+    setResolveLoading(true);
+    setResolveError(null);
+    try {
+      const current = Array.isArray(groupsData) ? groupsData : [];
+      const missing = current.filter(g => !g?.displayName || String(g.displayName).trim().length === 0).map(g => String(g?.id || ''));
+      if (missing.length === 0) {
+        setResolveError('Tous les groupes ont déjà un displayName.');
+        return;
+      }
+      // Tente avec Group.Read.All et Directory.Read.All pour maximiser les chances
+      let token = await getFreshMicrosoftAccessToken({ scopes: ['Group.Read.All', 'Directory.Read.All'] }) || tokens?.accessToken || undefined;
+      if (!token) { setResolveError('Impossible d’acquérir un jeton Microsoft avec Group.Read.All.'); return; }
+      const fetchOne = async (id: string) => {
+        const url = `https://graph.microsoft.com/v1.0/groups/${encodeURIComponent(id)}?$select=id,displayName`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          throw new Error(`Graph /groups/${id} HTTP ${res.status}: ${txt}`);
+        }
+        return res.json();
+      };
+      const results = await Promise.allSettled(missing.map(id => fetchOne(id)));
+      const nameMap: Record<string, string | undefined> = {};
+      const errors: string[] = [];
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const obj: any = r.value;
+          const id = String(obj?.id || '');
+          const dn = typeof obj?.displayName === 'string' ? obj.displayName : undefined;
+          if (id) nameMap[id] = dn;
+        } else {
+          const msg = String((r as any).reason?.message || (r as any).reason || 'Erreur inconnue');
+          errors.push(msg);
+        }
+      }
+      if (errors.length > 0) {
+        const combined = errors.join('\n');
+        const needsConsent = /Authorization_RequestDenied|Insufficient privileges/i.test(combined);
+        setResolveError(needsConsent
+          ? combined + '\nConseil: accordez le consentement administrateur aux permissions Microsoft Graph « Group.Read.All » et/ou « Directory.Read.All » pour l’application Microsoft utilisée par Firebase (App Registration), puis reconnectez-vous.'
+          : combined);
+      }
+      const updated = current.map(g => ({ id: g?.id, displayName: nameMap[String(g?.id || '')] ?? g?.displayName }));
+      setGroupsData(updated);
+    } catch (e: any) {
+      setResolveError(String(e?.message || e));
+    } finally {
+      setResolveLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 text-black">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -156,6 +362,18 @@ const AuthDebugPage: React.FC = () => {
         <section className="bg-white border border-gray-200 rounded-lg p-4">
           <h2 className="text-sm font-semibold text-black mb-2">Utilisateur</h2>
           <pre className="bg-gray-50 rounded p-3 text-xs overflow-x-auto text-black">{JSON.stringify(info, null, 2)}</pre>
+          {computedDisplayName && (
+            <p className="mt-2 text-xs text-black"><span className="font-semibold">Nom détecté:</span> {computedDisplayName}</p>
+          )}
+          {computedCountry && (
+            <p className="mt-1 text-xs text-black"><span className="font-semibold">Pays détecté:</span> {computedCountry}</p>
+          )}
+          {(graphMe?.country || graphMe?.usageLocation) && (
+            <p className="mt-1 text-[11px] text-gray-800">Azure AD (Graph): country = {String(graphMe?.country || '') || '—'}, usageLocation = {String(graphMe?.usageLocation || '') || '—'}</p>
+          )}
+          {!computedDisplayName && (
+            <p className="mt-2 text-[11px] text-gray-800">Le champ `displayName` est absent. Rafraîchis le jeton Microsoft pour récupérer les claims, ou vérifie le profil Azure AD.</p>
+          )}
         </section>
 
         <section className="bg-white border border-gray-200 rounded-lg p-4">
@@ -192,6 +410,36 @@ const AuthDebugPage: React.FC = () => {
             >
               {usersLoading ? 'Test /users…' : 'Tester Graph /users?$top=1'}
             </button>
+            <button
+              type="button"
+              onClick={testGraphGroups}
+              disabled={groupsLoading}
+              className="ml-2 px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50"
+            >
+              {groupsLoading ? 'Groupes…' : 'Tester Graph /me/memberOf'}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                // Force reauth and refresh tokens with needed scopes
+                const fresh = await getFreshMicrosoftAccessToken({ scopes: ['User.Read', 'Group.Read.All'] });
+                try {
+                  const accessToken = sessionStorage.getItem('ms_access_token') || undefined;
+                  const idToken = sessionStorage.getItem('ms_id_token') || undefined;
+                  setTokens({ accessToken, idToken });
+                  // Re-decode claims
+                  if (accessToken && accessToken.split('.').length === 3) {
+                    try { setMsClaims(JSON.parse(atob(accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))); } catch { setMsClaims(null); }
+                  }
+                  if (idToken && idToken.split('.').length === 3) {
+                    try { setMsIdClaims(JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))); } catch { setMsIdClaims(null); }
+                  }
+                } catch {}
+              }}
+              className="ml-2 px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50"
+            >
+              Rafraîchir jeton Microsoft
+            </button>
           </div>
         </section>
 
@@ -218,6 +466,43 @@ const AuthDebugPage: React.FC = () => {
             )}
             {graphMe && (
               <pre className="bg-gray-50 rounded p-3 text-xs overflow-x-auto">{JSON.stringify(graphMe, null, 2)}</pre>
+            )}
+          </section>
+        )}
+
+        {(msIdClaims?.groups || groupsError || (groupsData && groupsData.length >= 0)) && (
+          <section className="bg-white border border-gray-200 rounded-lg p-4">
+            <h2 className="text-sm font-semibold text-black mb-2">Groupes (SSO)</h2>
+            {Array.isArray(msIdClaims?.groups) && msIdClaims!.groups.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-black font-semibold">Depuis ID Token (claim `groups`):</p>
+                <pre className="bg-gray-50 rounded p-3 text-xs overflow-x-auto">{JSON.stringify(msIdClaims!.groups, null, 2)}</pre>
+              </div>
+            )}
+            {groupsError && (
+              <p className="text-xs text-red-700">{groupsError}</p>
+            )}
+            {groupsData && (
+              <div>
+                <p className="text-xs text-black font-semibold">Depuis Microsoft Graph /me/memberOf:</p>
+                <pre className="bg-gray-50 rounded p-3 text-xs overflow-x-auto">{JSON.stringify(groupsData, null, 2)}</pre>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={resolveGroupNames}
+                    disabled={resolveLoading}
+                    className="px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50"
+                  >
+                    {resolveLoading ? 'Résolution…' : 'Résoudre noms de groupes'}
+                  </button>
+                  {resolveError && (
+                    <span className="text-[11px] text-red-700">{resolveError}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {!Array.isArray(msIdClaims?.groups) && !groupsData && !groupsError && (
+              <p className="text-[11px] text-gray-800">Aucun groupe détecté. Essaie le bouton « Tester Graph /me/memberOf » (peut nécessiter le consentement administratif pour la permission <code>Group.Read.All</code>).</p>
             )}
           </section>
         )}

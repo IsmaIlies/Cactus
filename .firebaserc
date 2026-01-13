@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "cactus-mm"
-  }
+    "default": "cactus-mm",
+    "staging": "cactus-preprod",
+    "prod": "cactus-mm"
+  },
+  "targets": {},
+  "etags": {}
 }

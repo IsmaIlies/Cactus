@@ -1,183 +1,387 @@
 {
   "indexes": [
     {
-      "collectionGroup": "sales",
+      "collectionGroup": "hoursEntries",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reviewStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "day",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "sales",
+      "collectionGroup": "hoursEntries",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reviewStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "day",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
-        "collectionGroup": "leads_sales",
-        "queryScope": "COLLECTION",
-        "fields": [
-          { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
+      "collectionGroup": "hoursEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reviewStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "day",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "hoursEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reviewStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "day",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "leads_sales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
+        {
+          "fieldPath": "createdBy.userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "leads_sales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "createdBy.userId", "order": "ASCENDING" },
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
+        {
+          "fieldPath": "createdBy.userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "leads_sales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "origineLead", "order": "ASCENDING" },
-          { "fieldPath": "createdAt", "order": "ASCENDING" },
-          { "fieldPath": "__name__", "order": "ASCENDING" }
-        ]
-      },
-      {
-        "collectionGroup": "leads_sales",
-        "queryScope": "COLLECTION",
-        "fields": [
-          { "fieldPath": "mission", "order": "ASCENDING" },
-          { "fieldPath": "createdAt", "order": "DESCENDING" },
-          { "fieldPath": "__name__", "order": "DESCENDING" }
-        ]
-      },
+        {
+          "fieldPath": "createdBy.userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "origineLead",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "leads_sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mission",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "origineLead",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
     {
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "channel", "order": "ASCENDING" },
-        { "fieldPath": "timestamp", "order": "ASCENDING" }
-      ]
+        {
+          "fieldPath": "channel",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "participants", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "timestamp", "order": "ASCENDING" }
-      ]
+        {
+          "fieldPath": "participants",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "leads_sales",
+      "collectionGroup": "sales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "createdBy.userId", "order": "ASCENDING" },
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "leads_sales",
+      "collectionGroup": "sales",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "createdBy.userId", "order": "ASCENDING" },
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "leads_sales",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "origineLead", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "hoursEntries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "reviewStatus", "order": "ASCENDING" },
-        { "fieldPath": "day", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "hoursEntries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "reviewStatus", "order": "ASCENDING" },
-        { "fieldPath": "day", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "hoursEntries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "reviewStatus", "order": "ASCENDING" },
-        { "fieldPath": "day", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "hoursEntries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "reviewStatus", "order": "ASCENDING" },
-        { "fieldPath": "day", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "hoursEntries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "reviewStatus", "order": "ASCENDING" },
-        { "fieldPath": "day", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "hoursEntries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mission", "order": "ASCENDING" },
-        { "fieldPath": "region", "order": "ASCENDING" },
-        { "fieldPath": "reviewStatus", "order": "ASCENDING" },
-        { "fieldPath": "day", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
+        {
+          "fieldPath": "region",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
     }
   ],
   "fieldOverrides": []

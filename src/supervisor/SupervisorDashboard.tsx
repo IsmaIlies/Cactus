@@ -1,6 +1,7 @@
 import React from 'react';
 import CountUp from 'react-countup';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import { getSalesThisMonth, getValidatedSalesThisMonth, Sale } from '../services/salesService';
 import ChartComponent from '../components/ChartComponent';
 import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
@@ -33,11 +34,6 @@ const SupervisorDashboard: React.FC = () => {
   // Smart alerts
   const [alerts, setAlerts] = React.useState<SmartAlert[]>([]);
   const { area } = useParams<{ area: string }>();
-  const subtitle = area?.toUpperCase() === 'LEADS'
-    ? 'KPIs LEADS — collection "leads_sales"'
-    : area?.toUpperCase() === 'CIV'
-      ? 'KPIs CANAL+ CIV — collection "sales"'
-      : 'KPIs CANAL+ FR — collection "sales"';
 
   const effectiveArea = React.useMemo(() => {
     // For CANAL+ supervisor side, default to CIV KPIs unless area explicitly set to FR
@@ -72,6 +68,23 @@ const SupervisorDashboard: React.FC = () => {
   const [availableAgents, setAvailableAgents] = React.useState<string[]>([]);
   const [selectedAgents, setSelectedAgents] = React.useState<Set<string>>(new Set());
   const [regionOverride, setRegionOverride] = React.useState<'FR'|'CIV'|''>('');
+  const navigate = useNavigate();
+
+  const switchToAgentSide = React.useCallback(() => {
+    try {
+      if (effectiveArea === 'LEADS') {
+        try { localStorage.setItem('activeMission', 'ORANGE_LEADS'); } catch {}
+        try { localStorage.setItem('lastSpace', 'LEADS'); } catch {}
+        navigate('/leads/dashboard');
+        return;
+      }
+      const region: 'FR' | 'CIV' = (regionOverride || (effectiveArea as 'FR' | 'CIV')) as 'FR' | 'CIV';
+      try { localStorage.setItem('activeMission', 'CANAL_PLUS'); } catch {}
+      try { localStorage.setItem('activeRegion', region); } catch {}
+      try { localStorage.setItem('lastSpace', region === 'CIV' ? 'CANAL_CIV' : 'CANAL_FR'); } catch {}
+      navigate(region === 'CIV' ? '/dashboard/civ' : '/dashboard/fr');
+    } catch {}
+  }, [effectiveArea, regionOverride, navigate]);
 
   // UI tokens (harmonized colors)
   // Palette Canal+ jour – augmenter la différenciation visuelle : Canal+ passe à un dégradé turquoise
@@ -638,6 +651,18 @@ const SupervisorDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 md:space-y-8 max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6">
+      {/* Bouton switch vers côté Agent (haut droite) */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={switchToAgentSide}
+          className="group relative inline-flex items-center gap-2 rounded-full border border-white/15 bg-gradient-to-br from-cyan-500/20 via-indigo-500/20 to-emerald-500/20 px-4 py-2 text-sm font-semibold text-white backdrop-blur-md shadow-[0_12px_34px_-10px_rgba(34,211,238,0.35)] transition-all duration-300 hover:scale-[1.04] hover:border-white/30 hover:from-cyan-500/30 hover:to-emerald-500/30"
+        >
+          <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(120%_60%_at_10%_10%,rgba(34,211,238,0.28),transparent),radial-gradient(120%_60%_at_90%_90%,rgba(16,185,129,0.25),transparent)]" />
+          <span className="relative z-10">Passer au côté Agent</span>
+          <ArrowRight className="relative z-10 h-4 w-4 text-cyan-200 transition-transform duration-300 group-hover:translate-x-0.5" />
+        </button>
+      </div>
       {/* Filtres avancés */}
       <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1f3f]/70 via-[#0c2752]/60 to-[#0a2752]/60 p-4 sm:p-5 flex flex-col gap-4 shadow-[0_12px_32px_-8px_rgba(8,28,60,0.55)]">
         <div className="flex items-center gap-3 flex-wrap leading-relaxed">
