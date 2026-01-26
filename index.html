@@ -37,10 +37,10 @@
             } catch {}
           }
 
-          // Fail-open (temporaire): si la politique n'est pas récupérée, on n'applique pas le blocage.
-          const allowed = gotPolicy ? !!(result && result.allowed === true) : false;
+          // Fail-open: si la politique n'est pas récupérée, on n'applique pas le blocage.
+          const allowed = gotPolicy ? !!(result && result.allowed === true) : true;
 
-          // Strict front gate: if policy is retrieved and allowed === false, block immediately.
+          // Strict front gate: si on a une politique et allowed === false, on bloque.
           if (gotPolicy && !allowed) {
             // Remove the app entry script so React never loads.
             const entry = document.querySelector('script[type="module"][data-app-entry]');

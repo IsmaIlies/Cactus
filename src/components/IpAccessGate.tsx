@@ -22,7 +22,7 @@ function buildCheckUrls(): string[] {
 }
 
 const IpAccessGate: React.FC = () => {
-  const { isAuthenticated, logout } = useAuth();
+  const { logout } = useAuth();
   const [blocked, setBlocked] = React.useState<{ip?: string; message?: string} | null>(null);
 
   React.useEffect(() => {

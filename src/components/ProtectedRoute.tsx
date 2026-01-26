@@ -139,7 +139,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       </div>
     );
   }
-  
+
+  // Si après toutes les tentatives on n'a **aucun** groupe Azure AD,
+  // on n'applique AUCUNE restriction liée aux groupes : accès complet.
+  if (!groups || groups.length === 0) {
+    if (typeof window !== 'undefined' && window.console) {
+      console.log('[ProtectedRoute] Aucun groupe Azure AD détecté : accès complet à toutes les routes protégées.');
+    }
+    return <>{children}</>;
+  }
 
   // 2) Déduire un rôle et des espaces depuis les groupes
   const role = roleFromAzureGroups(groups) || '';
@@ -175,6 +183,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const idsLower = groups.map(g => typeof g === 'string' ? String(g).toLowerCase() : String((g as any)?.id || '').toLowerCase());
   const namesUpper = groups.map(g => typeof g === 'string' ? '' : String((g as any)?.displayName || '').toUpperCase());
 
+  const countryNorm = String(user?.country || '').trim().toUpperCase();
+  const isCivCountry = countryNorm.includes('CIV') || countryNorm.includes('IVOIRE');
+
   const hasSupLeads = idsLower.includes('54ef3c7c-1ec1-4c1c-aece-7db95d00737d') || namesUpper.some(n => n.includes('SUP') && n.includes('LEADS')) || role.includes('SUPERVISEUR LEADS');
   const hasSupCanalFR = idsLower.includes('c38dce07-743e-40c6-aab9-f46dc0ea9adb') || namesUpper.some(n => n.includes('SUP') && n.includes('CANAL') && !n.includes('CIV')) || role.includes('SUPERVISEUR CANAL+ FR');
   const hasSupCanalFRStrictGuid = idsLower.includes('c38dce07-743e-40c6-aab9-f46dc0ea9adb');
@@ -183,8 +194,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const isAgentLeads = namesUpper.some(n => n.includes('AGENT') && n.includes('LEADS')) || role.includes('AGENT LEADS');
   // Cas strict demandé: groupe GUID [MO] Agent LEADS → n'autoriser que /leads/dashboard
   const hasAgentLeadsStrictGuid = idsLower.includes('2fc9a8c8-f140-49fc-9ca8-8501b1b954d6');
-  // Cas strict demandé: groupe GUID [MO] Agent Canal → n'autoriser que /dashboard/fr (exact)
+  // Cas strict demandé: groupe GUID [MO] Agent Canal → n'autoriser qu'un seul dashboard agent
+  //  - Si pays Azure AD = Côte d’Ivoire → /dashboard/civ
+  //  - Sinon (FR, autre)          → /dashboard/fr
   const hasAgentCanalStrictGuid = idsLower.includes('6a2b7859-58d6-430f-a23a-e856956b333d');
+  const isAgentCanalCivStrict = (hasAgentCanalStrictGuid || isAgentCanal) && isCivCountry;
   // Cas strict demandé: groupe GUID [MO - CACTUS] Sup LEADS → n'autoriser que /leads/dashboard et /dashboard/superviseur/leads
   const hasSupLeadsStrictGuid = idsLower.includes('54ef3c7c-1ec1-4c1c-aece-7db95d00737d');
 
@@ -202,6 +216,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     (() => { try { return (localStorage.getItem('lastSpace') || '') === 'LEADS'; } catch { return false; } })()
   );
   if (isSupLeadsLike && (pathname.startsWith('/dashboard/superviseur/leads/'))) {
+    return <>{children}</>;
+  }
+
+  // Raccourci ciblé: Agent CANAL CIV (groupe Agent Canal + pays Côte d’Ivoire)
+  // → autoriser directement /dashboard/civ comme unique espace agent.
+  if (isAgentCanalCivStrict && pathname === '/dashboard/civ') {
     return <>{children}</>;
   }
 
@@ -232,7 +252,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
   // Autorisation stricte par GUID pour Agent Canal, même si le nom n'est pas présent
   if (hasAgentCanalStrictGuid) {
-    allowedExact.push('/dashboard/fr');
+    if (isCivCountry) {
+      allowedExact.push('/dashboard/civ');
+    } else {
+      allowedExact.push('/dashboard/fr');
+    }
   }
   // Autorisation stricte par GUID pour Agent LEADS, même si le nom n'est pas présent
   if (hasAgentLeadsStrictGuid) {
@@ -268,12 +292,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         allowedExact.push('/leads/dashboard');
       }
       // Fallback contrôlé pour Canal FR quand les claims de groupes sont absents
-      const isCanalFrLocal = (mission === 'CANAL_PLUS' && String(region).toUpperCase() === 'FR') || lastSpace === 'CANAL_FR';
+      const regionUpper = String(region).toUpperCase();
+      const isCanalFrLocal = (mission === 'CANAL_PLUS' && regionUpper === 'FR') || lastSpace === 'CANAL_FR';
       if (isCanalFrLocal) {
         allowedExact.push('/dashboard/fr');
       }
+      // Fallback contrôlé pour Canal CIV quand les claims de groupes sont absents
+      const isCanalCivLocal = (mission === 'CANAL_PLUS' && regionUpper === 'CIV') || lastSpace === 'CANAL_CIV';
+      if (isCanalCivLocal) {
+        allowedExact.push('/dashboard/civ');
+      }
       // Fallback contrôlé Superviseur Canal FR: autoriser superviseur FR et agent FR
-      const regionUpper = String(region).toUpperCase();
       const isSupCanalFrLocal = mission === 'CANAL_PLUS' && regionUpper === 'FR';
       if (isSupCanalFrLocal) {
         allowedExact.push('/dashboard/superviseur');
@@ -293,11 +322,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     allowedExact.push('/leads/dashboard');
     allowedStartsWith.push('/leads/dashboard/');
   }
-  if (hasAgentCanalStrictGuid) {
-    // Verrouillage: uniquement /dashboard/fr (pas de sous-routes)
+  if (hasAgentCanalStrictGuid || isAgentCanalCivStrict) {
+    // Verrouillage: Agent CANAL → un seul dashboard agent
     allowedStartsWith.length = 0;
     allowedExact.length = 0;
-    allowedExact.push('/dashboard/fr');
+    if (isAgentCanalCivStrict) {
+      allowedExact.push('/dashboard/civ');
+    } else {
+      allowedExact.push('/dashboard/fr');
+    }
   }
   if (hasSupCanalFRStrictGuid) {
     // Verrouillage: /dashboard/superviseur (racine), et toutes les sous-pages FR côté superviseur et agent
@@ -348,20 +381,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     });
     const isAllowedExact = allowedExact.includes(pathname);
     const isAllowed = isAllowedPrefix || isAllowedExact;
-    // Dernier fallback contrôlé: si aucun groupe n'est résolu et qu'on vise
-    // exactement /leads/dashboard, autoriser l'accès pour éviter un faux 403
-    // en environnement où les claims Graph sont indisponibles.
-    if (!isAllowed && pathname === '/leads/dashboard' && (!groups || groups.length === 0)) {
-      // Autoriser uniquement si l'état local indique clairement l'espace LEADS
-      try {
-        const mission = (typeof window !== 'undefined') ? (window.localStorage.getItem('activeMission') || '') : '';
-        const lastSpace = (typeof window !== 'undefined') ? (window.localStorage.getItem('lastSpace') || '') : '';
-        const isLeadsLocal = mission === 'ORANGE_LEADS' || lastSpace === 'LEADS';
-        if (isLeadsLocal) {
-          return <>{children}</>;
-        }
-      } catch {}
-      // Sinon, on bloque comme prévu
+    // TEMPORAIRE: si aucun groupe Azure n'est résolu, autoriser la zone LEADS
+    // pour éviter un 403 sur les sous‑pages (ex: /leads/sales, /leads/my-sales).
+    // Conserve les verrous stricts quand un groupe est présent.
+    if (!isAllowed && (!groups || groups.length === 0)) {
+      if (pathname === '/leads/dashboard' || pathname.startsWith('/leads/')) {
+        return <>{children}</>;
+      }
     }
     if (!isAllowed) {
       
